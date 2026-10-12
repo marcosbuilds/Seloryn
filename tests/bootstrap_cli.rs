@@ -23,6 +23,7 @@ fn help_is_utf8_and_documents_only_available_commands() {
     assert!(stdout.contains("Seloryn — native CLI bootstrap"));
     assert!(stdout.contains("seloryn --help"));
     assert!(stdout.contains("seloryn check <file.sely>"));
+    assert!(stdout.contains("seloryn run <file.sely>"));
     assert!(stdout.contains("not available yet"));
 }
 
@@ -172,4 +173,69 @@ fn check_rejects_semantic_name_type_and_match_errors() {
         let stderr = String::from_utf8(output.stderr).expect("diagnostics must be UTF-8");
         assert!(stderr.contains(code), "case {name}: {stderr}");
     }
+}
+
+#[test]
+fn run_executes_crlf_unicode_source_and_prints_a_value() {
+    let path = temporary_source("run-unicode");
+    fs::write(
+        &path,
+        "fn saudação() -> Text:\r\n    return \"olá\"\r\nfn main() -> Text:\r\n    return saudação()\r\n",
+    )
+    .expect("write runnable source");
+
+    let output = run_cli(&["run", path.to_str().expect("temporary path is UTF-8")]);
+    let _ = fs::remove_file(&path);
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("result must be UTF-8"),
+        "\"olá\"\n"
+    );
+}
+
+#[test]
+fn run_accepts_a_source_path_with_spaces() {
+    let path = std::env::temp_dir().join(format!("seloryn run path {}.sely", std::process::id()));
+    fs::write(&path, "fn main() -> I64:\n    return 42\n").expect("write spaced-path source");
+
+    let output = run_cli(&["run", path.to_str().expect("temporary path is UTF-8")]);
+    let _ = fs::remove_file(&path);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8(output.stdout).expect("result must be UTF-8"),
+        "42\n"
+    );
+}
+
+#[test]
+fn run_does_not_execute_after_a_static_error() {
+    let path = temporary_source("run-static-error");
+    fs::write(&path, "fn main() -> I64:\n    return missing\n").expect("write invalid source");
+
+    let output = run_cli(&["run", path.to_str().expect("temporary path is UTF-8")]);
+    let _ = fs::remove_file(&path);
+    assert_eq!(output.status.code(), Some(65));
+    assert!(output.stdout.is_empty());
+    assert!(
+        String::from_utf8(output.stderr)
+            .expect("diagnostics must be UTF-8")
+            .contains("SEL-M002")
+    );
+}
+
+#[test]
+fn run_reports_the_same_structured_runtime_error_each_time() {
+    let path = temporary_source("run-runtime-error");
+    fs::write(&path, "fn main() -> I64:\n    return 1 / 0\n").expect("write runtime-error source");
+
+    let first = run_cli(&["run", path.to_str().expect("temporary path is UTF-8")]);
+    let second = run_cli(&["run", path.to_str().expect("temporary path is UTF-8")]);
+    let _ = fs::remove_file(&path);
+    assert_eq!(first.status.code(), Some(65));
+    assert_eq!(first.stdout, second.stdout);
+    assert_eq!(first.stderr, second.stderr);
+    let stderr = String::from_utf8(first.stderr).expect("diagnostics must be UTF-8");
+    assert!(stderr.contains("SEL-R118"));
+    assert!(stderr.contains("stack main"));
 }

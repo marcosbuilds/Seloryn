@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current status: 0.00, experimental syntax and semantic checker.** Seloryn can validate a bounded `.sely` syntax and semantic subset through `check`; it cannot execute programs. There is no interpreter, tensor engine, training runtime, HTTP/file standard library, installable release or GPU backend. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and the [E3 checklist](docs/project/e3-checklist.md).
+> **Current status: 0.00, experimental E3 checker plus E4 pure scalar interpreter.** Seloryn can validate and execute a bounded `.sely` subset through `check` and `run`. There is no module system, tensor engine, training runtime, HTTP/file standard library, installable release or GPU backend. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md), [E3 checklist](docs/project/e3-checklist.md) and [E4 checklist](docs/project/e4-checklist.md).
 
 > **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** The attached `seloryn_e3_design_review.md` is the design reference for the intended language; this repository records only what is implemented and verified.
 
@@ -13,7 +13,7 @@
 
 ## What exists today vs. what is designed
 
-Seloryn is being designed as one expressive language for reliable AI development, integration and serving. The implemented result is currently a checker for the front end; the runtime and numerical layers remain roadmap work.
+Seloryn is being designed as one expressive language for reliable AI development, integration and serving. The implemented result is a checker plus a small pure interpreter for the validated scalar core; effects, tensors and numerical layers remain roadmap work.
 
 ## Mission: AI development and integration
 
@@ -30,7 +30,8 @@ instead of gaining features by default.
 | UTF-8 lexer, layout and parser subset | Implemented and tested | `src/parser.rs:224-1180`, parser tests |
 | Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | `src/semantic.rs:101-1115`, semantic tests |
 | `seloryn check <file.sely>` diagnostics | Implemented in the development CLI | `src/main.rs:82-119`, `tests/bootstrap_cli.rs:61-178` |
-| Program execution, interpreter and core IR | Not implemented; planned for E4 | No executable runtime exists |
+| Pure scalar/list interpreter and `seloryn run` | Experimental E4 implementation | [`src/runtime.rs`](src/runtime.rs), runtime and CLI tests; no effects |
+| Core IR | Not implemented; planned after interpreter evidence | The interpreter evaluates the checked AST directly |
 | Modules, files, HTTP, packages and standard library | Not implemented; imports are diagnosed as unavailable | No module or systems runtime exists |
 | Tensor buffers, autodiff, training and model serving | Designed only; not checked or executable | See [tensor design](docs/compute/tensors.md) and [E3 gaps](docs/project/e3-checklist.md) |
 | GPU, distributed execution and installers | Not implemented or verified | No backend or release artifact exists |

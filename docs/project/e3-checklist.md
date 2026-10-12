@@ -131,6 +131,7 @@ The Windows shell checks performed for this gate do not prove other platforms.
 
 E3 is **experimentally useful but not fully complete**. It is appropriate for
 evaluating Seloryn's front-end design and finding static errors in the
-implemented subset. It is not an interpreter, compiler, tensor framework or
-training system. The next real executable gate is E4: interpret scalar/list/file
-programs and prove structured runtime failures before beginning N1 tensor work.
+implemented subset. The E3 checker itself is not an interpreter, compiler,
+tensor framework or training system. E4 now supplies an experimental pure
+scalar/list interpreter with structured runtime failures; N1 still requires an
+independent tensor runtime and numeric correctness gate.

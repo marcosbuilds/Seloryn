@@ -2,7 +2,7 @@
 
 > **E3 semantic subset — implemented and tested portions only.** The current `seloryn check` command validates UTF-8, layout, a bounded parser subset and selected semantic rules. It does not execute `.sely`, validate tensor types or provide the complete grammar below. The attached `seloryn_e3_design_review.md` is the design reference; the [public E3 checklist](../project/e3-checklist.md) records implementation evidence and gaps.
 
-The complete grammar remains a design contract until each construct has runtime and negative-test coverage. Keywords, primitive types and standard public APIs are English. Case-sensitive symbols use `snake_case` for functions and variables, `PascalCase` for named types, `UPPER_SNAKE_CASE` for constants, and `lowercase.dotted` module paths. Identifiers follow Unicode XID rules; exported package names use ASCII for portability. Module namespaces are distinct from filesystem traversal.
+The complete grammar remains a design contract until each construct has runtime and negative-test coverage. The bounded E4 subset is executable through `seloryn run`; constructs outside that subset remain reserved or unavailable. Keywords, primitive types and standard public APIs are English. Case-sensitive symbols use `snake_case` for functions and variables, `PascalCase` for named types, `UPPER_SNAKE_CASE` for constants, and `lowercase.dotted` module paths. Identifiers follow Unicode XID rules; exported package names use ASCII for portability. Module namespaces are distinct from filesystem traversal.
 
 ## Compound statements
 
@@ -72,9 +72,9 @@ This EBNF summarizes accepted design intent; production-ready conformance gramma
 |---|---|---|
 | `record` declarations | Implemented parser and nominal field checks | [`parse_record`](../../src/parser.rs#L395), [`type_of_call`](../../src/semantic.rs#L845); named-field construction is not implemented |
 | `enum` declarations and variants | Implemented parser and partial constructor checks | [`parse_enum`](../../src/parser.rs#L436), [`check_constructor_name`](../../src/semantic.rs#L528); no runtime values |
-| `match` statements | Partial semantic checker | [`parse_match`](../../src/parser.rs#L650), [`check_match`](../../src/semantic.rs#L409); Bool/Option/Result/enum coverage is checked, but execution and structural patterns are absent |
-| `Result` and postfix `?` | Minimal static checks | [`type_of_expr`](../../src/semantic.rs#L652); propagation is typed, not executed |
-| `Option` and `??` | Minimal static checks | [`type_of_binary`](../../src/semantic.rs#L760); nullable `T?` and `?.` remain reserved |
+| `match` statements | Partial checker plus E4 execution | [`parse_match`](../../src/parser.rs#L650), [`check_match`](../../src/semantic.rs#L409), [`execute`](../../src/runtime.rs#L121); Bool/Option/Result/enum coverage and constructor cases execute, but structural patterns are absent |
+| `Result` and postfix `?` | Static checks plus E4 propagation | [`type_of_expr`](../../src/semantic.rs#L652), runtime tests; `?` returns a compatible `Err` from the current function |
+| `Option` and `??` | Static checks plus E4 values/fallback | [`type_of_binary`](../../src/semantic.rs#L760), runtime tests; nullable `T?` and `?.` remain reserved |
 | Modules and imports | Reserved/unavailable in E3 | `seloryn check` emits `SEL-M001`; no resolver or package graph exists |
 | Tensor and symbolic shape types | Designed only | No tensor type is accepted by [`type_from_expr`](../../src/semantic.rs#L1005) |
 
@@ -83,9 +83,9 @@ Status labels mean: **implemented** is present and tested in the checker; **part
 ### Implemented checker rules in the E3 subset
 
 - Four **ASCII spaces** per block level; tabs as indentation produce a diagnostic. Blank/comment-only lines do not emit indentation transitions; grouping delimiters suppress layout tokens. CRLF and LF accepted.
-- A `match` is statically checked for exhaustiveness for `Bool`, `Option`, `Result` and closed `enum` variants. A reachable `case` after a total match is diagnosed as unreachable. No match body executes.
-- `require condition else error` is accepted only in a function typed as `Result[T,E]`; `condition` must be `Bool` and `error` must be assignable to `E`. The checker does not perform the early return because no interpreter exists.
-- Postfix `?` is checked as Result propagation: `Result[T,E]` becomes `T` in a Result-returning function. No runtime propagation occurs; optional access is `?.` and nullability is `T?`, both reserved for later semantics.
+- A `match` is statically checked for exhaustiveness for `Bool`, `Option`, `Result` and closed `enum` variants. A reachable `case` after a total match is diagnosed as unreachable. The validated constructor/binder subset executes in `run`.
+- `require condition else error` is accepted only in a function typed as `Result[T,E]`; `condition` must be `Bool` and `error` must be assignable to `E`. In `run`, a false condition returns `Err(error)` from that function.
+- Postfix `?` is checked and executed as Result propagation: `Result[T,E]` becomes `T` in a Result-returning function, while `Err(E)` returns from the current function. Optional access is `?.` and nullability is `T?`, both reserved for later semantics.
 - `|>` requires a function or callable with exactly one first argument consumed by the LHS; further arguments require an explicit lambda (proposed syntax `value |> fn(x) => ...` is **reserved** until closure syntax is chosen).
 - `and` and `or` short-circuit and require Bool operands; `??` consumes nullable/Option values, not arbitrary falsey values.
 - No implicit conversion between integer, Bool, Text, F32 or F64. No implicit broadcasting across incompatible tensor dimensions.

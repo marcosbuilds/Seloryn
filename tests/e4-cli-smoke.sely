@@ -1,0 +1,2 @@
+fn main() -> Text:
+    return "Seloryn E4"

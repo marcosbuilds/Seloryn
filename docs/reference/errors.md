@@ -24,7 +24,7 @@ A diagnostic has stable `code`, severity, module, source span (byte offsets and 
 | Module | `SEL-M***` | missing module, cyclic initialization |
 | Tensor | `SEL-N***` | invalid shape, unsupported dtype |
 | Result/control flow | `SEL-R***` | invalid `require`, non-exhaustive `match`, bad `?` flow |
-| Runtime | future `SEL-R***` extensions | resource limit, illegal operation |
+| Runtime | `SEL-R***` | overflow, division by zero, invalid call or impossible match |
 | Security | `SEL-S***` | denied network destination |
 | Tooling | `SEL-C***` | unsupported CLI command or target |
 
@@ -38,7 +38,7 @@ fn load_config(path: Path) -> Result[Config, ConfigError]:
     return Ok(config)
 ```
 
-`?` requires compatible E types (or an explicit, lossless `From` conversion chosen by the programmer). When error sets differ, convert explicitly using `map_error`. Resource cleanup must run through scoped ownership, even across early Result returns. Panic-equivalent catastrophic faults terminate an unsafe/internal operation and must never masquerade as user-catchable validation errors.
+`?` requires compatible E types (or an explicit, lossless `From` conversion chosen by the programmer). When error sets differ, convert explicitly using `map_error`. In the E4 pure interpreter, runtime failures include a stable code, source span and deterministic function stack. Resource cleanup must run through scoped ownership once resource effects exist. Panic-equivalent catastrophic faults terminate an unsafe/internal operation and must never masquerade as user-catchable validation errors.
 
 ### Acceptance rules
 

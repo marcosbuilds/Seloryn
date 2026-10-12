@@ -1,6 +1,7 @@
 mod diagnostic;
 mod lexer;
 mod parser;
+mod runtime;
 mod semantic;
 
 use std::env;
@@ -17,12 +18,13 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\nThe interpreter, standard library and installable release\nare not available yet.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely>\n  seloryn run <file.sely>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar subset.\nThe standard library and installable release are not available yet.\n";
 
 enum Action {
     Help,
     Version,
     Check(OsString),
+    Run(OsString),
     Unsupported(String),
 }
 
@@ -38,6 +40,7 @@ fn run(args: &[OsString]) -> u8 {
             "seloryn {LANGUAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=experimental-implemented\n"
         )),
         Action::Check(path) => check_path(PathBuf::from(path)),
+        Action::Run(path) => run_path(PathBuf::from(path)),
         Action::Unsupported(command) => write_stderr(&format!(
             "SEL-C001 unsupported command or argument: {command}\n"
         )),
@@ -50,6 +53,7 @@ fn classify(args: &[OsString]) -> Action {
         [argument] if argument == "--help" || argument == "-h" => Action::Help,
         [argument] if argument == "--version" => Action::Version,
         [command, path] if command == "check" => Action::Check(path.clone()),
+        [command, path] if command == "run" => Action::Run(path.clone()),
         _ => Action::Unsupported(
             args.iter()
                 .map(|argument| display_argument(argument))
@@ -104,9 +108,9 @@ fn check_path(path: PathBuf) -> u8 {
 
     let parsed = parser::parse(&source);
     if parsed.diagnostics.is_empty() {
-        let program = parsed
-            .program
-            .expect("a diagnostic-free parse has a program");
+        let Some(program) = parsed.program else {
+            return write_stderr("SEL-C004 parser returned no program without diagnostics\n");
+        };
         let semantic_diagnostics = semantic::check(&program);
         if semantic_diagnostics.is_empty() {
             return write_stdout(&format!("checked {label} (syntax + semantics)\n"));
@@ -123,6 +127,67 @@ fn check_path(path: PathBuf) -> u8 {
         .map(|diagnostic| diagnostic::render(&path, &source, diagnostic))
         .collect::<String>();
     write_diagnostics(&rendered)
+}
+
+fn run_path(path: PathBuf) -> u8 {
+    let label = display_argument(path.as_os_str());
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return write_io_diagnostic(&format!(
+                "SEL-C003 failed to read source `{label}`: {error}\n"
+            ));
+        }
+    };
+    let source = match String::from_utf8(bytes) {
+        Ok(source) => source,
+        Err(error) => {
+            let offset = error.utf8_error().valid_up_to();
+            let diagnostic = diagnostic::Diagnostic::new(
+                "SEL-L001",
+                format!("source is not valid UTF-8 at byte offset {offset}"),
+                diagnostic::Span::new(offset, offset.saturating_add(1)),
+            );
+            return write_diagnostics(&diagnostic::render_at_start(&path, &diagnostic));
+        }
+    };
+
+    let parsed = parser::parse(&source);
+    if !parsed.diagnostics.is_empty() {
+        let rendered = parsed
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic::render(&path, &source, diagnostic))
+            .collect::<String>();
+        return write_diagnostics(&rendered);
+    }
+    let Some(program) = parsed.program else {
+        return write_stderr("SEL-C004 parser returned no program without diagnostics\n");
+    };
+    let semantic_diagnostics = semantic::check(&program);
+    if !semantic_diagnostics.is_empty() {
+        let rendered = semantic_diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic::render(&path, &source, diagnostic))
+            .collect::<String>();
+        return write_diagnostics(&rendered);
+    }
+
+    match runtime::execute(&program) {
+        Ok(value) => write_stdout(&format!("{}\n", value.render())),
+        Err(error) => {
+            let diagnostic = error.diagnostic();
+            let mut rendered = diagnostic::render(&path, &source, &diagnostic);
+            if !error.stack.is_empty() {
+                rendered.push_str(&format!(
+                    "{}: stack {}\n",
+                    path.display(),
+                    error.stack.join(" -> ")
+                ));
+            }
+            write_diagnostics(&rendered)
+        }
+    }
 }
 
 fn write_stdout(message: &str) -> u8 {
@@ -196,6 +261,10 @@ mod tests {
             classify(&[OsString::from("check")]),
             Action::Unsupported(_)
         ));
+        assert!(matches!(
+            classify(&[OsString::from("run"), OsString::from("program.sely")]),
+            Action::Run(_)
+        ));
     }
 
     #[test]
@@ -206,6 +275,7 @@ mod tests {
             Action::Help | Action::Version | Action::Check(_) => {
                 panic!("expected unsupported action")
             }
+            Action::Run(_) => panic!("expected unsupported action"),
         }
     }
 
