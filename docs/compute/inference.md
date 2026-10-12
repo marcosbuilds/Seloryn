@@ -1,6 +1,9 @@
 # Model inference
 
-The target inference contract supports typed model loading, explicit tokenizer, request batching and bounded memory, while keeping tensor model APIs distinct from HTTP serving.
+**Design target only:** Seloryn 0.00 cannot load or run models. The target
+inference contract supports typed model loading, explicit tokenizer, request
+batching and bounded memory, while keeping tensor model APIs distinct from HTTP
+serving.
 
 ```seloryn
 from seloryn.models import Model

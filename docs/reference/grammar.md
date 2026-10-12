@@ -1,6 +1,8 @@
 # Grammar and syntax contract
 
-**Normative direction; E3 syntax and semantic subset implemented.** Source is UTF-8. The current `seloryn check` command validates layout, a bounded parser subset and the implemented semantic core; the complete grammar below remains a design contract until each construct has runtime and negative-test coverage. Keywords, primitive types and standard public APIs are English. Case-sensitive symbols use `snake_case` for functions and variables, `PascalCase` for named types, `UPPER_SNAKE_CASE` for constants, and `lowercase.dotted` module paths. Identifiers follow Unicode XID rules; exported package names use ASCII for portability. Module namespaces are distinct from filesystem traversal.
+> **E3 semantic subset — implemented and tested portions only.** The current `seloryn check` command validates UTF-8, layout, a bounded parser subset and selected semantic rules. It does not execute `.sely`, validate tensor types or provide the complete grammar below. The attached `seloryn_e3_design_review.md` is the design reference; the [public E3 checklist](../project/e3-checklist.md) records implementation evidence and gaps.
+
+The complete grammar remains a design contract until each construct has runtime and negative-test coverage. Keywords, primitive types and standard public APIs are English. Case-sensitive symbols use `snake_case` for functions and variables, `PascalCase` for named types, `UPPER_SNAKE_CASE` for constants, and `lowercase.dotted` module paths. Identifiers follow Unicode XID rules; exported package names use ASCII for portability. Module namespaces are distinct from filesystem traversal.
 
 ## Compound statements
 
@@ -18,6 +20,8 @@ fn assess(health: Health) -> Text:
         case Health(healthy=false):
             return "unhealthy"
 ```
+
+The example above is a **design concept**, not a current acceptance example: modules, imports and named record-field patterns are not available in the E3 checker.
 
 ### Simplified EBNF
 
@@ -62,16 +66,30 @@ postfix        = primary, { call | '.' IDENT | '?.' IDENT | '[' expr ']' | '?' }
 
 This EBNF summarizes accepted design intent; production-ready conformance grammar must additionally define literal forms, tuples, map/sequence expressions, generics, spread rules, multiline continuation, numeric suffixes, operator associativity, method calls and exact lexical edge cases. Reserved syntax MUST fail explicitly before implementation, not silently parse incorrectly.
 
-### Definitive semantic rules
+## Grammar feature readiness
+
+| Feature | Current status | Evidence and limit |
+|---|---|---|
+| `record` declarations | Implemented parser and nominal field checks | [`parse_record`](../../src/parser.rs#L395), [`type_of_call`](../../src/semantic.rs#L845); named-field construction is not implemented |
+| `enum` declarations and variants | Implemented parser and partial constructor checks | [`parse_enum`](../../src/parser.rs#L436), [`check_constructor_name`](../../src/semantic.rs#L528); no runtime values |
+| `match` statements | Partial semantic checker | [`parse_match`](../../src/parser.rs#L650), [`check_match`](../../src/semantic.rs#L409); Bool/Option/Result/enum coverage is checked, but execution and structural patterns are absent |
+| `Result` and postfix `?` | Minimal static checks | [`type_of_expr`](../../src/semantic.rs#L652); propagation is typed, not executed |
+| `Option` and `??` | Minimal static checks | [`type_of_binary`](../../src/semantic.rs#L760); nullable `T?` and `?.` remain reserved |
+| Modules and imports | Reserved/unavailable in E3 | `seloryn check` emits `SEL-M001`; no resolver or package graph exists |
+| Tensor and symbolic shape types | Designed only | No tensor type is accepted by [`type_from_expr`](../../src/semantic.rs#L1005) |
+
+Status labels mean: **implemented** is present and tested in the checker; **partial** has explicit gaps; **reserved** produces a diagnostic rather than silently working; **designed** has no current implementation.
+
+### Implemented checker rules in the E3 subset
 
 - Four **ASCII spaces** per block level; tabs as indentation produce a diagnostic. Blank/comment-only lines do not emit indentation transitions; grouping delimiters suppress layout tokens. CRLF and LF accepted.
-- A `match` is exhaustiveness-checked for `Bool`, `Option`, `Result` and closed `enum` variants. A reachable `case` after a total match is diagnosed as unreachable. Binding patterns cannot execute functions.
-- `require condition else error` is legal **only** in a function returning `Result[T,E]`; a false condition causes early `Err(error)` with `error` assignable to `E`. `condition` MUST be Bool. No hidden throw.
-- Postfix `?` is Result propagation only: `Result[T,E]` becomes `T`, early-returning `Err(E)`; optional access is `?.` and nullability is `T?`. Those uses are lexically distinct.
+- A `match` is statically checked for exhaustiveness for `Bool`, `Option`, `Result` and closed `enum` variants. A reachable `case` after a total match is diagnosed as unreachable. No match body executes.
+- `require condition else error` is accepted only in a function typed as `Result[T,E]`; `condition` must be `Bool` and `error` must be assignable to `E`. The checker does not perform the early return because no interpreter exists.
+- Postfix `?` is checked as Result propagation: `Result[T,E]` becomes `T` in a Result-returning function. No runtime propagation occurs; optional access is `?.` and nullability is `T?`, both reserved for later semantics.
 - `|>` requires a function or callable with exactly one first argument consumed by the LHS; further arguments require an explicit lambda (proposed syntax `value |> fn(x) => ...` is **reserved** until closure syntax is chosen).
 - `and` and `or` short-circuit and require Bool operands; `??` consumes nullable/Option values, not arbitrary falsey values.
 - No implicit conversion between integer, Bool, Text, F32 or F64. No implicit broadcasting across incompatible tensor dimensions.
-- `return`, `break`, `continue` have strict context validation; `try/catch` is reserved and cannot replace `Result` in normal APIs.
+- `return` has function-context and return-type checks. `break`, `continue` and `try/catch` remain reserved and cannot replace `Result` in normal APIs.
 
 ### Operator precedence, high to low
 
@@ -99,4 +117,4 @@ This EBNF summarizes accepted design intent; production-ready conformance gramma
 | Resource safety | Scoped `using` (reserved pending lifetime rules) |
 | Concurrency | Structured `async` and `await` (reserved pending runtime) |
 
-All future declarations get syntax, semantics, diagnostics and a golden test suite before being marked accepted.
+All future declarations get syntax, semantics, diagnostics and a golden test suite before being marked accepted. The current implementation boundary and known gaps are tracked in the [E3 checklist](../project/e3-checklist.md).

@@ -1,6 +1,10 @@
 # Tensors
 
-A usable AI language needs a real numerical execution engine. A `Tensor` must be a typed, shaped value backed by an allocated buffer with documented lifetime, layout and device residency. A list of numbers with operator overloads does **not** meet this contract.
+**Design target only:** Seloryn 0.00 has no tensor type, allocated numeric
+buffer or tensor operation. A usable AI language needs a real numerical
+execution engine. A `Tensor` must be a typed, shaped value backed by an
+allocated buffer with documented lifetime, layout and device residency. A list
+of numbers with operator overloads does **not** meet this contract.
 
 ### Proposed type model
 

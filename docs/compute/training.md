@@ -1,6 +1,9 @@
 # Model training
 
-Seloryn's goal is to train actual networks end-to-end, not just call external inference endpoints. This requires a reliable stack from dataset ingestion to optimizer checkpointing.
+**Design target only:** Seloryn 0.00 has no trainer, dataset API, optimizer or
+model execution runtime. Seloryn's AI mission is to eventually train actual
+networks end-to-end, not just call external inference endpoints. This requires
+a reliable stack from dataset ingestion to optimizer checkpointing.
 
 ### Intended training loop (unimplemented)
 

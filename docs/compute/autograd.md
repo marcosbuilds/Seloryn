@@ -1,6 +1,10 @@
 # Automatic differentiation
 
-The first ML-ready gradient engine uses **reverse-mode automatic differentiation** over an explicit computation graph, with leaf parameters, intermediate values, saved tensors and one derivative rule per differentiable primitive.
+**Design target only:** Seloryn 0.00 has no automatic-differentiation engine
+or executable computation graph. The first ML-ready gradient engine is
+intended to use **reverse-mode automatic differentiation** over an explicit
+computation graph, with leaf parameters, intermediate values, saved tensors and
+one derivative rule per differentiable primitive.
 
 ![Gradient dataflow](../../assets/training-flow.png)
 

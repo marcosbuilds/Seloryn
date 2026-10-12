@@ -1,12 +1,21 @@
 # Language philosophy
 
-Seloryn is **expression-centered but not expression-only**. Branching is a basic primitive, not its governing design. The language aims to express intent using named types, checked values, pattern matching, operations over collections and tensors, declarative validation and composable pipelines.
+Seloryn is an **AI-first language design for development, integration and
+serving**, while remaining expression-centered rather than expression-only.
+Branching is a basic primitive, not its governing design. The language aims to
+make model, data and service boundaries explicit using named types, checked
+values, pattern matching, declarative validation and composable pipelines.
+
+The proposed advantage is fewer invalid states, fewer adaptations between
+development and production and better diagnostics across a complete AI
+workflow. That advantage is a hypothesis: later gates must compare equivalent
+workloads and revise the architecture if the evidence does not support it.
 
 ### Principles
 
 1. **Read the program like a contract:** named inputs, output types, explicit fallibility and visible side effects.
 2. **Make invalid states hard to represent:** non-null types, algebraic variants, exhaustive matches and shape constraints.
-3. **Organize by capabilities:** modules, records, traits, packages and narrow exports; no gigantic script mandate.
+3. **Organize AI systems by capabilities:** model/data/service modules, records, traits, packages and narrow exports; no gigantic script mandate.
 4. **Prefer describing data flow:** iterators, `match`, `require` for typed validation, `?` for Result propagation, `|>` for pure transformations.
 5. **Protect numerical integrity:** dtypes, dimensions, devices, precision, reproducibility and resource ownership are explicit.
 6. **Handle failure deliberately:** errors are structured values with diagnostic codes; no silent fallback.

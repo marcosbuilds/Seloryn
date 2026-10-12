@@ -1,9 +1,12 @@
 # Type system
 
-Seloryn's E3 checker provides an experimental soundness baseline for local
-scopes and public function boundaries, with local inference where
-information is sufficient. It does not yet execute programs or validate
-tensor types.
+> **Checker/design boundary.** Seloryn's E3 checker provides an experimental
+> soundness baseline for local scopes and public function boundaries, with
+> local inference where information is sufficient. It validates `Bool`, `I64`,
+> `F64`, `Text` and `Unit`, plus a limited set of containers and outcome types.
+> It does not execute programs or validate tensor types. The attached
+> `seloryn_e3_design_review.md` describes the target type system; the [E3
+> checklist](../project/e3-checklist.md) records what is real today.
 
 | Kind | Proposed contract | Avoid |
 |---|---|---|
@@ -12,7 +15,7 @@ tensor types.
 | Containers | `List[T]`, `Map[K,V]`, `Set[T]`, `Tuple[...]` | Untyped heterogeneous mutation |
 | Outcomes | `Result[T,E]`, `Option[T]`, `T?` | Silent error dropping or unknown nulls |
 | Domain | `record`, `enum`; planned `trait`, `class` | Unsafe implicit inheritance |
-| Tensor | `Tensor[DType, (Dim1, ...)]` with device metadata | Incorrect broadcasting or dtype promotion |
+| Tensor | **Designed only:** `Tensor[DType, (Dim1, ...)]` with device metadata | Incorrect broadcasting or dtype promotion |
 | Resources | File/socket/model/context handles with deterministic close | Leaks and cross-thread unsafety |
 | Callable | `fn(A,B) -> Result[C,E]` | Hidden uncaught errors |
 
@@ -30,7 +33,7 @@ widths remain outside this gate.
 
 ### Generics and types
 
-`Result[User, DbError]` and `Tensor[F32, (Batch, 768)]` share generic brackets but `Tensor` shape tuple is a compile-time symbolic shape language, **not** a runtime value list. Symbolic `Batch` unifies; conflicting concrete dimensions fail before execution when statically knowable, otherwise at the operation boundary with a structured ShapeError.
+`Result[User, DbError]` is part of the checker subset when its component types are supported. `Tensor[F32, (Batch, 768)]` is a **future API example**: the current checker does not accept `Tensor` as a type, does not allocate buffers and does not perform symbolic shape unification. The intended shape rules are design material only and must not be read as current validation behavior. See the [tensor design page](../compute/tensors.md) and the [current status](../project/status.md).
 
 ### Null / Result distinction
 

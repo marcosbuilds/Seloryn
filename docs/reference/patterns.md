@@ -1,6 +1,11 @@
 # Patterns, guards and composition
 
-The fundamental forms are **records** (named data), **enums** (closed variants), **Result** (explicit outcomes), **match** (exhaustive branching), **require** (validation) and **pipeline** (transformation). `if` is available but is not the entire language model.
+The fundamental design forms are **records** (named data), **enums** (closed
+variants), **Result** (explicit outcomes), **match** (exhaustive branching),
+**require** (validation) and **pipeline** (transformation). The current E3
+checker validates only a bounded subset of these forms and never executes them;
+the examples on this page are design concepts. `if` is available in the checker,
+but it is not the entire language model.
 
 ```seloryn
 enum JobState:
