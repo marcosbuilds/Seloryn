@@ -22,7 +22,7 @@ A diagnostic has stable `code`, severity, module, source span (byte offsets and 
 | Parsing | `SEL-P***` | missing colon, invalid pattern |
 | Typing | `SEL-T***` | incompatible units, non-Bool condition |
 | Module | `SEL-M***` | missing module, cyclic initialization |
-| Tensor runtime | `SEL-R201`–`SEL-R208` | invalid shape, budget, dtype, broadcast or numeric failure |
+| Tensor runtime | `SEL-R201`–`SEL-R209` | invalid shape, per-tensor/global budget, dtype, broadcast or numeric failure |
 | Result/control flow | `SEL-R***` | invalid `require`, non-exhaustive `match`, bad `?` flow |
 | Runtime | `SEL-R***` | overflow, division by zero, invalid call or impossible match |
 | Security | `SEL-S***` | denied network destination |

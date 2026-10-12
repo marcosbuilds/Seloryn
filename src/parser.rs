@@ -79,6 +79,11 @@ pub struct Directive {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
     Binding(Binding),
+    Assignment {
+        name: String,
+        value: Expr,
+        span: Span,
+    },
     Return {
         value: Option<Expr>,
         span: Span,
@@ -94,6 +99,12 @@ pub enum Statement {
         span: Span,
     },
     Match(MatchStatement),
+    For {
+        name: String,
+        iterable: Expr,
+        body: Vec<Statement>,
+        span: Span,
+    },
     Expression(Expr),
 }
 
@@ -207,6 +218,11 @@ pub enum Expr {
     Call {
         callee: Box<Expr>,
         arguments: Vec<Expr>,
+        span: Span,
+    },
+    Index {
+        object: Box<Expr>,
+        index: Box<Expr>,
         span: Span,
     },
     Member {
@@ -506,6 +522,7 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::Require) => self.parse_require(),
             TokenKind::Keyword(Keyword::If) => self.parse_if(),
             TokenKind::Keyword(Keyword::Match) => self.parse_match(),
+            TokenKind::Keyword(Keyword::For) => self.parse_for(),
             TokenKind::Keyword(Keyword::Const) => {
                 let span = self.bump().span;
                 self.error(
@@ -526,6 +543,21 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 let expression = self.parse_expression(0)?;
+                if self.consume_symbol(Symbol::Equal).is_some() {
+                    let Expr::Name { name, span } = expression else {
+                        self.error(
+                            "SEL-P004",
+                            "only a named `var` binding can be assigned",
+                            expression.span(),
+                        );
+                        self.synchronize_line();
+                        return None;
+                    };
+                    let value = self.parse_expression(0)?;
+                    let span = Span::new(span.start, value.span().end);
+                    self.finish_line();
+                    return Some(Statement::Assignment { name, value, span });
+                }
                 self.finish_line();
                 Some(Statement::Expression(expression))
             }
@@ -628,6 +660,25 @@ impl<'a> Parser<'a> {
             branches,
             otherwise,
             span: Span::new(start, branch_end),
+        })
+    }
+
+    fn parse_for(&mut self) -> Option<Statement> {
+        let start = self
+            .expect_keyword(Keyword::For, "expected `for`")?
+            .span
+            .start;
+        let (name, _) = self.expect_identifier("expected a loop binding name")?;
+        self.expect_keyword(Keyword::In, "expected `in` in for loop")?;
+        let iterable = self.parse_expression(0)?;
+        self.expect_symbol(Symbol::Colon, "expected `:` after for iterable")?;
+        let body = self.parse_block()?;
+        let end = self.previous_span().end;
+        Some(Statement::For {
+            name,
+            iterable,
+            body,
+            span: Span::new(start, end),
         })
     }
 
@@ -886,6 +937,19 @@ impl<'a> Parser<'a> {
                     object: Box::new(left),
                     name,
                     optional,
+                };
+                continue;
+            }
+            if self.consume_symbol(Symbol::LeftBracket).is_some() {
+                let index = self.parse_expression(0)?;
+                let end = self
+                    .expect_symbol(Symbol::RightBracket, "expected `]` after index")?
+                    .span
+                    .end;
+                left = Expr::Index {
+                    object: Box::new(left.clone()),
+                    index: Box::new(index),
+                    span: Span::new(left.span().start, end),
                 };
                 continue;
             }
@@ -1189,6 +1253,7 @@ impl Expr {
             | Self::Unary { span, .. }
             | Self::Binary { span, .. }
             | Self::Call { span, .. }
+            | Self::Index { span, .. }
             | Self::Member { span, .. }
             | Self::Propagate { span, .. } => *span,
         }

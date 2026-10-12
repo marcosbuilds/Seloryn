@@ -42,7 +42,7 @@ struct EnumDef {
 
 #[derive(Clone, Debug)]
 enum Symbol {
-    Value { ty: Type },
+    Value { ty: Type, mutable: bool },
     Function(FunctionSignature),
 }
 
@@ -277,7 +277,11 @@ impl<'a> Checker<'a> {
                 .get(index)
                 .cloned()
                 .unwrap_or(Type::Unknown);
-            self.declare_local(parameter.name.clone(), Symbol::Value { ty }, parameter.span);
+            self.declare_local(
+                parameter.name.clone(),
+                Symbol::Value { ty, mutable: false },
+                parameter.span,
+            );
         }
         for statement in &function.body {
             self.check_statement(statement);
@@ -305,13 +309,21 @@ impl<'a> Checker<'a> {
             .as_ref()
             .map_or_else(|| actual.clone(), |ty| self.type_from_expr(ty));
         self.ensure_assignable(&actual, &expected, binding.value.span(), "binding value");
-        self.globals
-            .insert(binding.name.clone(), Symbol::Value { ty: expected });
+        self.globals.insert(
+            binding.name.clone(),
+            Symbol::Value {
+                ty: expected,
+                mutable: binding.mutable,
+            },
+        );
     }
 
     fn check_statement(&mut self, statement: &Statement) {
         match statement {
             Statement::Binding(binding) => self.check_binding(binding),
+            Statement::Assignment { name, value, span } => {
+                self.check_assignment(name, value, *span)
+            }
             Statement::Return { value, span } => self.check_return(value.as_ref(), *span),
             Statement::Require {
                 condition,
@@ -335,6 +347,12 @@ impl<'a> Checker<'a> {
                 }
             }
             Statement::Match(statement) => self.check_match(statement),
+            Statement::For {
+                name,
+                iterable,
+                body,
+                span,
+            } => self.check_for(name, iterable, body, *span),
             Statement::Expression(expression) => {
                 self.type_of_expr(expression);
             }
@@ -350,9 +368,63 @@ impl<'a> Checker<'a> {
         self.ensure_assignable(&actual, &expected, binding.value.span(), "binding value");
         self.declare_local(
             binding.name.clone(),
-            Symbol::Value { ty: expected },
+            Symbol::Value {
+                ty: expected,
+                mutable: binding.mutable,
+            },
             binding.span,
         );
+    }
+
+    fn check_assignment(&mut self, name: &str, value: &Expr, span: Span) {
+        let Some(symbol) = self.lookup(name) else {
+            self.error("SEL-M002", format!("undefined name `{name}`"), span);
+            self.type_of_expr(value);
+            return;
+        };
+        let Symbol::Value { ty, mutable } = symbol else {
+            self.error(
+                "SEL-T003",
+                format!("function `{name}` cannot be assigned"),
+                span,
+            );
+            self.type_of_expr(value);
+            return;
+        };
+        if !mutable {
+            self.error(
+                "SEL-T003",
+                format!("binding `{name}` is immutable; use `var` for reassignment"),
+                span,
+            );
+        }
+        let actual = self.type_of_expr(value);
+        self.ensure_assignable(&actual, &ty, value.span(), "assignment value");
+    }
+
+    fn check_for(&mut self, name: &str, iterable: &Expr, body: &[Statement], span: Span) {
+        let iterable_type = self.type_of_expr(iterable);
+        let Type::List(element_type) = iterable_type else {
+            self.error(
+                "SEL-T003",
+                "for iteration requires a List[T] iterable",
+                span,
+            );
+            return;
+        };
+        self.scopes.push(Scope::default());
+        self.declare_local(
+            name.to_owned(),
+            Symbol::Value {
+                ty: *element_type,
+                mutable: false,
+            },
+            span,
+        );
+        for statement in body {
+            self.check_statement(statement);
+        }
+        self.scopes.pop();
     }
 
     fn check_return(&mut self, value: Option<&Expr>, span: Span) {
@@ -477,6 +549,7 @@ impl<'a> Checker<'a> {
                     name.clone(),
                     Symbol::Value {
                         ty: expected.clone(),
+                        mutable: false,
                     },
                     *span,
                 );
@@ -689,6 +762,27 @@ impl<'a> Checker<'a> {
                 let _ = span;
                 Type::List(Box::new(element))
             }
+            Expr::Index {
+                object,
+                index,
+                span,
+            } => {
+                let object_type = self.type_of_expr(object);
+                let index_type = self.type_of_expr(index);
+                self.ensure_type(&index_type, &Type::I64, index.span(), "list index");
+                match object_type {
+                    Type::List(element_type) => *element_type,
+                    Type::Unknown | Type::Error => Type::Error,
+                    other => {
+                        self.error(
+                            "SEL-T003",
+                            format!("indexing requires a List[T], got {}", display_type(&other)),
+                            *span,
+                        );
+                        Type::Error
+                    }
+                }
+            }
             Expr::Group { value, .. } => self.type_of_expr(value),
             Expr::Unary {
                 operator,
@@ -791,6 +885,16 @@ impl<'a> Checker<'a> {
             "+" => {
                 if left_type == Type::Text && right_type == Type::Text {
                     Type::Text
+                } else if let (Type::List(left_element), Type::List(right_element)) =
+                    (&left_type, &right_type)
+                {
+                    self.ensure_assignable(
+                        right_element,
+                        left_element,
+                        right.span(),
+                        "list element",
+                    );
+                    Type::List(left_element.clone())
                 } else {
                     self.numeric_binary(&left_type, &right_type, span)
                 }
@@ -953,16 +1057,26 @@ impl<'a> Checker<'a> {
             Builtin::TensorShape
             | Builtin::TensorRank
             | Builtin::TensorElements
-            | Builtin::TensorDtype
-            | Builtin::Sum
-            | Builtin::Mean => 1,
+            | Builtin::TensorDtype => 1,
+            Builtin::Sum | Builtin::Mean => 0,
             Builtin::Matmul => 2,
         };
-        if arguments.len() != expected_arguments {
+        let valid_arity = if matches!(builtin, Builtin::Sum | Builtin::Mean) {
+            arguments.len() == 1 || arguments.len() == 2
+        } else {
+            arguments.len() == expected_arguments
+        };
+        if !valid_arity {
+            let expected_description = if matches!(builtin, Builtin::Sum | Builtin::Mean) {
+                "1 or 2".to_owned()
+            } else {
+                expected_arguments.to_string()
+            };
             self.error(
                 "SEL-T005",
                 format!(
-                    "builtin `{name}` expects {expected_arguments} argument(s), got {}",
+                    "builtin `{name}` expects {} argument(s), got {}",
+                    expected_description,
                     arguments.len()
                 ),
                 span,
@@ -1041,6 +1155,9 @@ impl<'a> Checker<'a> {
             Builtin::Sum => {
                 let tensor_type = self.type_of_expr(&arguments[0]);
                 self.ensure_tensor_type(&tensor_type, arguments[0].span(), "tensor_sum tensor");
+                if let Some(axis) = arguments.get(1) {
+                    self.ensure_expr_assignable(axis, &Type::I64, "tensor_sum axis");
+                }
                 tensor_type
             }
             Builtin::Mean => {
@@ -1049,6 +1166,9 @@ impl<'a> Checker<'a> {
                     &Type::Tensor(TensorDtype::F32),
                     "tensor_mean tensor",
                 );
+                if let Some(axis) = arguments.get(1) {
+                    self.ensure_expr_assignable(axis, &Type::I64, "tensor_mean axis");
+                }
                 Type::Tensor(TensorDtype::F32)
             }
             Builtin::Matmul => {
@@ -1425,6 +1545,25 @@ mod tests {
     fn checks_records_options_results_and_member_types() {
         let source = "record Input:\n    text: Text\n    limit: I64\nfn validate(input: Input) -> Result[Text, Text]:\n    require input.limit > 0 else \"limit\"\n    return Ok(input.text)\nfn choose(value: Option[I64]) -> I64:\n    match value:\n        case Some(number):\n            return number\n        case None:\n            return 0\nfn main(input: Input) -> Unit:\n    let result: Result[Text, Text] = validate(input)\n    match result:\n        case Ok(text):\n            return\n        case Err(error):\n            return\n";
         assert!(diagnostics(source).is_empty());
+    }
+
+    #[test]
+    fn checks_collection_iteration_indexing_and_mutability() {
+        let valid = "fn main() -> I64:\n    var total: I64 = 0\n    for value in [1, 2, 3]:\n        total = total + value\n    return [total][0]\n";
+        assert!(diagnostics(valid).is_empty());
+        assert!(
+            diagnostics("fn main() -> Unit:\n    let value: I64 = 1\n    value = 2\n    return\n")
+                .contains(&"SEL-T003".to_owned())
+        );
+        assert!(
+            diagnostics("fn main() -> Unit:\n    for value in 1:\n        return\n")
+                .contains(&"SEL-T003".to_owned())
+        );
+        let invalid_index = diagnostics("fn main() -> I64:\n    return [true][0]\n");
+        assert!(
+            invalid_index.contains(&"SEL-T002".to_owned()),
+            "{invalid_index:?}"
+        );
     }
 
     #[test]

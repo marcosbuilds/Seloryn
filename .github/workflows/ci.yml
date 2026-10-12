@@ -1,0 +1,55 @@
+name: Verify Seloryn
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Rust and N1 / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+          rustup component add rustfmt clippy
+      - name: Toolchain details
+        run: |
+          rustc --version
+          cargo --version
+          python --version
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Rust tests (all targets)
+        run: cargo test --all-targets --locked
+      - name: Clippy (warnings fail)
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Release tests
+        run: cargo test --release --all-targets --locked
+      - name: Release build
+        run: cargo build --release --locked
+      - name: Independent N1 CLI comparison
+        run: python tests/n1_probe.py
+      - name: PowerShell 5.1 CLI smoke
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: '& .\target\release\seloryn.exe run examples\tensor-matmul.sely'
+      - name: CMD CLI smoke
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: target\release\seloryn.exe run examples\tensor-matmul.sely

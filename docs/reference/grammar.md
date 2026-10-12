@@ -70,13 +70,14 @@ This EBNF summarizes accepted design intent; production-ready conformance gramma
 
 | Feature | Current status | Evidence and limit |
 |---|---|---|
-| `record` declarations | Implemented parser and nominal field checks | [`parse_record`](../../src/parser.rs#L395), [`type_of_call`](../../src/semantic.rs#L845); named-field construction is not implemented |
-| `enum` declarations and variants | Implemented parser and partial constructor checks | [`parse_enum`](../../src/parser.rs#L436), [`check_constructor_name`](../../src/semantic.rs#L528); no runtime values |
+| `record` declarations | Implemented parser, nominal field checks and E4 construction/member access | [`parse_record`](../../src/parser.rs#L395), [`type_of_call`](../../src/semantic.rs#L845); named-field construction is not implemented |
+| `enum` declarations and variants | Implemented parser, constructor checks and E4 values/matching | [`parse_enum`](../../src/parser.rs#L436), [`check_constructor_name`](../../src/semantic.rs#L528); structural patterns remain outside |
 | `match` statements | Partial checker plus E4 execution | [`parse_match`](../../src/parser.rs#L650), [`check_match`](../../src/semantic.rs#L409), [`execute`](../../src/runtime.rs#L121); Bool/Option/Result/enum coverage and constructor cases execute, but structural patterns are absent |
 | `Result` and postfix `?` | Static checks plus E4 propagation | [`type_of_expr`](../../src/semantic.rs#L652), runtime tests; `?` returns a compatible `Err` from the current function |
 | `Option` and `??` | Static checks plus E4 values/fallback | [`type_of_binary`](../../src/semantic.rs#L760), runtime tests; nullable `T?` and `?.` remain reserved |
 | Modules and imports | Reserved/unavailable in E3 | `seloryn check` emits `SEL-M001`; no resolver or package graph exists |
 | `Tensor[F32]` and `Tensor[I64]` | N1 experimental | Runtime shapes and CPU kernels are checked by [`src/tensor`](../../src/tensor) and CLI tests; symbolic shape parameters remain unavailable |
+| List indexing, `for` iteration and `var` assignment | E4 experimental | `List[T]` indexing, bounded iteration, mutable bindings and list concatenation execute; tensor indexing remains unavailable |
 
 Status labels mean: **implemented** is present and tested in the checker; **partial** has explicit gaps; **reserved** produces a diagnostic rather than silently working; **designed** has no current implementation.
 

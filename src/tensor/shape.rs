@@ -2,6 +2,7 @@ use super::TensorError;
 
 pub const MAX_RANK: usize = 32;
 pub const DEFAULT_MEMORY_BUDGET_BYTES: usize = 64 * 1024 * 1024;
+pub const DEFAULT_GLOBAL_MEMORY_BUDGET_BYTES: usize = 64 * 1024 * 1024;
 
 pub fn checked_shape(shape: &[i64]) -> Result<Vec<usize>, TensorError> {
     if shape.len() > MAX_RANK {

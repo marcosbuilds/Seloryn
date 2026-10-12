@@ -1,6 +1,24 @@
 use super::TensorError;
-use super::shape::{broadcast_shape, checked_shape, contiguous_strides, element_count};
+use super::shape::{
+    DEFAULT_GLOBAL_MEMORY_BUDGET_BYTES, broadcast_shape, checked_shape, contiguous_strides,
+    element_count,
+};
 use std::fmt;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+static GLOBAL_ALLOCATED_BYTES: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug, Eq, PartialEq)]
+struct TensorAllocation {
+    bytes: usize,
+}
+
+impl Drop for TensorAllocation {
+    fn drop(&mut self) {
+        GLOBAL_ALLOCATED_BYTES.fetch_sub(self.bytes, Ordering::SeqCst);
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TensorDtype {
@@ -26,8 +44,8 @@ impl TensorDtype {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum TensorData {
-    F32(Vec<f32>),
-    I64(Vec<i64>),
+    F32(Arc<Vec<f32>>),
+    I64(Arc<Vec<i64>>),
 }
 
 impl TensorData {
@@ -45,6 +63,7 @@ pub struct Tensor {
     pub(crate) shape: Vec<usize>,
     pub(crate) strides: Vec<usize>,
     pub(crate) data: TensorData,
+    allocation: Arc<TensorAllocation>,
 }
 
 impl Tensor {
@@ -73,7 +92,12 @@ impl Tensor {
         shape: &[i64],
         budget: usize,
     ) -> Result<Self, TensorError> {
-        Self::new(TensorDtype::F32, TensorData::F32(values), shape, budget)
+        Self::new(
+            TensorDtype::F32,
+            TensorData::F32(Arc::new(values)),
+            shape,
+            budget,
+        )
     }
 
     pub fn from_i64(values: Vec<i64>, shape: &[i64]) -> Result<Self, TensorError> {
@@ -85,7 +109,12 @@ impl Tensor {
         shape: &[i64],
         budget: usize,
     ) -> Result<Self, TensorError> {
-        Self::new(TensorDtype::I64, TensorData::I64(values), shape, budget)
+        Self::new(
+            TensorDtype::I64,
+            TensorData::I64(Arc::new(values)),
+            shape,
+            budget,
+        )
     }
 
     fn new(
@@ -113,11 +142,13 @@ impl Tensor {
         {
             return Err(TensorError::NonFinite);
         }
+        let allocation = reserve_global(bytes)?;
         Ok(Self {
             dtype,
             strides: contiguous_strides(&shape),
             shape,
             data,
+            allocation,
         })
     }
 
@@ -130,15 +161,17 @@ impl Tensor {
         if bytes > budget {
             return Err(TensorError::AllocationBudget { bytes, budget });
         }
+        let allocation = reserve_global(bytes)?;
         let data = match dtype {
-            TensorDtype::F32 => TensorData::F32(vec![0.0; elements]),
-            TensorDtype::I64 => TensorData::I64(vec![0; elements]),
+            TensorDtype::F32 => TensorData::F32(Arc::new(vec![0.0; elements])),
+            TensorDtype::I64 => TensorData::I64(Arc::new(vec![0; elements])),
         };
         Ok(Self {
             dtype,
             strides: contiguous_strides(&shape),
             shape,
             data,
+            allocation,
         })
     }
 
@@ -160,6 +193,11 @@ impl Tensor {
 
     pub fn element_count(&self) -> usize {
         self.data.len()
+    }
+
+    #[cfg(test)]
+    fn allocated_bytes(&self) -> usize {
+        self.allocation.bytes
     }
 
     pub fn reshape(&self, shape: &[i64]) -> Result<Self, TensorError> {
@@ -284,8 +322,8 @@ impl Tensor {
         if mean && axis_size == 0 {
             return Err(TensorError::EmptyMean);
         }
-        let outer = self.shape[..axis].iter().product::<usize>();
-        let inner = self.shape[axis + 1..].iter().product::<usize>();
+        let outer = checked_product(&self.shape[..axis])?;
+        let inner = checked_product(&self.shape[axis + 1..])?;
         let output_shape = self
             .shape
             .iter()
@@ -316,8 +354,8 @@ impl Tensor {
 
     fn reduce_i64(&self, values: &[i64], axis: usize) -> Result<Self, TensorError> {
         let axis_size = self.shape[axis];
-        let outer = self.shape[..axis].iter().product::<usize>();
-        let inner = self.shape[axis + 1..].iter().product::<usize>();
+        let outer = checked_product(&self.shape[..axis])?;
+        let inner = checked_product(&self.shape[axis + 1..])?;
         let output_shape = self
             .shape
             .iter()
@@ -425,6 +463,14 @@ fn validate_axis(axis: Option<usize>, rank: usize) -> Result<Option<usize>, Tens
     Ok(axis)
 }
 
+fn checked_product(shape: &[usize]) -> Result<usize, TensorError> {
+    shape.iter().try_fold(1usize, |product, dimension| {
+        product
+            .checked_mul(*dimension)
+            .ok_or(TensorError::ShapeOverflow)
+    })
+}
+
 fn shape_from_usize(shape: &[usize]) -> Result<Vec<i64>, TensorError> {
     shape
         .iter()
@@ -443,6 +489,32 @@ fn ensure_allocation(dtype: TensorDtype, elements: usize) -> Result<(), TensorEr
         });
     }
     Ok(())
+}
+
+fn reserve_global(bytes: usize) -> Result<Arc<TensorAllocation>, TensorError> {
+    loop {
+        let used = GLOBAL_ALLOCATED_BYTES.load(Ordering::SeqCst);
+        let Some(next) = used.checked_add(bytes) else {
+            return Err(TensorError::GlobalAllocationBudget {
+                bytes,
+                used,
+                budget: DEFAULT_GLOBAL_MEMORY_BUDGET_BYTES,
+            });
+        };
+        if next > DEFAULT_GLOBAL_MEMORY_BUDGET_BYTES {
+            return Err(TensorError::GlobalAllocationBudget {
+                bytes,
+                used,
+                budget: DEFAULT_GLOBAL_MEMORY_BUDGET_BYTES,
+            });
+        }
+        if GLOBAL_ALLOCATED_BYTES
+            .compare_exchange(used, next, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+        {
+            return Ok(Arc::new(TensorAllocation { bytes }));
+        }
+    }
 }
 
 fn broadcast_index(index: usize, output_shape: &[usize], input_shape: &[usize]) -> usize {
@@ -555,6 +627,20 @@ mod tests {
     }
 
     #[test]
+    fn enforces_global_resident_buffer_budget() {
+        let first = Tensor::zeros_f32(&[6_291_456]).expect("first global allocation");
+        let second = Tensor::zeros_f32(&[6_291_456]).expect("second global allocation");
+        assert_eq!(first.allocated_bytes(), 24 * 1024 * 1024);
+        assert!(matches!(
+            Tensor::zeros_f32(&[6_291_456]),
+            Err(TensorError::GlobalAllocationBudget { .. })
+        ));
+        drop(second);
+        drop(first);
+        Tensor::zeros_f32(&[1]).expect("released global allocation");
+    }
+
+    #[test]
     fn reshape_preserves_order_without_aliasing() {
         let tensor = Tensor::from_i64(vec![1, 2, 3, 4], &[2, 2]).expect("source tensor");
         let reshaped = tensor.reshape(&[4]).expect("same element count");
@@ -609,6 +695,22 @@ mod tests {
         assert!(matches!(
             sparse_metadata.sum_axis(Some(0)),
             Err(TensorError::AllocationBudget { .. })
+        ));
+    }
+
+    #[test]
+    fn overflowing_axis_reductions_report_errors_without_panicking() {
+        let zero_f32 =
+            Tensor::from_f32(Vec::new(), &[0, i64::MAX, i64::MAX]).expect("zero-storage tensor");
+        assert!(matches!(
+            zero_f32.sum_axis(Some(0)),
+            Err(TensorError::ShapeOverflow)
+        ));
+        let zero_i64 =
+            Tensor::from_i64(Vec::new(), &[0, i64::MAX, i64::MAX]).expect("zero-storage tensor");
+        assert!(matches!(
+            zero_i64.sum_axis(Some(0)),
+            Err(TensorError::ShapeOverflow)
         ));
     }
 

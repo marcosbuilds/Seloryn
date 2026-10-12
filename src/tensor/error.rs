@@ -15,6 +15,11 @@ pub enum TensorError {
         bytes: usize,
         budget: usize,
     },
+    GlobalAllocationBudget {
+        bytes: usize,
+        used: usize,
+        budget: usize,
+    },
     DataLength {
         expected: usize,
         actual: usize,
@@ -60,6 +65,7 @@ impl TensorError {
             | Self::ShapeOverflow
             | Self::InvalidReshape { .. } => "SEL-R201",
             Self::AllocationBudget { .. } => "SEL-R202",
+            Self::GlobalAllocationBudget { .. } => "SEL-R209",
             Self::DataLength { .. } | Self::DtypeMismatch { .. } => "SEL-R203",
             Self::BroadcastMismatch { .. } => "SEL-R204",
             Self::InvalidAxis { .. } | Self::MatmulRank { .. } | Self::MatmulShape { .. } => {
@@ -88,6 +94,14 @@ impl fmt::Display for TensorError {
                     "tensor allocation of {bytes} bytes exceeds budget {budget}"
                 )
             }
+            Self::GlobalAllocationBudget {
+                bytes,
+                used,
+                budget,
+            } => write!(
+                formatter,
+                "global tensor allocation of {bytes} bytes exceeds budget {budget} (already used {used} bytes)"
+            ),
             Self::DataLength { expected, actual } => write!(
                 formatter,
                 "tensor data has {actual} elements but shape requires {expected}"

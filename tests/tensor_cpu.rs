@@ -92,6 +92,42 @@ fn runs_broadcast_reshape_and_reduction_end_to_end() {
 }
 
 #[test]
+fn runs_axis_reductions_and_rejects_invalid_axis() {
+    let source = "fn main() -> Tensor[F32]:\n    let values: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0, 4.0], [2, 2])\n    return tensor_sum(values, 0)\n";
+    let output = run_source("axis-sum", source);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "Tensor[F32, shape=[2], values=[4.0, 6.0]]\n"
+    );
+
+    let source = "fn main() -> Tensor[F32]:\n    let values: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0, 4.0], [2, 2])\n    return tensor_mean(values, 1)\n";
+    let output = run_source("axis-mean", source);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout),
+        "Tensor[F32, shape=[2], values=[1.5, 3.5]]\n"
+    );
+
+    let source = "fn main() -> Tensor[F32]:\n    let values: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0, 4.0], [2, 2])\n    return tensor_sum(values, 2)\n";
+    let first = run_source("axis-invalid", source);
+    let second = run_source("axis-invalid", source);
+    assert!(!first.status.success());
+    assert_eq!(first.status.code(), Some(65));
+    assert_eq!(first.stdout, second.stdout);
+    assert_eq!(first.stderr, second.stderr);
+    assert!(String::from_utf8_lossy(&first.stderr).contains("SEL-R205"));
+}
+
+#[test]
 fn runs_i64_tensor_and_inspection_builtins() {
     let source = "fn main() -> Tensor[I64]:\n    let values: Tensor[I64] = tensor_i64([1, 2, 3, 4], [2, 2])\n    return tensor_sum(values)\n";
     let output = run_source("i64", source);

@@ -30,6 +30,14 @@ E3 defaults integer literals to `I64` and floating literals to `F64`, with no
 implicit Bool/Text/numeric coercion. Overflow behavior and additional scalar
 widths remain outside this gate.
 
+## Executable collection subset
+
+`List[T]` literals are homogeneous and can be indexed with an `I64`. A negative
+or out-of-bounds index is a deterministic runtime error. `for value in values:`
+iterates a list in source order; the loop binding is immutable. A `var` binding
+may be reassigned only to a value of its checked type, and `+` concatenates two
+compatible lists. Maps, sets, tuples and list mutation remain unavailable.
+
 ### Generics and types
 
 `Result[User, DbError]` is part of the checker subset when its component types are supported. `Tensor[F32]` and `Tensor[I64]` are accepted as bounded N1 types; shapes are supplied to runtime builtins and are checked at execution. Symbolic shape parameters, device metadata and implicit dtype conversion are not accepted. See the [tensor page](../compute/tensors.md) and the [current status](../project/status.md).

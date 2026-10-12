@@ -239,3 +239,23 @@ fn run_reports_the_same_structured_runtime_error_each_time() {
     assert!(stderr.contains("SEL-R118"));
     assert!(stderr.contains("stack main"));
 }
+
+#[test]
+fn run_rejects_global_tensor_budget_without_panicking() {
+    let path = temporary_source("global-tensor-budget");
+    fs::write(
+        &path,
+        "fn main() -> Tensor[F32]:\n    let first: Tensor[F32] = tensor_zeros_f32([6291456])\n    let second: Tensor[F32] = tensor_zeros_f32([6291456])\n    return tensor_zeros_f32([4194305])\n",
+    )
+    .expect("write global-budget source");
+
+    let first = run_cli(&["run", path.to_str().expect("temporary path is UTF-8")]);
+    let second = run_cli(&["run", path.to_str().expect("temporary path is UTF-8")]);
+    let _ = fs::remove_file(&path);
+    assert_eq!(first.status.code(), Some(65));
+    assert_eq!(first.stdout, second.stdout);
+    assert_eq!(first.stderr, second.stderr);
+    let stderr = String::from_utf8(first.stderr).expect("diagnostics must be UTF-8");
+    assert!(stderr.contains("SEL-R209"));
+    assert!(stderr.contains("stack main"));
+}

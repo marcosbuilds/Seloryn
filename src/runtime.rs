@@ -7,6 +7,9 @@ use crate::tensor::{Tensor, TensorError};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
+const MAX_CALL_DEPTH: usize = 128;
+const MAX_LOOP_ITERATIONS: usize = 1_000_000;
+
 /// Values that can be produced by the pure E4 interpreter.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -209,6 +212,13 @@ impl<'a> Interpreter<'a> {
                 span,
             )));
         }
+        if self.call_stack.len() >= MAX_CALL_DEPTH {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R132",
+                format!("call depth exceeds maximum {MAX_CALL_DEPTH}"),
+                span,
+            )));
+        }
 
         self.call_stack.push(name.to_owned());
         let mut frame = HashMap::new();
@@ -240,6 +250,10 @@ impl<'a> Interpreter<'a> {
                 let value = self.eval_expr(&binding.value)?;
                 self.bind(binding, value)
             }
+            Statement::Assignment { name, value, span } => {
+                let value = self.eval_expr(value)?;
+                self.assign(name, value, *span)
+            }
             Statement::Return { value, .. } => {
                 let value = value
                     .as_ref()
@@ -269,6 +283,12 @@ impl<'a> Interpreter<'a> {
                 ..
             } => self.eval_if(branches, otherwise.as_deref()),
             Statement::Match(statement) => self.eval_match(statement),
+            Statement::For {
+                name,
+                iterable,
+                body,
+                span,
+            } => self.eval_for(name, iterable, body, *span),
             Statement::Expression(expression) => {
                 self.eval_expr(expression)?;
                 Ok(())
@@ -326,6 +346,40 @@ impl<'a> Interpreter<'a> {
         let result = self.eval_statements(statements);
         self.scopes.pop();
         result
+    }
+
+    fn eval_for(
+        &mut self,
+        name: &str,
+        iterable: &Expr,
+        body: &[Statement],
+        span: Span,
+    ) -> Eval<()> {
+        let value = self.eval_expr(iterable)?;
+        let Value::List(values) = value else {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R128",
+                "for iteration requires a List value",
+                span,
+            )));
+        };
+        if values.len() > MAX_LOOP_ITERATIONS {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R131",
+                format!(
+                    "for loop has {} iterations; maximum is {MAX_LOOP_ITERATIONS}",
+                    values.len()
+                ),
+                span,
+            )));
+        }
+        for value in values {
+            self.scopes.push(HashMap::from([(name.to_owned(), value)]));
+            let result = self.eval_statements(body);
+            self.scopes.pop();
+            result?;
+        }
+        Ok(())
     }
 
     fn pattern_matches(
@@ -476,6 +530,11 @@ impl<'a> Interpreter<'a> {
                 arguments,
                 span,
             } => self.eval_call(callee, arguments, *span),
+            Expr::Index {
+                object,
+                index,
+                span,
+            } => self.eval_index(object, index, *span),
             Expr::Member {
                 object,
                 name,
@@ -633,15 +692,25 @@ impl<'a> Interpreter<'a> {
             Builtin::TensorShape
             | Builtin::TensorRank
             | Builtin::TensorElements
-            | Builtin::TensorDtype
-            | Builtin::Sum
-            | Builtin::Mean => 1,
+            | Builtin::TensorDtype => 1,
+            Builtin::Sum | Builtin::Mean => 0,
         };
-        if arguments.len() != expected {
+        let valid_arity = if matches!(builtin, Builtin::Sum | Builtin::Mean) {
+            arguments.len() == 1 || arguments.len() == 2
+        } else {
+            arguments.len() == expected
+        };
+        if !valid_arity {
+            let expected_description = if matches!(builtin, Builtin::Sum | Builtin::Mean) {
+                "1 or 2".to_owned()
+            } else {
+                expected.to_string()
+            };
             return Err(Control::Runtime(self.runtime(
                 "SEL-R103",
                 format!(
-                    "builtin expects {expected} argument(s), got {}",
+                    "builtin expects {} argument(s), got {}",
+                    expected_description,
                     arguments.len()
                 ),
                 span,
@@ -748,15 +817,29 @@ impl<'a> Interpreter<'a> {
             }
             Builtin::Sum => {
                 let tensor = tensor_value(&values[0], span, self)?;
-                tensor
-                    .sum_all()
+                let axis = values
+                    .get(1)
+                    .map(|value| self.reduction_axis(value, tensor.rank(), span))
+                    .transpose()?;
+                let result = match axis {
+                    Some(axis) => tensor.sum_axis(Some(axis)),
+                    None => tensor.sum_all(),
+                };
+                result
                     .map(Value::Tensor)
                     .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
             }
             Builtin::Mean => {
                 let tensor = tensor_value(&values[0], span, self)?;
-                tensor
-                    .mean_all()
+                let axis = values
+                    .get(1)
+                    .map(|value| self.reduction_axis(value, tensor.rank(), span))
+                    .transpose()?;
+                let result = match axis {
+                    Some(axis) => tensor.mean_axis(Some(axis)),
+                    None => tensor.mean_all(),
+                };
+                result
                     .map(Value::Tensor)
                     .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
             }
@@ -884,6 +967,42 @@ impl<'a> Interpreter<'a> {
         )))
     }
 
+    fn eval_index(&mut self, object: &Expr, index: &Expr, span: Span) -> Eval<Value> {
+        let object = self.eval_expr(object)?;
+        let index = self.eval_expr(index)?;
+        let Value::List(values) = object else {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R128",
+                "indexing requires a List value",
+                span,
+            )));
+        };
+        let Value::I64(index) = index else {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R128",
+                "list index requires an I64 value",
+                span,
+            )));
+        };
+        let Ok(index) = usize::try_from(index) else {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R129",
+                format!("list index {index} is outside the valid range"),
+                span,
+            )));
+        };
+        values.get(index).cloned().ok_or_else(|| {
+            Control::Runtime(self.runtime(
+                "SEL-R129",
+                format!(
+                    "list index {index} is out of bounds for length {}",
+                    values.len()
+                ),
+                span,
+            ))
+        })
+    }
+
     fn bind(&mut self, binding: &Binding, value: Value) -> Eval<()> {
         let Some(scope) = self.scopes.last_mut() else {
             return Err(Control::Runtime(self.runtime(
@@ -894,6 +1013,24 @@ impl<'a> Interpreter<'a> {
         };
         scope.insert(binding.name.clone(), value);
         Ok(())
+    }
+
+    fn assign(&mut self, name: &str, value: Value, span: Span) -> Eval<()> {
+        for scope in self.scopes.iter_mut().rev() {
+            if scope.contains_key(name) {
+                scope.insert(name.to_owned(), value);
+                return Ok(());
+            }
+        }
+        if self.globals.contains_key(name) {
+            self.globals.insert(name.to_owned(), value);
+            return Ok(());
+        }
+        Err(Control::Runtime(self.runtime(
+            "SEL-R130",
+            format!("cannot assign undefined name `{name}`"),
+            span,
+        )))
     }
 
     fn lookup(&self, name: &str) -> Option<Value> {
@@ -928,6 +1065,10 @@ impl<'a> Interpreter<'a> {
     fn add_values(&mut self, left: Value, right: Value, span: Span) -> Eval<Value> {
         match (left, right) {
             (Value::Text(left), Value::Text(right)) => Ok(Value::Text(left + &right)),
+            (Value::List(mut left), Value::List(right)) => {
+                left.extend(right);
+                Ok(Value::List(left))
+            }
             (Value::I64(left), Value::I64(right)) => {
                 left.checked_add(right).map(Value::I64).ok_or_else(|| {
                     Control::Runtime(self.runtime("SEL-R106", "integer addition overflowed", span))
@@ -1112,6 +1253,34 @@ impl<'a> Interpreter<'a> {
         self.runtime(error.code(), error.to_string(), span)
     }
 
+    fn reduction_axis(&self, value: &Value, rank: usize, span: Span) -> Eval<usize> {
+        let Value::I64(axis) = value else {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R205",
+                format!(
+                    "reduction axis requires I64, got {}",
+                    value_type_name(value)
+                ),
+                span,
+            )));
+        };
+        let Ok(axis) = usize::try_from(*axis) else {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R205",
+                format!("reduction axis {axis} is invalid for rank {rank}"),
+                span,
+            )));
+        };
+        if axis >= rank {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R205",
+                format!("reduction axis {axis} is invalid for rank {rank}"),
+                span,
+            )));
+        }
+        Ok(axis)
+    }
+
     fn error(&self, code: &'static str, message: impl Into<String>, span: Span) -> RuntimeError {
         self.runtime(code, message, span)
     }
@@ -1281,6 +1450,21 @@ mod tests {
     }
 
     #[test]
+    fn executes_list_indexing_iteration_assignment_and_concat() {
+        let indexed = run(
+            "fn main() -> List[I64]:\n    let values: List[I64] = [1, 2]\n    return values + [values[0]]\n",
+        )
+        .expect("list indexing should execute");
+        assert_eq!(indexed.render(), "[1, 2, 1]");
+
+        let total = run(
+            "fn main() -> I64:\n    var total: I64 = 0\n    for value in [1, 2, 3]:\n        total = total + value\n    return total\n",
+        )
+        .expect("list iteration should execute");
+        assert_eq!(total, Value::I64(6));
+    }
+
+    #[test]
     fn executes_option_result_require_match_and_propagation() {
         let value = run(
             "fn validate(value: I64) -> Result[I64, Text]:\n    require value > 0 else \"bad\"\n    return Ok(value)\nfn main() -> Result[I64, Text]:\n    let maybe: Option[I64] = None\n    let fallback: I64 = maybe ?? 7\n    let result: Result[I64, Text] = validate(fallback)\n    match result:\n        case Ok(value):\n            return Ok(value)\n        case Err(error):\n            return Err(error)\n",
@@ -1301,5 +1485,17 @@ mod tests {
         assert_eq!(error.code, "SEL-R118");
         assert_eq!(error.stack, vec!["main"]);
         assert_eq!(error.span.start, 29);
+    }
+
+    #[test]
+    fn reports_bounds_and_call_depth_without_panicking() {
+        let bounds = run("fn main() -> I64:\n    return [1][2]\n").expect_err("bounds must fail");
+        assert_eq!(bounds.code, "SEL-R129");
+
+        let depth = run(
+            "fn recurse(value: I64) -> I64:\n    return recurse(value)\nfn main() -> I64:\n    return recurse(0)\n",
+        )
+        .expect_err("call depth must fail");
+        assert_eq!(depth.code, "SEL-R132");
     }
 }

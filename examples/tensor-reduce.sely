@@ -1,0 +1,5 @@
+fn main() -> Tensor[F32]:
+    let left: Tensor[F32] = tensor_f32([1.0, 2.0], [2, 1])
+    let right: Tensor[F32] = tensor_f32([10.0, 20.0, 30.0], [1, 3])
+    let result: Tensor[F32] = left + right
+    return tensor_sum(result)

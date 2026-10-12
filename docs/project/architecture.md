@@ -40,7 +40,7 @@ Legend: **✓ implemented** means the checker/interpreter has source and tests; 
 | Semantic core | **⚠️ Partial:** name binding, scalar type constraints, exhaustiveness and fallibility checks | Diagnosable static behavior; no runtime execution |
 | Core IR | **✗ Not implemented** | Typed operations and optimization remain design work |
 | Execution | **⚠️ Experimental E4/N1:** pure tree-walk interpreter plus CPU tensor builtins | No effects, core IR, modules or accelerators |
-| Tensor engine | **⚠️ Experimental N1:** owned F32/I64 CPU buffers, checked shapes, broadcasting, reductions and rank-2 matmul | No symbolic shapes, views, autodiff or device movement |
+| Tensor engine | **⚠️ Experimental N1:** owned F32/I64 CPU buffers, checked shapes, broadcasting, total/axis reductions and rank-2 matmul with bounded resident memory | No symbolic shapes, views, autodiff or device movement |
 | Device interface | **✗ Not implemented** | CPU and accelerator providers require later evidence |
 | System library | **✗ Not implemented** | Streams, HTTP, files and subprocesses require later gates |
 | Product tools | **⚠️ Partial:** development CLI only; packages, formatter, LSP and installer are future | Platform-specific measured support |

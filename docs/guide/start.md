@@ -15,7 +15,7 @@ seloryn check example.sely
 seloryn run example.sely
 ```
 
-`check` validates UTF-8, four-space layout, the implemented parser subset and selected semantic rules: local names and scopes, scalar types, function calls and returns, records, enums, `Result`, `Option`, `require`, postfix `?`, pipelines and exhaustive `match`. It emits a structured source diagnostic and nonzero exit code for invalid input. The command path is implemented in [`src/main.rs:82`](../../src/main.rs#L82) and exercised by [`tests/bootstrap_cli.rs:61`](../../tests/bootstrap_cli.rs#L61).
+`check` validates UTF-8, four-space layout, the implemented parser subset and selected semantic rules: local names and scopes, scalar types, typed list indexing and iteration, mutable `var` assignment, function calls and returns, records, enums, `Result`, `Option`, `require`, postfix `?`, pipelines and exhaustive `match`. It emits a structured source diagnostic and nonzero exit code for invalid input. The command path is implemented in [`src/main.rs:82`](../../src/main.rs#L82) and exercised by [`tests/bootstrap_cli.rs:61`](../../tests/bootstrap_cli.rs#L61).
 
 `run` executes the same bounded constructs after all front-end diagnostics
 pass. It is pure: it has no filesystem, network, process or accelerator effects.
