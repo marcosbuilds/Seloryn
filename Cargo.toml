@@ -11,6 +11,10 @@ default-run = "seloryn"
 language-version = "0.00"
 status = "experimental-implemented"
 
+[dependencies]
+unicode-ident = "1.0"
+unicode-normalization = "0.1"
+
 [[bin]]
 name = "seloryn"
 path = "src/main.rs"

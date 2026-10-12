@@ -5,9 +5,10 @@
 | Area | State | Evidence |
 |---|---|---|
 | Grammar and language contracts | Proposed documentation | Reference pages only |
-| Lexer, parser, type checker | Not implemented | No artifacts |
+| Lexer and syntax parser | Experimental implemented | [`check`](../guide/cli.md), [bootstrap tests](../../tests/bootstrap_cli.rs) |
+| Type checker and semantic analysis | Not implemented | No artifacts |
 | Interpreter and runtime | Not implemented | No binary |
-| CLI bootstrap | Experimental implemented | [`--help`/`--version`](../guide/cli.md), [bootstrap tests](../../tests/bootstrap_cli.rs) |
+| CLI bootstrap | Experimental implemented | [`--help`/`--version`](../guide/cli.md), [`check`](../guide/cli.md) |
 | Formatter, language server | Not implemented | No executable |
 | HTTP, files, automation | Not implemented | No standard library |
 | Tensor CPU engine | Not implemented | No kernels |

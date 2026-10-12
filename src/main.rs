@@ -1,19 +1,27 @@
+mod diagnostic;
+mod lexer;
+mod parser;
+
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
+use std::fs;
 use std::io::{self, Write};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 const LANGUAGE_VERSION: &str = "0.00";
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
 const EXIT_OK: u8 = 0;
 const EXIT_USAGE: u8 = 64;
+const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n\nThis build exposes the CLI bootstrap only. The language compiler,\ninterpreter, standard library and installable release are not available yet.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely>\n\n`check` currently validates UTF-8, layout and syntax only.\nThe type checker, interpreter, standard library and installable release\nare not available yet.\n";
 
 enum Action {
     Help,
     Version,
+    Check(OsString),
     Unsupported(String),
 }
 
@@ -28,6 +36,7 @@ fn run(args: &[OsString]) -> u8 {
         Action::Version => write_stdout(&format!(
             "seloryn {LANGUAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=design-only\n"
         )),
+        Action::Check(path) => check_path(PathBuf::from(path)),
         Action::Unsupported(command) => write_stderr(&format!(
             "SEL-C001 unsupported command or argument: {command}\n"
         )),
@@ -39,16 +48,17 @@ fn classify(args: &[OsString]) -> Action {
         [] => Action::Help,
         [argument] if argument == "--help" || argument == "-h" => Action::Help,
         [argument] if argument == "--version" => Action::Version,
+        [command, path] if command == "check" => Action::Check(path.clone()),
         _ => Action::Unsupported(
             args.iter()
-                .map(display_argument)
+                .map(|argument| display_argument(argument))
                 .collect::<Vec<_>>()
                 .join(" "),
         ),
     }
 }
 
-fn display_argument(argument: &OsString) -> String {
+fn display_argument(argument: &OsStr) -> String {
     let Some(argument) = argument.to_str() else {
         return "<non-UTF-8 argument>".to_owned();
     };
@@ -68,6 +78,41 @@ fn display_argument(argument: &OsString) -> String {
     displayed
 }
 
+fn check_path(path: PathBuf) -> u8 {
+    let label = display_argument(path.as_os_str());
+    let bytes = match fs::read(&path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return write_io_diagnostic(&format!(
+                "SEL-C003 failed to read source `{label}`: {error}\n"
+            ));
+        }
+    };
+    let source = match String::from_utf8(bytes) {
+        Ok(source) => source,
+        Err(error) => {
+            let offset = error.utf8_error().valid_up_to();
+            let diagnostic = diagnostic::Diagnostic::new(
+                "SEL-L001",
+                format!("source is not valid UTF-8 at byte offset {offset}"),
+                diagnostic::Span::new(offset, offset.saturating_add(1)),
+            );
+            return write_diagnostics(&diagnostic::render_at_start(&path, &diagnostic));
+        }
+    };
+
+    let parsed = parser::parse(&source);
+    if parsed.program.is_some() && parsed.diagnostics.is_empty() {
+        return write_stdout(&format!("parsed {label} (syntax-only)\n"));
+    }
+    let rendered = parsed
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic::render(&path, &source, diagnostic))
+        .collect::<String>();
+    write_diagnostics(&rendered)
+}
+
 fn write_stdout(message: &str) -> u8 {
     match io::stdout().write_all(message.as_bytes()) {
         Ok(()) => EXIT_OK,
@@ -78,6 +123,20 @@ fn write_stdout(message: &str) -> u8 {
 fn write_stderr(message: &str) -> u8 {
     match io::stderr().write_all(message.as_bytes()) {
         Ok(()) => EXIT_USAGE,
+        Err(error) => write_io_error("stderr", error),
+    }
+}
+
+fn write_diagnostics(message: &str) -> u8 {
+    match io::stderr().write_all(message.as_bytes()) {
+        Ok(()) => EXIT_DATA,
+        Err(error) => write_io_error("stderr", error),
+    }
+}
+
+fn write_io_diagnostic(message: &str) -> u8 {
+    match io::stderr().write_all(message.as_bytes()) {
+        Ok(()) => EXIT_IO,
         Err(error) => write_io_error("stderr", error),
     }
 }
@@ -116,18 +175,32 @@ mod tests {
     }
 
     #[test]
+    fn check_requires_exactly_one_source_path() {
+        assert!(matches!(
+            classify(&[OsString::from("check"), OsString::from("program.sely")]),
+            Action::Check(_)
+        ));
+        assert!(matches!(
+            classify(&[OsString::from("check")]),
+            Action::Unsupported(_)
+        ));
+    }
+
+    #[test]
     fn unsupported_unicode_argument_remains_visible() {
         let action = classify(&[OsString::from("入口")]);
         match action {
             Action::Unsupported(message) => assert_eq!(message, "入口"),
-            Action::Help | Action::Version => panic!("expected unsupported action"),
+            Action::Help | Action::Version | Action::Check(_) => {
+                panic!("expected unsupported action")
+            }
         }
     }
 
     #[test]
     fn control_characters_are_escaped_in_diagnostics() {
         assert_eq!(
-            display_argument(&OsString::from("a\n\u{1b}b")),
+            display_argument(OsString::from("a\n\u{1b}b").as_os_str()),
             r"a\n\u{1b}b"
         );
     }

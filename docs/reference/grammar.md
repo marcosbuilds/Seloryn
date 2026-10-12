@@ -1,6 +1,6 @@
 # Grammar and syntax contract
 
-**Normative direction; implementation pending.** Source is UTF-8. Keywords, primitive types and standard public APIs are English. Case-sensitive symbols use `snake_case` for functions and variables, `PascalCase` for named types, `UPPER_SNAKE_CASE` for constants, and `lowercase.dotted` module paths. Identifiers follow Unicode XID rules; exported package names use ASCII for portability. Module namespaces are distinct from filesystem traversal.
+**Normative direction; E2 syntax subset implemented.** Source is UTF-8. The current `seloryn check` command validates layout and a bounded parser subset; the complete grammar below remains a design contract until each construct has semantic and negative-test coverage. Keywords, primitive types and standard public APIs are English. Case-sensitive symbols use `snake_case` for functions and variables, `PascalCase` for named types, `UPPER_SNAKE_CASE` for constants, and `lowercase.dotted` module paths. Identifiers follow Unicode XID rules; exported package names use ASCII for portability. Module namespaces are distinct from filesystem traversal.
 
 ## Compound statements
 
