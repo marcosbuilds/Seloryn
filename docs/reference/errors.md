@@ -24,7 +24,7 @@ A diagnostic has stable `code`, severity, module, source span (byte offsets and 
 | Module | `SEL-M***` | missing module, cyclic initialization |
 | Tensor runtime | `SEL-R201`–`SEL-R209` | invalid shape, per-tensor/global budget, dtype, broadcast or numeric failure |
 | Result/control flow | `SEL-R***` | invalid `require`, non-exhaustive `match`, bad `?` flow |
-| Runtime | `SEL-R***` | overflow, division by zero, invalid call or impossible match |
+| Runtime | `SEL-R***` | overflow, division by zero, invalid call, collection limit or impossible match |
 | Security | `SEL-S***` | denied network destination |
 | Tooling | `SEL-C***` | unsupported CLI command or target |
 

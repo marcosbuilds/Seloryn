@@ -46,7 +46,9 @@ Shapes are ordered nonnegative dimensions with rank at most 32. Rank zero has
 one element; any zero dimension has zero elements. Shape products, byte counts,
 reshape counts, integer arithmetic and F32 finite results are checked. The
 default per-tensor allocation budget is 64 MiB, and the process-wide resident
-tensor-buffer budget is also 64 MiB. Broadcast dimensions must be equal or one;
+tensor-buffer budget is also 64 MiB. This is a resident-buffer limit, not a
+total-process-memory limit for source lists, conversion scratch or metadata.
+Broadcast dimensions must be equal or one;
 zero and one are compatible, while other incompatible dimensions produce
 `SEL-R204`. An axis is a zero-based `I64` and must be less than the tensor rank;
 invalid axes produce `SEL-R205`.
@@ -56,7 +58,9 @@ It rejects negative or overflowing shapes, wrong data lengths, dtype mismatches,
 invalid axes, empty means, division by zero and non-finite F32 values with
 structured runtime diagnostics (`SEL-R201` through `SEL-R209`). A lexical,
 syntactic or semantic diagnostic still stops execution before any tensor is
-created.
+created. The CLI renders at most 4096 tensor values and appends a deterministic
+`... (N more)` marker for larger results; this limits presentation memory and
+does not change the tensor contents used by computation.
 
 ## Not available yet
 

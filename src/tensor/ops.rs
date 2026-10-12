@@ -55,6 +55,13 @@ impl TensorData {
             Self::I64(values) => values.len(),
         }
     }
+
+    fn capacity(&self) -> usize {
+        match self {
+            Self::F32(values) => values.capacity(),
+            Self::I64(values) => values.capacity(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -131,7 +138,8 @@ impl Tensor {
                 actual: data.len(),
             });
         }
-        let bytes = elements
+        let bytes = data
+            .capacity()
             .checked_mul(dtype.element_size())
             .ok_or(TensorError::ShapeOverflow)?;
         if bytes > budget {
@@ -143,6 +151,42 @@ impl Tensor {
             return Err(TensorError::NonFinite);
         }
         let allocation = reserve_global(bytes)?;
+        Self::with_allocation(dtype, data, shape, budget, allocation)
+    }
+
+    fn with_allocation(
+        dtype: TensorDtype,
+        data: TensorData,
+        shape: Vec<usize>,
+        budget: usize,
+        allocation: Arc<TensorAllocation>,
+    ) -> Result<Self, TensorError> {
+        let elements = element_count(&shape)?;
+        if data.len() != elements {
+            return Err(TensorError::DataLength {
+                expected: elements,
+                actual: data.len(),
+            });
+        }
+        let bytes = data
+            .capacity()
+            .checked_mul(dtype.element_size())
+            .ok_or(TensorError::ShapeOverflow)?;
+        if bytes > budget {
+            return Err(TensorError::AllocationBudget { bytes, budget });
+        }
+        if allocation.bytes != bytes {
+            return Err(TensorError::GlobalAllocationBudget {
+                bytes,
+                used: allocation.bytes,
+                budget: DEFAULT_GLOBAL_MEMORY_BUDGET_BYTES,
+            });
+        }
+        if let TensorData::F32(values) = &data
+            && values.iter().any(|value| !value.is_finite())
+        {
+            return Err(TensorError::NonFinite);
+        }
         Ok(Self {
             dtype,
             strides: contiguous_strides(&shape),
@@ -228,28 +272,42 @@ impl Tensor {
         }
         let output_shape = broadcast_shape(&self.shape, &other.shape)?;
         let output_elements = element_count(&output_shape)?;
-        ensure_allocation(self.dtype, output_elements)?;
+        let output_allocation = reserve_output(self.dtype, output_elements)?;
         let output_shape_i64 = shape_from_usize(&output_shape)?;
         match (&self.data, &other.data) {
             (TensorData::F32(left), TensorData::F32(right)) => {
-                let values = (0..output_elements)
+                let mut values = (0..output_elements)
                     .map(|index| {
                         let left_index = broadcast_index(index, &output_shape, &self.shape);
                         let right_index = broadcast_index(index, &output_shape, &other.shape);
                         float_operation(operator, left[left_index], right[right_index])
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                Self::from_f32(values, &output_shape_i64)
+                values.shrink_to_fit();
+                Self::with_allocation(
+                    TensorDtype::F32,
+                    TensorData::F32(Arc::new(values)),
+                    checked_shape(&output_shape_i64)?,
+                    super::DEFAULT_MEMORY_BUDGET_BYTES,
+                    output_allocation,
+                )
             }
             (TensorData::I64(left), TensorData::I64(right)) => {
-                let values = (0..output_elements)
+                let mut values = (0..output_elements)
                     .map(|index| {
                         let left_index = broadcast_index(index, &output_shape, &self.shape);
                         let right_index = broadcast_index(index, &output_shape, &other.shape);
                         integer_operation(operator, left[left_index], right[right_index])
                     })
                     .collect::<Result<Vec<_>, _>>()?;
-                Self::from_i64(values, &output_shape_i64)
+                values.shrink_to_fit();
+                Self::with_allocation(
+                    TensorDtype::I64,
+                    TensorData::I64(Arc::new(values)),
+                    checked_shape(&output_shape_i64)?,
+                    super::DEFAULT_MEMORY_BUDGET_BYTES,
+                    output_allocation,
+                )
             }
             _ => Err(TensorError::DtypeMismatch {
                 expected: self.dtype.name(),
@@ -331,7 +389,8 @@ impl Tensor {
             .filter_map(|(index, dimension)| (index != axis).then_some(*dimension))
             .collect::<Vec<_>>();
         let output_elements = outer.checked_mul(inner).ok_or(TensorError::ShapeOverflow)?;
-        ensure_allocation(TensorDtype::F32, output_elements)?;
+        let output_shape = shape_from_usize(&output_shape)?;
+        let output_allocation = reserve_output(TensorDtype::F32, output_elements)?;
         let mut output = vec![0.0; output_elements];
         for outer_index in 0..outer {
             for inner_index in 0..inner {
@@ -349,7 +408,13 @@ impl Tensor {
                 output[outer_index * inner + inner_index] = sum;
             }
         }
-        shape_from_usize(&output_shape).and_then(|shape| Self::from_f32(output, &shape))
+        Self::with_allocation(
+            TensorDtype::F32,
+            TensorData::F32(Arc::new(output)),
+            checked_shape(&output_shape)?,
+            super::DEFAULT_MEMORY_BUDGET_BYTES,
+            output_allocation,
+        )
     }
 
     fn reduce_i64(&self, values: &[i64], axis: usize) -> Result<Self, TensorError> {
@@ -363,7 +428,8 @@ impl Tensor {
             .filter_map(|(index, dimension)| (index != axis).then_some(*dimension))
             .collect::<Vec<_>>();
         let output_elements = outer.checked_mul(inner).ok_or(TensorError::ShapeOverflow)?;
-        ensure_allocation(TensorDtype::I64, output_elements)?;
+        let output_shape = shape_from_usize(&output_shape)?;
+        let output_allocation = reserve_output(TensorDtype::I64, output_elements)?;
         let mut output = vec![0i64; output_elements];
         for outer_index in 0..outer {
             for inner_index in 0..inner {
@@ -377,7 +443,13 @@ impl Tensor {
                 output[outer_index * inner + inner_index] = sum;
             }
         }
-        shape_from_usize(&output_shape).and_then(|shape| Self::from_i64(output, &shape))
+        Self::with_allocation(
+            TensorDtype::I64,
+            TensorData::I64(Arc::new(output)),
+            checked_shape(&output_shape)?,
+            super::DEFAULT_MEMORY_BUDGET_BYTES,
+            output_allocation,
+        )
     }
 
     pub fn matmul(&self, other: &Self) -> Result<Self, TensorError> {
@@ -418,7 +490,7 @@ impl Tensor {
         let output_elements = rows
             .checked_mul(columns)
             .ok_or(TensorError::ShapeOverflow)?;
-        ensure_allocation(TensorDtype::F32, output_elements)?;
+        let output_allocation = reserve_output(TensorDtype::F32, output_elements)?;
         let mut output = vec![0.0f32; output_elements];
         for row in 0..rows {
             for column in 0..columns {
@@ -433,24 +505,53 @@ impl Tensor {
             }
         }
         let shape = [rows as i64, columns as i64];
-        Self::from_f32(output, &shape)
+        Self::with_allocation(
+            TensorDtype::F32,
+            TensorData::F32(Arc::new(output)),
+            checked_shape(&shape)?,
+            super::DEFAULT_MEMORY_BUDGET_BYTES,
+            output_allocation,
+        )
     }
 
     pub fn render(&self) -> String {
+        self.render_with_limit(4096).0
+    }
+
+    pub(crate) fn render_with_limit(&self, max_values: usize) -> (String, usize) {
         debug_assert_eq!(self.strides(), contiguous_strides(&self.shape));
-        let values = match &self.data {
-            TensorData::F32(values) => values
-                .iter()
-                .map(|value| format_f32(*value))
-                .collect::<Vec<_>>(),
-            TensorData::I64(values) => values.iter().map(ToString::to_string).collect(),
+        let (values, truncated) = match &self.data {
+            TensorData::F32(values) => (
+                values
+                    .iter()
+                    .take(max_values)
+                    .map(|value| format_f32(*value))
+                    .collect::<Vec<_>>(),
+                values.len().saturating_sub(max_values),
+            ),
+            TensorData::I64(values) => (
+                values
+                    .iter()
+                    .take(max_values)
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>(),
+                values.len().saturating_sub(max_values),
+            ),
         };
-        format!(
-            "Tensor[{}, shape={:?}, values=[{}]]",
+        let values = values.join(", ");
+        let suffix = match (truncated > 0, values.is_empty()) {
+            (true, true) => format!("... ({truncated} more)"),
+            (true, false) => format!(", ... ({truncated} more)"),
+            (false, _) => String::new(),
+        };
+        let rendered = format!(
+            "Tensor[{}, shape={:?}, values=[{}{}]]",
             self.dtype.name(),
             self.shape,
-            values.join(", ")
-        )
+            values,
+            suffix
+        );
+        (rendered, max_values.min(self.element_count()))
     }
 }
 
@@ -478,7 +579,10 @@ fn shape_from_usize(shape: &[usize]) -> Result<Vec<i64>, TensorError> {
         .collect()
 }
 
-fn ensure_allocation(dtype: TensorDtype, elements: usize) -> Result<(), TensorError> {
+fn reserve_output(
+    dtype: TensorDtype,
+    elements: usize,
+) -> Result<Arc<TensorAllocation>, TensorError> {
     let bytes = elements
         .checked_mul(dtype.element_size())
         .ok_or(TensorError::ShapeOverflow)?;
@@ -488,7 +592,7 @@ fn ensure_allocation(dtype: TensorDtype, elements: usize) -> Result<(), TensorEr
             budget: super::DEFAULT_MEMORY_BUDGET_BYTES,
         });
     }
-    Ok(())
+    reserve_global(bytes)
 }
 
 fn reserve_global(bytes: usize) -> Result<Arc<TensorAllocation>, TensorError> {
@@ -627,6 +731,16 @@ mod tests {
     }
 
     #[test]
+    fn accounts_for_vec_capacity_in_the_tensor_budget() {
+        let mut values = Vec::with_capacity(2);
+        values.push(1.0f32);
+        assert!(matches!(
+            Tensor::from_f32_with_budget(values, &[1], 4),
+            Err(TensorError::AllocationBudget { bytes, budget: 4 }) if bytes >= 8
+        ));
+    }
+
+    #[test]
     fn enforces_global_resident_buffer_budget() {
         let first = Tensor::zeros_f32(&[6_291_456]).expect("first global allocation");
         let second = Tensor::zeros_f32(&[6_291_456]).expect("second global allocation");
@@ -734,6 +848,15 @@ mod tests {
             matrix.matmul(&right).expect("matmul").render(),
             "Tensor[F32, shape=[2, 2], values=[19.0, 22.0, 43.0, 50.0]]"
         );
+    }
+
+    #[test]
+    fn truncates_large_rendered_tensors_deterministically() {
+        let tensor = Tensor::zeros_f32(&[4097]).expect("render test tensor");
+        let rendered = tensor.render();
+        assert!(rendered.starts_with("Tensor[F32, shape=[4097], values=[0.0, 0.0"));
+        assert!(rendered.ends_with(", ... (1 more)]]"));
+        assert_eq!(rendered.matches("0.0").count(), 4096);
     }
 
     #[test]

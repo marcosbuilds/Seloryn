@@ -22,7 +22,6 @@
 | Core IR | **Not implemented** | E4 evaluates the checked AST directly; no lowering or optimizer exists |
 | Modules, packages and standard library | **Not implemented** | imports return an explicit unavailable diagnostic |
 | Files, HTTP, processes and automation | **Not implemented** | no systems program can run |
-| CPU tensor buffers, shape checks and reference kernels | **Experimental N1** | bounded F32/I64 construction, broadcasting, reductions and rank-2 F32 matmul; no model/training claim |
 | Autograd, optimizers, checkpoints and training | **Not implemented** | no model can train |
 | GPU, distributed execution and serving | **Not implemented** | no accelerator or production service exists |
 | Formatter, LSP, installer and release artifacts | **Not implemented or verified** | no supported installation path exists |
@@ -50,8 +49,10 @@ executes `fn main()` through the pure tree-walk interpreter. The runtime covers
 `??`, postfix `?`, list indexing, list iteration, mutable `var` assignment, list
 concatenation and the named-function `|>` pipeline. Runtime failures carry
 stable `SEL-R***` codes, source spans and a deterministic function stack. Call
-depth, loop size and list bounds are bounded to keep user programs from
-overflowing the host runtime.
+depth, loop size and list size are bounded to keep user programs from
+overflowing the host runtime. Large values are rendered with a deterministic
+truncation marker; storage and computation remain bounded by their separate
+runtime limits.
 
 Evidence is [`src/runtime.rs`](../../src/runtime.rs) plus the CLI tests in
 [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs). The interpreter does
@@ -63,8 +64,9 @@ API. The core IR and all systems/runtime gates remain future work.
 
 N1 is experimentally implemented for owned contiguous F32/I64 CPU tensors. The
 runtime checks rank (maximum 32), nonnegative dimensions, checked element and
-byte products, a 64 MiB per-tensor and process-wide resident-buffer budget,
-row-major strides, reshape counts, same-dtype arithmetic, right-aligned
+byte products, a 64 MiB per-tensor and process-wide resident-buffer budget
+(not a total-process-memory limit), row-major strides, reshape counts, same-dtype
+arithmetic, right-aligned
 broadcasting, finite F32 results, checked I64 arithmetic, total and axis
 reductions and rank-2 F32 matrix multiplication. The language bridge is covered
 by positive and negative CLI tests, including CRLF, Unicode paths, static dtype

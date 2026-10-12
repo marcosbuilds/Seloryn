@@ -9,6 +9,8 @@ use std::collections::HashMap;
 
 const MAX_CALL_DEPTH: usize = 128;
 const MAX_LOOP_ITERATIONS: usize = 1_000_000;
+const MAX_LIST_ELEMENTS: usize = 1_000_000;
+const MAX_RENDER_VALUES: usize = 4096;
 
 /// Values that can be produced by the pure E4 interpreter.
 #[derive(Clone, Debug, PartialEq)]
@@ -39,29 +41,57 @@ pub enum Value {
 
 impl Value {
     pub fn render(&self) -> String {
+        let mut remaining = MAX_RENDER_VALUES;
+        self.render_with_budget(&mut remaining)
+    }
+
+    fn render_with_budget(&self, remaining: &mut usize) -> String {
         match self {
             Self::Unit => "unit".to_owned(),
             Self::Bool(value) => value.to_string(),
             Self::I64(value) => value.to_string(),
             Self::F64(value) => format_f64(*value),
-            Self::Text(value) => format!("\"{}\"", escape_text(value)),
-            Self::List(values) => format!(
-                "[{}]",
-                values
-                    .iter()
-                    .map(Self::render)
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
-            Self::Tensor(tensor) => tensor.render(),
-            Self::Record { name, fields } => format!(
-                "{name}({})",
-                fields
-                    .iter()
-                    .map(|(field, value)| format!("{field}: {}", value.render()))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
+            Self::Text(value) => render_text(value, remaining),
+            Self::List(values) => {
+                let mut rendered = Vec::new();
+                for value in values {
+                    if *remaining == 0 {
+                        break;
+                    }
+                    *remaining -= 1;
+                    rendered.push(value.render_with_budget(remaining));
+                }
+                if rendered.len() < values.len() {
+                    rendered.push(format!("... ({} more)", values.len() - rendered.len()));
+                }
+                format!("[{}]", rendered.join(", "))
+            }
+            Self::Tensor(tensor) => {
+                let (rendered, used) = if *remaining == MAX_RENDER_VALUES {
+                    (
+                        tensor.render(),
+                        MAX_RENDER_VALUES.min(tensor.element_count()),
+                    )
+                } else {
+                    tensor.render_with_limit(*remaining)
+                };
+                *remaining = remaining.saturating_sub(used);
+                rendered
+            }
+            Self::Record { name, fields } => {
+                let mut rendered = Vec::new();
+                for (field, value) in fields {
+                    if *remaining == 0 {
+                        break;
+                    }
+                    *remaining -= 1;
+                    rendered.push(format!("{field}: {}", value.render_with_budget(remaining)));
+                }
+                if rendered.len() < fields.len() {
+                    rendered.push(format!("... ({} more)", fields.len() - rendered.len()));
+                }
+                format!("{name}({})", rendered.join(", "))
+            }
             Self::Enum {
                 name,
                 variant,
@@ -70,20 +100,28 @@ impl Value {
                 if fields.is_empty() {
                     format!("{name}.{variant}")
                 } else {
-                    format!(
-                        "{name}.{variant}({})",
-                        fields
-                            .iter()
-                            .map(Self::render)
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )
+                    let mut rendered = Vec::new();
+                    for value in fields {
+                        if *remaining == 0 {
+                            break;
+                        }
+                        *remaining -= 1;
+                        rendered.push(value.render_with_budget(remaining));
+                    }
+                    if rendered.len() < fields.len() {
+                        rendered.push(format!("... ({} more)", fields.len() - rendered.len()));
+                    }
+                    format!("{name}.{variant}({})", rendered.join(", "))
                 }
             }
-            Self::Option(Some(value)) => format!("Some({})", value.render()),
+            Self::Option(Some(value)) => format!("Some({})", value.render_with_budget(remaining)),
             Self::Option(None) => "None".to_owned(),
-            Self::Result { ok: true, value } => format!("Ok({})", value.render()),
-            Self::Result { ok: false, value } => format!("Err({})", value.render()),
+            Self::Result { ok: true, value } => {
+                format!("Ok({})", value.render_with_budget(remaining))
+            }
+            Self::Result { ok: false, value } => {
+                format!("Err({})", value.render_with_budget(remaining))
+            }
             Self::Function(name) => format!("<fn {name}>").to_owned(),
         }
     }
@@ -481,7 +519,17 @@ impl<'a> Interpreter<'a> {
             Expr::String { value, .. } => Ok(Value::Text(value.clone())),
             Expr::Boolean { value, .. } => Ok(Value::Bool(*value)),
             Expr::Null(_) => Ok(Value::Option(None)),
-            Expr::List { values, .. } => {
+            Expr::List { values, span } => {
+                if values.len() > MAX_LIST_ELEMENTS {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R133",
+                        format!(
+                            "list contains {} elements; maximum is {MAX_LIST_ELEMENTS}",
+                            values.len()
+                        ),
+                        *span,
+                    )));
+                }
                 let values = values
                     .iter()
                     .map(|value| self.eval_expr(value))
@@ -1066,6 +1114,16 @@ impl<'a> Interpreter<'a> {
         match (left, right) {
             (Value::Text(left), Value::Text(right)) => Ok(Value::Text(left + &right)),
             (Value::List(mut left), Value::List(right)) => {
+                let length = left.len().checked_add(right.len()).ok_or_else(|| {
+                    Control::Runtime(self.runtime("SEL-R133", "list length overflowed", span))
+                })?;
+                if length > MAX_LIST_ELEMENTS {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R133",
+                        format!("list contains {length} elements; maximum is {MAX_LIST_ELEMENTS}"),
+                        span,
+                    )));
+                }
                 left.extend(right);
                 Ok(Value::List(left))
             }
@@ -1402,11 +1460,25 @@ fn escape_text(value: &str) -> String {
     escaped
 }
 
+fn render_text(value: &str, remaining: &mut usize) -> String {
+    let length = value.chars().count();
+    let visible_length = length.min(*remaining);
+    let visible = value.chars().take(visible_length).collect::<String>();
+    *remaining -= visible_length;
+    let suffix = if visible_length < length {
+        format!("... ({} more chars)", length - visible_length)
+    } else {
+        String::new()
+    };
+    format!("\"{}{}\"", escape_text(&visible), suffix)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeError, Value, execute};
+    use super::{MAX_RENDER_VALUES, RuntimeError, Value, execute};
     use crate::parser::parse;
     use crate::semantic::check;
+    use crate::tensor::Tensor;
 
     fn run(source: &str) -> Result<Value, RuntimeError> {
         let parsed = parse(source);
@@ -1497,5 +1569,47 @@ mod tests {
         )
         .expect_err("call depth must fail");
         assert_eq!(depth.code, "SEL-R132");
+    }
+
+    #[test]
+    fn truncates_large_list_rendering_deterministically() {
+        let values = Value::List(
+            (0..=MAX_RENDER_VALUES)
+                .map(|value| Value::I64(value as i64))
+                .collect(),
+        );
+        let rendered = values.render();
+        assert!(rendered.starts_with("[0, 1, 2"));
+        assert!(rendered.ends_with(", ... (1 more)]"));
+        assert_eq!(rendered.matches(", ").count(), MAX_RENDER_VALUES);
+    }
+
+    #[test]
+    fn truncates_large_record_rendering_deterministically() {
+        let fields = (0..=MAX_RENDER_VALUES)
+            .map(|index| (format!("field_{index}"), Value::I64(index as i64)))
+            .collect();
+        let record = Value::Record {
+            name: "Wide".to_owned(),
+            fields,
+        };
+        let rendered = record.render();
+        assert!(rendered.starts_with("Wide(field_0: 0, field_1: 1"));
+        assert!(rendered.ends_with(", ... (1 more))"));
+        assert_eq!(rendered.matches(": ").count(), MAX_RENDER_VALUES);
+    }
+
+    #[test]
+    fn shares_render_budget_across_text_and_nested_tensors() {
+        let text = Value::Text("a".repeat(MAX_RENDER_VALUES + 1));
+        assert!(text.render().ends_with("... (1 more chars)\""));
+
+        let values = Value::List(vec![
+            Value::Tensor(Tensor::zeros_f32(&[4097]).expect("first tensor")),
+            Value::Tensor(Tensor::zeros_f32(&[1]).expect("second tensor")),
+        ]);
+        let rendered = values.render();
+        assert!(rendered.contains("... (2 more)"));
+        assert!(rendered.ends_with("... (1 more)]"));
     }
 }

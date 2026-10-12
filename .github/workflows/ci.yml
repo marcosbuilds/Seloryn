@@ -49,6 +49,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: '& .\target\release\seloryn.exe run examples\tensor-matmul.sely'
+      - name: PowerShell 7 CLI smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: '& .\target\release\seloryn.exe run examples\tensor-matmul.sely'
       - name: CMD CLI smoke
         if: runner.os == 'Windows'
         shell: cmd

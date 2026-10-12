@@ -22,8 +22,8 @@ flowchart LR
         L[Model training]
     end
     F -. future IR .-> G
-    F -. future N1 .-> H
-    H -. future N1/N2 .-> I
+    F --> H
+    H -. future N2 .-> I
     H -. future A1 .-> J
     G -. future E6 .-> K
     I -. future N4 .-> L
