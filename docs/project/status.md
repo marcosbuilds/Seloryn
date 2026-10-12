@@ -1,13 +1,14 @@
 # Current capability status
 
-**Design-only baseline (`0.00`); no public release.**
+**Staged implementation baseline (`0.00`); no public release.**
 
 | Area | State | Evidence |
 |---|---|---|
 | Grammar and language contracts | Proposed documentation | Reference pages only |
 | Lexer, parser, type checker | Not implemented | No artifacts |
 | Interpreter and runtime | Not implemented | No binary |
-| CLI, formatter, language server | Not implemented | No executable |
+| CLI bootstrap | Experimental implemented | [`--help`/`--version`](../guide/cli.md), [bootstrap tests](../../tests/bootstrap_cli.rs) |
+| Formatter, language server | Not implemented | No executable |
 | HTTP, files, automation | Not implemented | No standard library |
 | Tensor CPU engine | Not implemented | No kernels |
 | Autograd or model training | Not implemented | No experiment |

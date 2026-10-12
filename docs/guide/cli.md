@@ -1,9 +1,23 @@
-# Command-line design
+# Command-line bootstrap
 
-**Proposed commands — not implemented.**
+The native CLI bootstrap is implemented and currently exposes only help and
+version metadata. It is not an installable release and it cannot compile or
+run `.sely` programs.
 
 ```text
-seloryn --version                  # exactly M.mm + independent build hash
+seloryn --help
+seloryn --version
+```
+
+The development version reports `0.00` and `build=local-development`; this is
+not a release hash or a supported language release. The observed behavior is
+covered by [the CLI integration tests](../../tests/bootstrap_cli.rs).
+
+## Future commands
+
+The following commands remain proposed and must not be treated as available:
+
+```text
 seloryn doctor                     # runtime, platform and capabilities
 seloryn run app.sely               # execute a program
 seloryn check app.sely             # parse + type checking

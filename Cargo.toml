@@ -1,0 +1,16 @@
+[package]
+name = "seloryn"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "Seloryn language bootstrap CLI"
+license = "MIT"
+default-run = "seloryn"
+
+[package.metadata.seloryn]
+language-version = "0.00"
+status = "experimental-implemented"
+
+[[bin]]
+name = "seloryn"
+path = "src/main.rs"
