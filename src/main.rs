@@ -1,6 +1,7 @@
 mod diagnostic;
 mod lexer;
 mod parser;
+mod semantic;
 
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -16,7 +17,7 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely>\n\n`check` currently validates UTF-8, layout and syntax only.\nThe type checker, interpreter, standard library and installable release\nare not available yet.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\nThe interpreter, standard library and installable release\nare not available yet.\n";
 
 enum Action {
     Help,
@@ -34,7 +35,7 @@ fn run(args: &[OsString]) -> u8 {
     match classify(args) {
         Action::Help => write_stdout(HELP_TEXT),
         Action::Version => write_stdout(&format!(
-            "seloryn {LANGUAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=design-only\n"
+            "seloryn {LANGUAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=experimental-implemented\n"
         )),
         Action::Check(path) => check_path(PathBuf::from(path)),
         Action::Unsupported(command) => write_stderr(&format!(
@@ -102,8 +103,19 @@ fn check_path(path: PathBuf) -> u8 {
     };
 
     let parsed = parser::parse(&source);
-    if parsed.program.is_some() && parsed.diagnostics.is_empty() {
-        return write_stdout(&format!("parsed {label} (syntax-only)\n"));
+    if parsed.diagnostics.is_empty() {
+        let program = parsed
+            .program
+            .expect("a diagnostic-free parse has a program");
+        let semantic_diagnostics = semantic::check(&program);
+        if semantic_diagnostics.is_empty() {
+            return write_stdout(&format!("checked {label} (syntax + semantics)\n"));
+        }
+        let rendered = semantic_diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic::render(&path, &source, diagnostic))
+            .collect::<String>();
+        return write_diagnostics(&rendered);
     }
     let rendered = parsed
         .diagnostics

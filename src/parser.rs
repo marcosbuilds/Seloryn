@@ -24,6 +24,7 @@ pub enum Item {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
+    pub public: bool,
     pub name: String,
     pub parameters: Vec<Parameter>,
     pub return_type: Option<TypeExpr>,
@@ -40,6 +41,7 @@ pub struct Parameter {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Record {
+    pub public: bool,
     pub name: String,
     pub fields: Vec<Field>,
     pub span: Span,
@@ -47,6 +49,7 @@ pub struct Record {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EnumDecl {
+    pub public: bool,
     pub name: String,
     pub variants: Vec<Variant>,
     pub span: Span,
@@ -90,6 +93,7 @@ pub enum Statement {
         otherwise: Option<Vec<Statement>>,
         span: Span,
     },
+    Match(MatchStatement),
     Expression(Expr),
 }
 
@@ -98,6 +102,48 @@ pub struct IfBranch {
     pub condition: Expr,
     pub body: Vec<Statement>,
     pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchStatement {
+    pub value: Expr,
+    pub cases: Vec<MatchCase>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MatchCase {
+    pub pattern: Pattern,
+    pub guard: Option<Expr>,
+    pub body: Vec<Statement>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Pattern {
+    Wildcard(Span),
+    Binding {
+        name: String,
+        span: Span,
+    },
+    Boolean {
+        value: bool,
+        span: Span,
+    },
+    Integer {
+        text: String,
+        span: Span,
+    },
+    String {
+        value: String,
+        span: Span,
+    },
+    Null(Span),
+    Constructor {
+        path: Vec<String>,
+        arguments: Vec<Pattern>,
+        span: Span,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -169,6 +215,10 @@ pub enum Expr {
         optional: bool,
         span: Span,
     },
+    Propagate {
+        value: Box<Expr>,
+        span: Span,
+    },
 }
 
 pub fn parse(source: &str) -> ParseResult {
@@ -230,17 +280,49 @@ impl<'a> Parser<'a> {
     fn parse_item(&mut self) -> Option<Item> {
         let public = self.consume_keyword(Keyword::Pub).is_some();
         let item = match self.peek().kind.clone() {
-            TokenKind::Keyword(Keyword::Fn) => self.parse_function(),
-            TokenKind::Keyword(Keyword::Record) => self.parse_record(),
-            TokenKind::Keyword(Keyword::Enum) => self.parse_enum(),
+            TokenKind::Keyword(Keyword::Fn) => self.parse_function(public),
+            TokenKind::Keyword(Keyword::Record) => self.parse_record(public),
+            TokenKind::Keyword(Keyword::Enum) => self.parse_enum(public),
             TokenKind::Keyword(Keyword::Let) | TokenKind::Keyword(Keyword::Var) => {
+                if public {
+                    self.error(
+                        "SEL-P003",
+                        "`pub` is only supported on functions, records and enums",
+                        self.previous_span(),
+                    );
+                }
                 self.parse_binding().map(Item::Binding)
             }
             TokenKind::Keyword(Keyword::Module)
             | TokenKind::Keyword(Keyword::Import)
-            | TokenKind::Keyword(Keyword::From) => self.parse_directive(),
+            | TokenKind::Keyword(Keyword::From) => {
+                if public {
+                    self.error(
+                        "SEL-P003",
+                        "`pub` is only supported on functions, records and enums",
+                        self.previous_span(),
+                    );
+                }
+                self.parse_directive()
+            }
+            TokenKind::Keyword(Keyword::Const) => {
+                let span = self.bump().span;
+                self.error(
+                    "SEL-P003",
+                    "`const` is reserved until constant evaluation is implemented",
+                    span,
+                );
+                None
+            }
             TokenKind::Reserved(name) => {
                 let span = self.bump().span;
+                if public {
+                    self.error(
+                        "SEL-P003",
+                        "`pub` is only supported on functions, records and enums",
+                        self.previous_span(),
+                    );
+                }
                 self.error(
                     "SEL-P003",
                     format!("reserved syntax `{name}` is not implemented"),
@@ -248,23 +330,21 @@ impl<'a> Parser<'a> {
                 );
                 None
             }
-            _ => self.parse_statement().map(Item::Statement),
-        }?;
-
-        if public {
-            match item {
-                Item::Function(_)
-                | Item::Record(_)
-                | Item::Enum(_)
-                | Item::Binding(_)
-                | Item::Directive(_)
-                | Item::Statement(_) => {}
+            _ => {
+                if public {
+                    self.error(
+                        "SEL-P003",
+                        "`pub` is only supported on functions, records and enums",
+                        self.previous_span(),
+                    );
+                }
+                self.parse_statement().map(Item::Statement)
             }
-        }
+        }?;
         Some(item)
     }
 
-    fn parse_function(&mut self) -> Option<Item> {
+    fn parse_function(&mut self, public: bool) -> Option<Item> {
         let start = self
             .expect_keyword(Keyword::Fn, "expected `fn`")?
             .span
@@ -303,6 +383,7 @@ impl<'a> Parser<'a> {
         let body = self.parse_block()?;
         let end = self.previous_span().end;
         Some(Item::Function(Function {
+            public,
             name,
             parameters,
             return_type,
@@ -311,7 +392,7 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    fn parse_record(&mut self) -> Option<Item> {
+    fn parse_record(&mut self, public: bool) -> Option<Item> {
         let start = self
             .expect_keyword(Keyword::Record, "expected `record`")?
             .span
@@ -345,13 +426,14 @@ impl<'a> Parser<'a> {
             .span
             .end;
         Some(Item::Record(Record {
+            public,
             name,
             fields,
             span: Span::new(start, end),
         }))
     }
 
-    fn parse_enum(&mut self) -> Option<Item> {
+    fn parse_enum(&mut self, public: bool) -> Option<Item> {
         let start = self
             .expect_keyword(Keyword::Enum, "expected `enum`")?
             .span
@@ -392,6 +474,7 @@ impl<'a> Parser<'a> {
             .span
             .end;
         Some(Item::Enum(EnumDecl {
+            public,
             name,
             variants,
             span: Span::new(start, end),
@@ -422,6 +505,16 @@ impl<'a> Parser<'a> {
             TokenKind::Keyword(Keyword::Return) => self.parse_return(),
             TokenKind::Keyword(Keyword::Require) => self.parse_require(),
             TokenKind::Keyword(Keyword::If) => self.parse_if(),
+            TokenKind::Keyword(Keyword::Match) => self.parse_match(),
+            TokenKind::Keyword(Keyword::Const) => {
+                let span = self.bump().span;
+                self.error(
+                    "SEL-P003",
+                    "`const` is reserved until constant evaluation is implemented",
+                    span,
+                );
+                None
+            }
             TokenKind::Reserved(name) => {
                 let span = self.bump().span;
                 self.error(
@@ -554,9 +647,134 @@ impl<'a> Parser<'a> {
         Some((condition, end, body))
     }
 
+    fn parse_match(&mut self) -> Option<Statement> {
+        let start = self
+            .expect_keyword(Keyword::Match, "expected `match`")?
+            .span
+            .start;
+        let value = self.parse_expression(0)?;
+        self.expect_symbol(Symbol::Colon, "expected `:` after match expression")?;
+        self.expect_newline("expected a new line before match cases")?;
+        self.expect_kind(TokenKind::Indent, "expected an indented match body")?;
+
+        let mut cases = Vec::new();
+        while !self.at(TokenKind::Dedent) && !self.at(TokenKind::Eof) {
+            if self.consume_kind(TokenKind::Newline).is_some() {
+                continue;
+            }
+            let case_start = self
+                .expect_keyword(Keyword::Case, "expected `case` in match body")?
+                .span
+                .start;
+            let pattern = self.parse_pattern()?;
+            let guard = if self.consume_keyword(Keyword::If).is_some() {
+                Some(self.parse_expression(0)?)
+            } else {
+                None
+            };
+            self.expect_symbol(Symbol::Colon, "expected `:` after match case")?;
+            self.expect_newline("expected a new line before match case body")?;
+            self.expect_kind(TokenKind::Indent, "expected an indented match case body")?;
+            let body = self.parse_indented_statements()?;
+            let end = self.previous_span().end;
+            cases.push(MatchCase {
+                pattern,
+                guard,
+                body,
+                span: Span::new(case_start, end),
+            });
+        }
+        let end = self
+            .expect_kind(TokenKind::Dedent, "expected end of match body")?
+            .span
+            .end;
+        Some(Statement::Match(MatchStatement {
+            value,
+            cases,
+            span: Span::new(start, end),
+        }))
+    }
+
+    fn parse_pattern(&mut self) -> Option<Pattern> {
+        let token = self.bump();
+        match token.kind {
+            TokenKind::Keyword(Keyword::True) => Some(Pattern::Boolean {
+                value: true,
+                span: token.span,
+            }),
+            TokenKind::Keyword(Keyword::False) => Some(Pattern::Boolean {
+                value: false,
+                span: token.span,
+            }),
+            TokenKind::Keyword(Keyword::Null) => Some(Pattern::Null(token.span)),
+            TokenKind::Integer(text) => Some(Pattern::Integer {
+                text,
+                span: token.span,
+            }),
+            TokenKind::StringLiteral(value) => Some(Pattern::String {
+                value,
+                span: token.span,
+            }),
+            TokenKind::Identifier(name) => {
+                if name == "_" {
+                    return Some(Pattern::Wildcard(token.span));
+                }
+                let mut path = vec![name];
+                let mut end = token.span.end;
+                while self.consume_symbol(Symbol::Dot).is_some() {
+                    let (name, span) =
+                        self.expect_identifier("expected a pattern name after `.`")?;
+                    path.push(name);
+                    end = span.end;
+                }
+                let mut arguments = Vec::new();
+                if self.consume_symbol(Symbol::LeftParen).is_some() {
+                    while !self.at_symbol(Symbol::RightParen) && !self.at(TokenKind::Eof) {
+                        arguments.push(self.parse_pattern()?);
+                        if self.consume_symbol(Symbol::Comma).is_none() {
+                            break;
+                        }
+                    }
+                    end = self
+                        .expect_symbol(Symbol::RightParen, "expected `)` after pattern")?
+                        .span
+                        .end;
+                }
+                if path.len() > 1 || !arguments.is_empty() {
+                    Some(Pattern::Constructor {
+                        path,
+                        arguments,
+                        span: Span::new(token.span.start, end),
+                    })
+                } else {
+                    Some(Pattern::Binding {
+                        name: path.remove(0),
+                        span: token.span,
+                    })
+                }
+            }
+            TokenKind::Reserved(name) => {
+                self.error(
+                    "SEL-P003",
+                    format!("reserved syntax `{name}` is not implemented"),
+                    token.span,
+                );
+                None
+            }
+            _ => {
+                self.error("SEL-P001", "expected a match pattern", token.span);
+                None
+            }
+        }
+    }
+
     fn parse_block(&mut self) -> Option<Vec<Statement>> {
         self.expect_newline("expected a new line before block")?;
         self.expect_kind(TokenKind::Indent, "expected an indented block")?;
+        self.parse_indented_statements()
+    }
+
+    fn parse_indented_statements(&mut self) -> Option<Vec<Statement>> {
         let mut statements = Vec::new();
         while !self.at(TokenKind::Dedent) && !self.at(TokenKind::Eof) {
             if self.consume_kind(TokenKind::Newline).is_some() {
@@ -597,19 +815,24 @@ impl<'a> Parser<'a> {
                 span: Span::new(start, end),
             };
         }
+        if self.consume_symbol(Symbol::Question).is_some() {
+            self.error(
+                "SEL-P003",
+                "nullable type syntax `T?` is reserved; use `Option[T]`",
+                self.previous_span(),
+            );
+        }
         Some(type_expr)
     }
 
     fn parse_type_atom(&mut self) -> Option<TypeExpr> {
         let token = self.bump();
         match token.kind {
-            TokenKind::Identifier(name) | TokenKind::Integer(name) | TokenKind::Float(name) => {
-                Some(TypeExpr {
-                    name,
-                    arguments: Vec::new(),
-                    span: token.span,
-                })
-            }
+            TokenKind::Identifier(name) => Some(TypeExpr {
+                name,
+                arguments: Vec::new(),
+                span: token.span,
+            }),
             TokenKind::Symbol(Symbol::LeftParen) => {
                 let mut arguments = Vec::new();
                 while !self.at_symbol(Symbol::RightParen) && !self.at(TokenKind::Eof) {
@@ -663,6 +886,14 @@ impl<'a> Parser<'a> {
                     object: Box::new(left),
                     name,
                     optional,
+                };
+                continue;
+            }
+            if self.consume_symbol(Symbol::Question).is_some() {
+                let span = Span::new(left.span().start, self.previous_span().end);
+                left = Expr::Propagate {
+                    value: Box::new(left),
+                    span,
                 };
                 continue;
             }
@@ -796,10 +1027,10 @@ impl<'a> Parser<'a> {
 
     fn infix_binding_power(&self) -> Option<(String, u8, u8)> {
         let (operator, left, right) = match self.peek().kind {
-            TokenKind::Keyword(Keyword::Or) => ("or", 10, 11),
-            TokenKind::Keyword(Keyword::And) => ("and", 20, 21),
-            TokenKind::Symbol(Symbol::QuestionQuestion) => ("??", 25, 26),
-            TokenKind::Symbol(Symbol::Pipe) => ("|>", 30, 31),
+            TokenKind::Symbol(Symbol::QuestionQuestion) => ("??", 10, 10),
+            TokenKind::Symbol(Symbol::Pipe) => ("|>", 5, 6),
+            TokenKind::Keyword(Keyword::Or) => ("or", 20, 21),
+            TokenKind::Keyword(Keyword::And) => ("and", 30, 31),
             TokenKind::Symbol(Symbol::EqualEqual) => ("==", 40, 41),
             TokenKind::Symbol(Symbol::BangEqual) => ("!=", 40, 41),
             TokenKind::Symbol(Symbol::Less) => ("<", 40, 41),
@@ -945,7 +1176,7 @@ impl<'a> Parser<'a> {
 }
 
 impl Expr {
-    fn span(&self) -> Span {
+    pub(crate) fn span(&self) -> Span {
         match self {
             Self::Null(span)
             | Self::Name { span, .. }
@@ -958,7 +1189,8 @@ impl Expr {
             | Self::Unary { span, .. }
             | Self::Binary { span, .. }
             | Self::Call { span, .. }
-            | Self::Member { span, .. } => *span,
+            | Self::Member { span, .. }
+            | Self::Propagate { span, .. } => *span,
         }
     }
 }
@@ -1001,6 +1233,47 @@ mod tests {
     #[test]
     fn reserved_syntax_has_a_parser_diagnostic() {
         let result = parse("class Example:\n");
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "SEL-P003")
+        );
+    }
+
+    #[test]
+    fn preserves_e3_precedence_and_match_ast() {
+        let result = parse("let value = left ?? fallback |> normalize\n");
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let Item::Binding(binding) = &result.program.expect("program").items[0] else {
+            panic!("expected binding")
+        };
+        let Expr::Binary {
+            operator,
+            left,
+            right,
+            ..
+        } = &binding.value
+        else {
+            panic!("expected pipeline expression")
+        };
+        assert_eq!(operator, "|>");
+        assert!(matches!(left.as_ref(), Expr::Binary { operator, .. } if operator == "??"));
+        assert!(matches!(right.as_ref(), Expr::Name { name, .. } if name == "normalize"));
+
+        let match_source = "pub fn choose(flag: Bool) -> Unit:\n    match flag:\n        case true:\n            return\n        case false:\n            return\n";
+        let result = parse(match_source);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let Item::Function(function) = &result.program.expect("program").items[0] else {
+            panic!("expected function")
+        };
+        assert!(function.public);
+        assert!(matches!(function.body[0], Statement::Match(_)));
+    }
+
+    #[test]
+    fn nullable_type_syntax_is_reserved_explicitly() {
+        let result = parse("fn bad(value: I64?) -> I64:\n    return value\n");
         assert!(
             result
                 .diagnostics

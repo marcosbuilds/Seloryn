@@ -35,7 +35,7 @@ fn version_reports_language_baseline_without_claiming_a_release() {
     let stdout = String::from_utf8(output.stdout).expect("version must be UTF-8");
     assert_eq!(
         stdout,
-        "seloryn 0.00 build=local-development status=design-only\n"
+        "seloryn 0.00 build=local-development status=experimental-implemented\n"
     );
 }
 
@@ -59,11 +59,11 @@ fn extra_arguments_are_not_silently_ignored() {
 }
 
 #[test]
-fn check_accepts_utf8_crlf_syntax_and_reports_spans_only_on_failure() {
+fn check_accepts_utf8_crlf_syntax_and_semantics() {
     let path = temporary_source("valid");
     fs::write(
         &path,
-        "fn main() -> Unit:\r\n    let value: I64 = -2 ** 2\r\n    return value\r\n",
+        "fn main() -> I64:\r\n    let value: I64 = -2 ** 2\r\n    return value\r\n",
     )
     .expect("write valid source");
 
@@ -74,7 +74,7 @@ fn check_accepts_utf8_crlf_syntax_and_reports_spans_only_on_failure() {
     assert!(
         String::from_utf8(output.stdout)
             .expect("success output must be UTF-8")
-            .contains("parsed")
+            .contains("checked")
     );
 }
 
@@ -115,4 +115,61 @@ fn check_rejects_reserved_syntax_explicitly() {
     let stderr = String::from_utf8(output.stderr).expect("diagnostics must be UTF-8");
     assert!(stderr.contains("SEL-P003"));
     assert!(stderr.contains("reserved syntax `class`"));
+}
+
+#[test]
+fn check_accepts_result_and_exhaustive_match_semantics() {
+    let path = temporary_source("result-match");
+    fs::write(
+        &path,
+        "enum Flag:\r\n    On\r\n    Off\r\nfn main(flag: Flag) -> Unit:\r\n    match flag:\r\n        case On:\r\n            return\r\n        case Off:\r\n            return\r\n",
+    )
+    .expect("write semantic source");
+
+    let output = run_cli(&["check", path.to_str().expect("temporary path is UTF-8")]);
+    let _ = fs::remove_file(&path);
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    assert!(
+        String::from_utf8(output.stdout)
+            .expect("success output must be UTF-8")
+            .contains("syntax + semantics")
+    );
+}
+
+#[test]
+fn check_rejects_semantic_name_type_and_match_errors() {
+    let cases = [
+        (
+            "undefined",
+            "fn main() -> I64:\n    return missing\n",
+            "SEL-M002",
+        ),
+        (
+            "condition",
+            "fn main() -> Unit:\n    if 1:\n        return\n",
+            "SEL-T004",
+        ),
+        (
+            "match",
+            "enum Flag:\n    On\n    Off\nfn main(flag: Flag) -> Unit:\n    match flag:\n        case On:\n            return\n",
+            "SEL-R003",
+        ),
+        (
+            "import",
+            "import seloryn.tensor\nfn main() -> Unit:\n    return\n",
+            "SEL-M001",
+        ),
+    ];
+
+    for (name, source, code) in cases {
+        let path = temporary_source(name);
+        fs::write(&path, source).expect("write semantic negative source");
+        let output = run_cli(&["check", path.to_str().expect("temporary path is UTF-8")]);
+        let _ = fs::remove_file(&path);
+        assert_eq!(output.status.code(), Some(65), "case {name}");
+        assert!(output.stdout.is_empty(), "case {name} wrote false success");
+        let stderr = String::from_utf8(output.stderr).expect("diagnostics must be UTF-8");
+        assert!(stderr.contains(code), "case {name}: {stderr}");
+    }
 }

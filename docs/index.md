@@ -1,6 +1,6 @@
 # Documentation
 
-![Seloryn language flow](../assets/architecture-flow.svg)
+![Seloryn language flow](../assets/architecture-flow.png)
 
 The public documentation is deliberately short-named and categorized. Every page distinguishes a proposed contract from an implemented, verified feature. **No interpreter or training engine exists yet.**
 

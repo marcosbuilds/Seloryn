@@ -23,7 +23,8 @@ A diagnostic has stable `code`, severity, module, source span (byte offsets and 
 | Typing | `SEL-T***` | incompatible units, non-Bool condition |
 | Module | `SEL-M***` | missing module, cyclic initialization |
 | Tensor | `SEL-N***` | invalid shape, unsupported dtype |
-| Runtime | `SEL-R***` | resource limit, illegal operation |
+| Result/control flow | `SEL-R***` | invalid `require`, non-exhaustive `match`, bad `?` flow |
+| Runtime | future `SEL-R***` extensions | resource limit, illegal operation |
 | Security | `SEL-S***` | denied network destination |
 | Tooling | `SEL-C***` | unsupported CLI command or target |
 

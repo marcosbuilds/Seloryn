@@ -2,7 +2,7 @@
 
 The first ML-ready gradient engine uses **reverse-mode automatic differentiation** over an explicit computation graph, with leaf parameters, intermediate values, saved tensors and one derivative rule per differentiable primitive.
 
-![Gradient dataflow](../../assets/training-flow.svg)
+![Gradient dataflow](../../assets/training-flow.png)
 
 ### Target semantics
 

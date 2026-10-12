@@ -1,12 +1,12 @@
 # Visual references
 
-![Seloryn mark](../../assets/seloryn-mark.svg)
+![Seloryn mark](../../assets/seloryn-symbol.svg)
 
 | Asset | Purpose | Origin |
 |---|---|---|
-| `seloryn-mark.svg` | Language identity, future terminal/editor icon | Original project draft |
-| `architecture-flow.svg` | Source → runtime → tensor backends | Original vector diagram |
-| `training-flow.svg` | Forward pass → gradient → optimizer | Original vector diagram |
+| `seloryn-symbol.svg` | Language identity, future terminal/editor icon | Original project asset, canonical vector |
+| `architecture-flow.png` | Source → runtime → tensor backends | Original project raster diagram |
+| `training-flow.png` | Forward pass → gradient → optimizer | Original project raster diagram |
 | `theSVG` links | Distinguish outside vendors/services visually | External brand assets; not bundled |
 
 ### External SVG sourcing rule

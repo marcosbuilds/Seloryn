@@ -1,10 +1,13 @@
 # Type system
 
-Seloryn proposes sound static checking for public module boundaries, with local inference where information is sufficient. The type checker must distinguish values from computation effects and host resources.
+Seloryn's E3 checker provides an experimental soundness baseline for local
+scopes and public function boundaries, with local inference where
+information is sufficient. It does not yet execute programs or validate
+tensor types.
 
 | Kind | Proposed contract | Avoid |
 |---|---|---|
-| Scalars | `Bool`, `I8/I16/I32/I64`, `U8/U16/U32/U64`, `F16/BF16/F32/F64`, `Text`, `Bytes` | Silent numeric/text conversion |
+| Scalars | E3: `Bool`, `I64`, `F64`, `Text`, `Unit`; other widths remain proposed | Silent numeric/text conversion |
 | Text vs bytes | UTF-8 logical text; explicit encoding/decoding | Broken boundary assumptions |
 | Containers | `List[T]`, `Map[K,V]`, `Set[T]`, `Tuple[...]` | Untyped heterogeneous mutation |
 | Outcomes | `Result[T,E]`, `Option[T]`, `T?` | Silent error dropping or unknown nulls |
@@ -21,7 +24,9 @@ let learning_rate: F32 = 0.0003
 var steps: I64 = 0
 ```
 
-Numeric literal default types and overflow semantics must be explicitly frozen before preview. Proposed baseline: integer literals default `I64` when unannotated; floating literals default `F64`; explicit `F32` context must be range-checked. Integer overflow in safe mode yields deterministic failure; unchecked wrap requires explicit API. No float equality surprises are disguised as tolerant comparisons.
+E3 defaults integer literals to `I64` and floating literals to `F64`, with no
+implicit Bool/Text/numeric coercion. Overflow behavior and additional scalar
+widths remain outside this gate.
 
 ### Generics and types
 
@@ -29,7 +34,11 @@ Numeric literal default types and overflow semantics must be explicitly frozen b
 
 ### Null / Result distinction
 
-`T?` encodes nullable values and `?.` safe member access; `Option[T]` is explicit absence with `Some` and `None`. `Result[T,E]` encodes fallibility. There is no truthiness of `None`, `0` or an empty list. `??` has explicit null/Option rules and never conceals `Err`.
+`Option[T]` is E3's explicit absence model with `Some` and `None`.
+`Result[T,E]` encodes fallibility. Nullable `T?` and `?.` remain reserved
+until their coercion and member-access rules are frozen. There is no
+truthiness of `None`, `0` or an empty list. E3's `??` accepts an `Option` on
+the left and never conceals `Err`.
 
 ### Extension discipline
 

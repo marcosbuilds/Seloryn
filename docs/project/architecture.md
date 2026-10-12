@@ -1,6 +1,6 @@
 # Architecture
 
-![Language pipeline](../../assets/architecture-flow.svg)
+![Language pipeline](../../assets/architecture-flow.png)
 
 The architecture is defined by owned language semantics from UTF-8 source to deterministic results. The first implementation uses a native systems-language host, but `.sely` is not a wrapper or source-to-source alias for any host language. Verified, established system libraries may be called through constrained interfaces; security-sensitive protocols and cryptography must not be casually reimplemented.
 

@@ -1,8 +1,8 @@
-# Command-line bootstrap
+# Command-line checker
 
-The native CLI bootstrap is implemented with help, version metadata and a
-syntax-only source check. It is not an installable release and it cannot type
-check, compile or run `.sely` programs.
+The native CLI exposes help, version metadata and an experimental source
+checker. It is not an installable release and it cannot interpret or compile
+`.sely` programs.
 
 ```text
 seloryn --help
@@ -12,8 +12,11 @@ seloryn check <file.sely>
 
 The development version reports `0.00` and `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
-layout tokens and the implemented parser subset, then reports `syntax-only`.
-The observed behavior is covered by [the CLI integration tests](../../tests/bootstrap_cli.rs).
+layout, the E3 parser subset and the E3 semantic core: lexical scopes,
+scalar types, records, enums, `Result`, `Option`, `require`, postfix `?`,
+calls and exhaustive `match`. It reports `checked` only when all these
+checks pass. Imports are diagnosed as unavailable, and nullable `T?` syntax
+remains reserved. The observed behavior is covered by [the CLI integration tests](../../tests/bootstrap_cli.rs).
 
 ## Future commands
 

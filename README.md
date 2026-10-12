@@ -1,13 +1,13 @@
 <div align="center">
-  <img src="assets/seloryn-mark.svg" alt="Seloryn symbol" width="88" height="88" />
+  <img src="assets/seloryn-symbol.svg" alt="Seloryn symbol" width="88" height="88" />
   <h1>Seloryn</h1>
   <p><strong>Readable logic. Real computation.</strong></p>
   <p>A planned original programming language for reliable applications, tensors, model training and inference.</p>
 </div>
 
-> **Project status: staged implementation — 0.00.** The native CLI bootstrap exposes `--help`, `--version` and syntax-only `check`; the type checker, interpreter, compiler, language libraries, GPU support and installers do not exist yet. Code samples throughout this repository show the **proposed language contract**, not running programs. [Current status](docs/project/status.md).
+> **Project status: staged implementation — 0.00.** The native CLI exposes `--help`, `--version` and experimental `check`, which validates the E3 syntax and semantic core. The interpreter, compiler, language libraries, GPU support and installers do not exist yet. Code samples throughout this repository show the **proposed language contract**, not running programs. [Current status](docs/project/status.md).
 
-![Seloryn architecture](assets/architecture-flow.svg)
+![Seloryn architecture](assets/architecture-flow.png)
 
 ## What Seloryn is designed to do
 
