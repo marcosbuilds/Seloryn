@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="t d" viewBox="0 0 960 280">
+ <title id="t">Seloryn execution and tensor compiler architecture</title><desc id="d">Source code becomes a parser AST, then a typed intermediate representation which branches to system runtime and to a CPU or accelerator tensor engine for model training.</desc>
+ <rect width="960" height="280" rx="18" fill="#111920"/>
+ <g font-family="Arial, sans-serif" font-size="17" fill="#F4FAF8" text-anchor="middle">
+ <rect x="32" y="94" width="150" height="76" rx="12" fill="#213339" stroke="#74D6B0" stroke-width="2"/><text x="107" y="127">.sely source</text><text x="107" y="151" font-size="12" fill="#9FB6AE">readable programs</text>
+ <rect x="246" y="94" width="150" height="76" rx="12" fill="#213339" stroke="#74D6B0" stroke-width="2"/><text x="321" y="127">Grammar / AST</text><text x="321" y="151" font-size="12" fill="#9FB6AE">syntax + spans</text>
+ <rect x="460" y="94" width="150" height="76" rx="12" fill="#213339" stroke="#74D6B0" stroke-width="2"/><text x="535" y="127">Typed IR</text><text x="535" y="151" font-size="12" fill="#9FB6AE">checked semantics</text>
+ <rect x="675" y="41" width="245" height="75" rx="12" fill="#213339" stroke="#F4FAF8" stroke-width="2"/><text x="798" y="73">Services runtime</text><text x="798" y="95" font-size="12" fill="#9FB6AE">HTTP • files • automation</text>
+ <rect x="675" y="150" width="245" height="86" rx="12" fill="#213339" stroke="#74D6B0" stroke-width="2"/><text x="798" y="182">Tensor execution</text><text x="798" y="206" font-size="12" fill="#9FB6AE">CPU • accelerators • gradients</text>
+ </g><g fill="none" stroke="#74D6B0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M182 132H241M234 126L241 132L234 138"/><path d="M396 132H455M448 126L455 132L448 138"/><path d="M610 125H641V78H670M663 72L670 78L663 84"/><path d="M610 139H641V192H670M663 186L670 192L663 198"/></g>
+ <text x="31" y="255" fill="#9FB6AE" font-family="Arial,sans-serif" font-size="12">Architecture proposal · all execution components not yet implemented</text>
+</svg>

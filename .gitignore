@@ -1,0 +1,21 @@
+# AGENTS.md is local agent policy, never public product documentation.
+/AGENTS.md
+# Private operator specs must remain adjacent, never inside this worktree.
+/operator/
+/.operator/
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.secret
+*.token
+.DS_Store
+Thumbs.db
+__pycache__/
+target/
+dist/
+build/
+.cache/

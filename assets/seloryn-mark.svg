@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Seloryn language mark" viewBox="0 0 128 128">
+ <title>Seloryn</title><desc>An original connected flow symbol with three ordered strokes converging across a center.</desc>
+ <rect width="128" height="128" rx="30" fill="#111920"/>
+ <path d="M30 41L50 25H86L100 37L86 52H51L31 68L48 84H77L95 101" fill="none" stroke="#74D6B0" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/>
+ <path d="M34 101H59L75 86" fill="none" stroke="#F4FAF8" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+ <circle cx="88" cy="50" r="6" fill="#F4FAF8"/>
+</svg>
