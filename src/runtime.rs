@@ -1,7 +1,9 @@
+use crate::builtins::{self, Builtin};
 use crate::diagnostic::{Diagnostic, Span};
 use crate::parser::{
     Binding, EnumDecl, Expr, Function, IfBranch, Item, Pattern, Program, Record, Statement,
 };
+use crate::tensor::{Tensor, TensorError};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
@@ -14,6 +16,7 @@ pub enum Value {
     F64(f64),
     Text(String),
     List(Vec<Value>),
+    Tensor(Tensor),
     Record {
         name: String,
         fields: Vec<(String, Value)>,
@@ -47,6 +50,7 @@ impl Value {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
+            Self::Tensor(tensor) => tensor.render(),
             Self::Record { name, fields } => format!(
                 "{name}({})",
                 fields
@@ -563,6 +567,9 @@ impl<'a> Interpreter<'a> {
 
     fn eval_call(&mut self, callee: &Expr, arguments: &[Expr], span: Span) -> Eval<Value> {
         if let Expr::Name { name, .. } = callee {
+            if let Some(builtin) = builtins::lookup(name) {
+                return self.eval_builtin(builtin, arguments, span);
+            }
             if matches!(name.as_str(), "Ok" | "Err" | "Some") {
                 if arguments.len() != 1 {
                     return Err(Control::Runtime(self.runtime(
@@ -616,6 +623,150 @@ impl<'a> Interpreter<'a> {
                 "expression is not callable",
                 span,
             ))),
+        }
+    }
+
+    fn eval_builtin(&mut self, builtin: Builtin, arguments: &[Expr], span: Span) -> Eval<Value> {
+        let expected = match builtin {
+            Builtin::TensorF32 | Builtin::TensorI64 | Builtin::Reshape | Builtin::Matmul => 2,
+            Builtin::ZerosF32 | Builtin::ZerosI64 => 1,
+            Builtin::TensorShape
+            | Builtin::TensorRank
+            | Builtin::TensorElements
+            | Builtin::TensorDtype
+            | Builtin::Sum
+            | Builtin::Mean => 1,
+        };
+        if arguments.len() != expected {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R103",
+                format!(
+                    "builtin expects {expected} argument(s), got {}",
+                    arguments.len()
+                ),
+                span,
+            )));
+        }
+        let values = arguments
+            .iter()
+            .map(|argument| self.eval_expr(argument))
+            .collect::<Result<Vec<_>, _>>()?;
+        match builtin {
+            Builtin::TensorF32 => {
+                let source = list_values(&values[0], span, self)?;
+                let shape = shape_values(&values[1], span, self)?;
+                let values = source
+                    .iter()
+                    .map(|value| match value {
+                        Value::F64(value) => {
+                            let converted = *value as f32;
+                            converted.is_finite().then_some(converted).ok_or_else(|| {
+                                Control::Runtime(self.tensor_error(TensorError::NonFinite, span))
+                            })
+                        }
+                        _ => Err(Control::Runtime(self.tensor_error(
+                            TensorError::DtypeMismatch {
+                                expected: "F64",
+                                actual: value_type_name(value),
+                            },
+                            span,
+                        ))),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Tensor::from_f32(values, &shape)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::TensorI64 => {
+                let source = list_values(&values[0], span, self)?;
+                let shape = shape_values(&values[1], span, self)?;
+                let values = source
+                    .iter()
+                    .map(|value| match value {
+                        Value::I64(value) => Ok(*value),
+                        _ => Err(Control::Runtime(self.tensor_error(
+                            TensorError::DtypeMismatch {
+                                expected: "I64",
+                                actual: value_type_name(value),
+                            },
+                            span,
+                        ))),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Tensor::from_i64(values, &shape)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::ZerosF32 => {
+                let shape = shape_values(&values[0], span, self)?;
+                Tensor::zeros_f32(&shape)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::ZerosI64 => {
+                let shape = shape_values(&values[0], span, self)?;
+                Tensor::zeros_i64(&shape)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::TensorShape => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                let shape = tensor
+                    .shape()
+                    .iter()
+                    .map(|dimension| {
+                        i64::try_from(*dimension).map(Value::I64).map_err(|_| {
+                            Control::Runtime(self.tensor_error(TensorError::ShapeOverflow, span))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Value::List(shape))
+            }
+            Builtin::TensorRank => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                Ok(Value::I64(i64::try_from(tensor.rank()).map_err(|_| {
+                    Control::Runtime(self.tensor_error(TensorError::ShapeOverflow, span))
+                })?))
+            }
+            Builtin::TensorElements => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                Ok(Value::I64(i64::try_from(tensor.element_count()).map_err(
+                    |_| Control::Runtime(self.tensor_error(TensorError::ShapeOverflow, span)),
+                )?))
+            }
+            Builtin::TensorDtype => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                Ok(Value::Text(tensor.dtype().name().to_owned()))
+            }
+            Builtin::Reshape => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                let shape = shape_values(&values[1], span, self)?;
+                tensor
+                    .reshape(&shape)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::Sum => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                tensor
+                    .sum_all()
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::Mean => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                tensor
+                    .mean_all()
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::Matmul => {
+                let left = tensor_value(&values[0], span, self)?;
+                let right = tensor_value(&values[1], span, self)?;
+                left.matmul(right)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
         }
     }
 
@@ -788,6 +939,10 @@ impl<'a> Interpreter<'a> {
                 span,
                 self,
             ),
+            (Value::Tensor(left), Value::Tensor(right)) => left
+                .elementwise(&right, "+")
+                .map(Value::Tensor)
+                .map_err(|error| Control::Runtime(self.tensor_error(error, span))),
             _ => Err(Control::Runtime(self.runtime(
                 "SEL-R117",
                 "`+` received incompatible values",
@@ -804,6 +959,10 @@ impl<'a> Interpreter<'a> {
         span: Span,
     ) -> Eval<Value> {
         match (left, right) {
+            (Value::Tensor(left), Value::Tensor(right)) => left
+                .elementwise(&right, operator)
+                .map(Value::Tensor)
+                .map_err(|error| Control::Runtime(self.tensor_error(error, span))),
             (Value::I64(left), Value::I64(right)) => {
                 let value = match operator {
                     "-" => left.checked_sub(right),
@@ -949,6 +1108,10 @@ impl<'a> Interpreter<'a> {
         RuntimeError::new(code, message, span, &self.call_stack)
     }
 
+    fn tensor_error(&self, error: TensorError, span: Span) -> RuntimeError {
+        self.runtime(error.code(), error.to_string(), span)
+    }
+
     fn error(&self, code: &'static str, message: impl Into<String>, span: Span) -> RuntimeError {
         self.runtime(code, message, span)
     }
@@ -973,6 +1136,73 @@ fn finite_f64(value: f64, message: &str, span: Span, interpreter: &Interpreter<'
         Err(Control::Runtime(
             interpreter.runtime("SEL-R125", message, span),
         ))
+    }
+}
+
+fn list_values<'a>(
+    value: &'a Value,
+    span: Span,
+    interpreter: &Interpreter<'_>,
+) -> Eval<&'a [Value]> {
+    match value {
+        Value::List(values) => Ok(values),
+        _ => Err(Control::Runtime(interpreter.runtime(
+            "SEL-R203",
+            format!(
+                "expected List[I64] or List[F64], got {}",
+                value_type_name(value)
+            ),
+            span,
+        ))),
+    }
+}
+
+fn shape_values(value: &Value, span: Span, interpreter: &Interpreter<'_>) -> Eval<Vec<i64>> {
+    list_values(value, span, interpreter)?
+        .iter()
+        .map(|value| match value {
+            Value::I64(value) => Ok(*value),
+            _ => Err(Control::Runtime(interpreter.runtime(
+                "SEL-R203",
+                format!(
+                    "tensor shape requires I64 dimensions, got {}",
+                    value_type_name(value)
+                ),
+                span,
+            ))),
+        })
+        .collect()
+}
+
+fn tensor_value<'a>(
+    value: &'a Value,
+    span: Span,
+    interpreter: &Interpreter<'_>,
+) -> Eval<&'a Tensor> {
+    match value {
+        Value::Tensor(tensor) => Ok(tensor),
+        _ => Err(Control::Runtime(interpreter.runtime(
+            "SEL-R203",
+            format!("expected a tensor, got {}", value_type_name(value)),
+            span,
+        ))),
+    }
+}
+
+fn value_type_name(value: &Value) -> &'static str {
+    match value {
+        Value::Unit => "Unit",
+        Value::Bool(_) => "Bool",
+        Value::I64(_) => "I64",
+        Value::F64(_) => "F64",
+        Value::Text(_) => "Text",
+        Value::List(_) => "List",
+        Value::Tensor(_) => "Tensor",
+        Value::Record { .. } => "Record",
+        Value::Enum { .. } => "Enum",
+        Value::Option(_) => "Option",
+        Value::Result { .. } => "Result",
+        Value::Function(_) => "Function",
     }
 }
 

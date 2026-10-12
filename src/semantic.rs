@@ -1,7 +1,9 @@
+use crate::builtins::{self, Builtin};
 use crate::diagnostic::{Diagnostic, Span};
 use crate::parser::{
     Binding, Expr, Function, IfBranch, Item, MatchStatement, Pattern, Program, Statement, TypeExpr,
 };
+use crate::tensor::TensorDtype;
 use std::collections::{HashMap, HashSet, hash_map::Entry};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -14,6 +16,7 @@ enum Type {
     List(Box<Type>),
     Option(Box<Type>),
     Result(Box<Type>, Box<Type>),
+    Tensor(TensorDtype),
     Record(String),
     Enum(String),
     Function(Vec<Type>, Box<Type>),
@@ -191,7 +194,8 @@ impl<'a> Checker<'a> {
 
         for item in &self.program.items {
             if let Item::Function(function) = item {
-                if self.globals.contains_key(&function.name)
+                if builtins::lookup(&function.name).is_some()
+                    || self.globals.contains_key(&function.name)
                     || self.records.contains_key(&function.name)
                     || self.enums.contains_key(&function.name)
                 {
@@ -283,7 +287,8 @@ impl<'a> Checker<'a> {
     }
 
     fn check_top_binding(&mut self, binding: &Binding) {
-        if self.globals.contains_key(&binding.name)
+        if builtins::lookup(&binding.name).is_some()
+            || self.globals.contains_key(&binding.name)
             || self.records.contains_key(&binding.name)
             || self.enums.contains_key(&binding.name)
         {
@@ -844,6 +849,9 @@ impl<'a> Checker<'a> {
 
     fn type_of_call(&mut self, callee: &Expr, arguments: &[Expr], span: Span) -> Type {
         if let Expr::Name { name, .. } = callee {
+            if let Some(builtin) = builtins::lookup(name) {
+                return self.type_of_builtin_call(builtin, arguments, span);
+            }
             match name.as_str() {
                 "Ok" => {
                     if arguments.len() != 1 {
@@ -937,6 +945,149 @@ impl<'a> Checker<'a> {
         }
     }
 
+    fn type_of_builtin_call(&mut self, builtin: Builtin, arguments: &[Expr], span: Span) -> Type {
+        let name = builtin_name(builtin);
+        let expected_arguments = match builtin {
+            Builtin::TensorF32 | Builtin::TensorI64 | Builtin::Reshape => 2,
+            Builtin::ZerosF32 | Builtin::ZerosI64 => 1,
+            Builtin::TensorShape
+            | Builtin::TensorRank
+            | Builtin::TensorElements
+            | Builtin::TensorDtype
+            | Builtin::Sum
+            | Builtin::Mean => 1,
+            Builtin::Matmul => 2,
+        };
+        if arguments.len() != expected_arguments {
+            self.error(
+                "SEL-T005",
+                format!(
+                    "builtin `{name}` expects {expected_arguments} argument(s), got {}",
+                    arguments.len()
+                ),
+                span,
+            );
+            for argument in arguments {
+                self.type_of_expr(argument);
+            }
+            return Type::Error;
+        }
+
+        match builtin {
+            Builtin::TensorF32 => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::List(Box::new(Type::F64)),
+                    "tensor_f32 values",
+                );
+                self.ensure_expr_assignable(
+                    &arguments[1],
+                    &Type::List(Box::new(Type::I64)),
+                    "tensor_f32 shape",
+                );
+                Type::Tensor(TensorDtype::F32)
+            }
+            Builtin::TensorI64 => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::List(Box::new(Type::I64)),
+                    "tensor_i64 values",
+                );
+                self.ensure_expr_assignable(
+                    &arguments[1],
+                    &Type::List(Box::new(Type::I64)),
+                    "tensor_i64 shape",
+                );
+                Type::Tensor(TensorDtype::I64)
+            }
+            Builtin::ZerosF32 => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::List(Box::new(Type::I64)),
+                    "tensor_zeros_f32 shape",
+                );
+                Type::Tensor(TensorDtype::F32)
+            }
+            Builtin::ZerosI64 => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::List(Box::new(Type::I64)),
+                    "tensor_zeros_i64 shape",
+                );
+                Type::Tensor(TensorDtype::I64)
+            }
+            Builtin::TensorShape => {
+                self.ensure_tensor_argument(&arguments[0], "tensor_shape");
+                Type::List(Box::new(Type::I64))
+            }
+            Builtin::TensorRank | Builtin::TensorElements => {
+                self.ensure_tensor_argument(&arguments[0], name);
+                Type::I64
+            }
+            Builtin::TensorDtype => {
+                self.ensure_tensor_argument(&arguments[0], name);
+                Type::Text
+            }
+            Builtin::Reshape => {
+                let tensor_type = self.type_of_expr(&arguments[0]);
+                self.ensure_tensor_type(&tensor_type, arguments[0].span(), "reshape tensor");
+                self.ensure_expr_assignable(
+                    &arguments[1],
+                    &Type::List(Box::new(Type::I64)),
+                    "reshape shape",
+                );
+                tensor_type
+            }
+            Builtin::Sum => {
+                let tensor_type = self.type_of_expr(&arguments[0]);
+                self.ensure_tensor_type(&tensor_type, arguments[0].span(), "tensor_sum tensor");
+                tensor_type
+            }
+            Builtin::Mean => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::Tensor(TensorDtype::F32),
+                    "tensor_mean tensor",
+                );
+                Type::Tensor(TensorDtype::F32)
+            }
+            Builtin::Matmul => {
+                for argument in arguments {
+                    self.ensure_expr_assignable(
+                        argument,
+                        &Type::Tensor(TensorDtype::F32),
+                        "matmul operand",
+                    );
+                }
+                Type::Tensor(TensorDtype::F32)
+            }
+        }
+    }
+
+    fn ensure_tensor_argument(&mut self, argument: &Expr, context: &str) -> Type {
+        let actual = self.type_of_expr(argument);
+        self.ensure_tensor_type(&actual, argument.span(), context);
+        actual
+    }
+
+    fn ensure_tensor_type(&mut self, actual: &Type, span: Span, context: &str) {
+        if !matches!(actual, Type::Tensor(_) | Type::Unknown | Type::Error) {
+            self.error(
+                "SEL-T002",
+                format!(
+                    "{context} expects a Tensor[F32] or Tensor[I64], got {}",
+                    display_type(actual)
+                ),
+                span,
+            );
+        }
+    }
+
+    fn ensure_expr_assignable(&mut self, expression: &Expr, expected: &Type, context: &str) {
+        let actual = self.type_of_expr(expression);
+        self.ensure_assignable(&actual, expected, expression.span(), context);
+    }
+
     fn check_arguments(&mut self, arguments: &[Expr], expected: &[Type], span: Span, name: &str) {
         if arguments.len() != expected.len() {
             self.error(
@@ -1009,6 +1160,24 @@ impl<'a> Checker<'a> {
             "I64" if expression.arguments.is_empty() => Type::I64,
             "F64" if expression.arguments.is_empty() => Type::F64,
             "Text" if expression.arguments.is_empty() => Type::Text,
+            "Tensor" if expression.arguments.len() == 1 => {
+                match expression.arguments[0].name.as_str() {
+                    "F32" if expression.arguments[0].arguments.is_empty() => {
+                        Type::Tensor(TensorDtype::F32)
+                    }
+                    "I64" if expression.arguments[0].arguments.is_empty() => {
+                        Type::Tensor(TensorDtype::I64)
+                    }
+                    _ => {
+                        self.error(
+                            "SEL-T001",
+                            "Tensor type requires F32 or I64 dtype",
+                            expression.arguments[0].span,
+                        );
+                        Type::Error
+                    }
+                }
+            }
             "List" if expression.arguments.len() == 1 => {
                 Type::List(Box::new(self.type_from_expr(&expression.arguments[0])))
             }
@@ -1066,6 +1235,11 @@ impl<'a> Checker<'a> {
         }
         if left == &Type::F64 && right == &Type::F64 {
             return Type::F64;
+        }
+        if let (Type::Tensor(left), Type::Tensor(right)) = (left, right)
+            && left == right
+        {
+            return Type::Tensor(*left);
         }
         if matches!(left, Type::Unknown | Type::Error)
             || matches!(right, Type::Unknown | Type::Error)
@@ -1141,6 +1315,7 @@ fn assignable(actual: &Type, expected: &Type) -> bool {
                     .all(|(actual, expected)| assignable(actual, expected))
                 && assignable(actual_return, expected_return)
         }
+        (Type::Tensor(actual), Type::Tensor(expected)) => actual == expected,
         _ => actual == expected,
     }
 }
@@ -1157,6 +1332,7 @@ fn display_type(ty: &Type) -> String {
         Type::Result(value, error) => {
             format!("Result[{}, {}]", display_type(value), display_type(error))
         }
+        Type::Tensor(dtype) => format!("Tensor[{}]", dtype),
         Type::Record(name) | Type::Enum(name) => name.clone(),
         Type::Function(parameters, return_type) => format!(
             "fn({}) -> {}",
@@ -1169,6 +1345,23 @@ fn display_type(ty: &Type) -> String {
         ),
         Type::Unknown => "unknown".to_owned(),
         Type::Error => "error".to_owned(),
+    }
+}
+
+fn builtin_name(builtin: Builtin) -> &'static str {
+    match builtin {
+        Builtin::TensorF32 => "tensor_f32",
+        Builtin::TensorI64 => "tensor_i64",
+        Builtin::ZerosF32 => "tensor_zeros_f32",
+        Builtin::ZerosI64 => "tensor_zeros_i64",
+        Builtin::TensorShape => "tensor_shape",
+        Builtin::TensorRank => "tensor_rank",
+        Builtin::TensorElements => "tensor_elements",
+        Builtin::TensorDtype => "tensor_dtype",
+        Builtin::Reshape => "reshape",
+        Builtin::Sum => "tensor_sum",
+        Builtin::Mean => "tensor_mean",
+        Builtin::Matmul => "matmul",
     }
 }
 

@@ -5,15 +5,15 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current status: 0.00, experimental E3 checker plus E4 pure scalar interpreter.** Seloryn can validate and execute a bounded `.sely` subset through `check` and `run`. There is no module system, tensor engine, training runtime, HTTP/file standard library, installable release or GPU backend. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md), [E3 checklist](docs/project/e3-checklist.md) and [E4 checklist](docs/project/e4-checklist.md).
+> **Current status: 0.00, experimental E3 checker, E4 pure interpreter and N1 CPU tensor runtime.** Seloryn can validate and execute a bounded `.sely` subset through `check` and `run`. There is no module system, training runtime, HTTP/file standard library, installable release or GPU backend. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and [tensor reference](docs/compute/tensors.md).
 
-> **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** The attached `seloryn_e3_design_review.md` is the design reference for the intended language; this repository records only what is implemented and verified.
+> **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** This repository records only what is implemented and verified.
 
 ![Seloryn architecture](assets/architecture-flow.png)
 
 ## What exists today vs. what is designed
 
-Seloryn is being designed as one expressive language for reliable AI development, integration and serving. The implemented result is a checker plus a small pure interpreter for the validated scalar core; effects, tensors and numerical layers remain roadmap work.
+Seloryn is being designed as one expressive language for reliable AI development, integration and serving. The implemented result is a checker plus a pure interpreter for the validated scalar core and a bounded CPU tensor core; effects, training and accelerator layers remain roadmap work.
 
 ## Mission: AI development and integration
 
@@ -31,9 +31,10 @@ instead of gaining features by default.
 | Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | `src/semantic.rs:101-1115`, semantic tests |
 | `seloryn check <file.sely>` diagnostics | Implemented in the development CLI | `src/main.rs:82-119`, `tests/bootstrap_cli.rs:61-178` |
 | Pure scalar/list interpreter and `seloryn run` | Experimental E4 implementation | [`src/runtime.rs`](src/runtime.rs), runtime and CLI tests; no effects |
+| CPU `Tensor[F32]` / `Tensor[I64]` buffers and N1 operations | Experimental N1 implementation | [`src/tensor`](src/tensor), tensor unit and CLI tests; CPU only |
 | Core IR | Not implemented; planned after interpreter evidence | The interpreter evaluates the checked AST directly |
 | Modules, files, HTTP, packages and standard library | Not implemented; imports are diagnosed as unavailable | No module or systems runtime exists |
-| Tensor buffers, autodiff, training and model serving | Designed only; not checked or executable | See [tensor design](docs/compute/tensors.md) and [E3 gaps](docs/project/e3-checklist.md) |
+| Autodiff, training and model serving | Designed only; not checked or executable | See [autodiff](docs/compute/autograd.md) and [training](docs/compute/training.md) |
 | GPU, distributed execution and installers | Not implemented or verified | No backend or release artifact exists |
 
 | AI development | AI integration | AI serving | Evidence |
@@ -46,15 +47,14 @@ instead of gaining features by default.
 
 ```seloryn
 record Sample:
-    input: Tensor[F32, (Batch, Features)]
-    target: Tensor[I64, (Batch,)]
+    input: Tensor[F32]
+    target: Tensor[I64]
 
-fn accuracy(predicted: Tensor[I64, (Batch,)], expected: Tensor[I64, (Batch,)]) -> Result[F32, ShapeError]:
-    require predicted.shape == expected.shape else ShapeError("shape mismatch")
-    return Ok((predicted == expected).cast(F32).mean().item())
+fn accuracy(predicted: Tensor[I64], expected: Tensor[I64]) -> Result[I64, Text]:
+    return Ok(tensor_elements(predicted))
 ```
 
-The illustrative snippet above describes a **future API**, not a program accepted by the current checker. It may change before acceptance. `require` inside fallible functions has a limited checker rule in the [language reference](docs/reference/grammar.md); see [examples](examples/tensor-tour.md) for a design-only training flow.
+The function above is intentionally illustrative beyond the current callable API. The verified runnable tensor example is [`examples/tensor-matmul.sely`](examples/tensor-matmul.sely); it returns a real CPU matmul result through `seloryn run`.
 
 ## Read next
 
@@ -62,6 +62,6 @@ The illustrative snippet above describes a **future API**, not a program accepte
 
 ## References and visuals
 
-Original Seloryn symbol and architecture diagrams are packaged under `assets/`. Vendor and service brand SVGs may be retrieved via the [theSVG catalog](https://thesvg.org/) when needed; they must not be presented as Seloryn's own mark. No external brand assets are bundled in this design-only archive.
+Original Seloryn symbol and architecture diagrams are packaged under `assets/`. Vendor and service brand SVGs may be retrieved via the [theSVG catalog](https://thesvg.org/) when needed; they must not be presented as Seloryn's own mark. No external brand assets are bundled in this repository.
 
 **Documentation map:** [Browse by category](docs/index.md).

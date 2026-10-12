@@ -19,12 +19,13 @@ checks pass. Imports are diagnosed as unavailable, and nullable `T?` syntax
 remains reserved.
 
 `run` performs the same full front-end validation before evaluating the pure E4
-subset. A successful run prints one deterministic rendered value to stdout:
-scalars, lists, records, enum constructors, `Some`/`None` and `Ok`/`Err` are
-supported. A source or runtime failure writes a stable `SEL-*` diagnostic to
-stderr and returns exit code 65; no runtime evaluation starts after a lexical,
-parse or semantic diagnostic. The interpreter performs no file, network,
-process, tensor or GPU effects. The behavior is covered by [the CLI integration tests](../../tests/bootstrap_cli.rs) and [the E4 checklist](../project/e4-checklist.md).
+subset and the bounded N1 CPU tensor subset. A successful run prints one
+deterministic rendered value to stdout. A source or runtime failure writes a
+stable `SEL-*` diagnostic to stderr and returns exit code 65; no runtime
+evaluation starts after a lexical, parse or semantic diagnostic. The
+interpreter performs no file, network, process or GPU effects. The behavior is
+covered by the CLI tests in [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs)
+and [`tests/tensor_cpu.rs`](../../tests/tensor_cpu.rs).
 
 ## Future commands
 
