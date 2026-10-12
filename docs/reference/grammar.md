@@ -1,6 +1,6 @@
 # Grammar and syntax contract
 
-> **Implemented and tested portions only.** The current `seloryn check` command validates UTF-8, layout, a bounded parser subset and selected semantic rules. `seloryn run` additionally executes the E4 scalar subset and the bounded N1 CPU tensor subset; it does not provide the complete grammar below.
+> **Implemented and tested portions only.** The current `seloryn check` command validates UTF-8, layout, a bounded parser subset and selected semantic rules. `seloryn run` additionally executes the E4 scalar subset and the bounded N1/N2 CPU tensor subset; it does not provide the complete grammar below.
 
 The complete grammar remains a design contract until each construct has runtime and negative-test coverage. The bounded E4 subset is executable through `seloryn run`; constructs outside that subset remain reserved or unavailable. Keywords, primitive types and standard public APIs are English. Case-sensitive symbols use `snake_case` for functions and variables, `PascalCase` for named types, `UPPER_SNAKE_CASE` for constants, and `lowercase.dotted` module paths. Identifiers follow Unicode XID rules; exported package names use ASCII for portability. Module namespaces are distinct from filesystem traversal.
 
@@ -76,7 +76,7 @@ This EBNF summarizes accepted design intent; production-ready conformance gramma
 | `Result` and postfix `?` | Static checks plus E4 propagation | [`type_of_expr`](../../src/semantic.rs#L652), runtime tests; `?` returns a compatible `Err` from the current function |
 | `Option` and `??` | Static checks plus E4 values/fallback | [`type_of_binary`](../../src/semantic.rs#L760), runtime tests; nullable `T?` and `?.` remain reserved |
 | Modules and imports | Reserved/unavailable in E3 | `seloryn check` emits `SEL-M001`; no resolver or package graph exists |
-| `Tensor[F32]` and `Tensor[I64]` | N1 experimental | Runtime shapes and CPU kernels are checked by [`src/tensor`](../../src/tensor) and CLI tests; symbolic shape parameters remain unavailable |
+| `Tensor[F32]` and `Tensor[I64]` | N1/N2 experimental | Runtime shapes and CPU kernels are checked by [`src/tensor`](../../src/tensor) and CLI tests; symbolic shape parameters remain unavailable |
 | List indexing, `for` iteration and `var` assignment | E4 experimental | `List[T]` indexing, bounded iteration, mutable bindings and list concatenation execute; tensor indexing remains unavailable |
 
 Status labels mean: **implemented** is present and tested in the checker; **partial** has explicit gaps; **reserved** produces a diagnostic rather than silently working; **designed** has no current implementation.

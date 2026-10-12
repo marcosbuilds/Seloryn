@@ -12,6 +12,13 @@ pub enum Builtin {
     Sum,
     Mean,
     Matmul,
+    Transpose,
+    Relu,
+    Exp,
+    Log,
+    Softmax,
+    LogSumExp,
+    SumToShape,
 }
 
 pub fn lookup(name: &str) -> Option<Builtin> {
@@ -28,6 +35,13 @@ pub fn lookup(name: &str) -> Option<Builtin> {
         "tensor_sum" => Some(Builtin::Sum),
         "tensor_mean" => Some(Builtin::Mean),
         "matmul" => Some(Builtin::Matmul),
+        "transpose" => Some(Builtin::Transpose),
+        "tensor_relu" => Some(Builtin::Relu),
+        "tensor_exp" => Some(Builtin::Exp),
+        "tensor_log" => Some(Builtin::Log),
+        "tensor_softmax" => Some(Builtin::Softmax),
+        "tensor_logsumexp" => Some(Builtin::LogSumExp),
+        "tensor_sum_to_shape" => Some(Builtin::SumToShape),
         _ => None,
     }
 }

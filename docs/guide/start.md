@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.00 currently provides an experimental syntax and semantic checker, a pure interpreter and a bounded CPU tensor runtime in the development repository. There is no verified release, downloadable executable, package registry, hosted API or supported installation command.
+**Availability:** Seloryn 0.00 currently provides an experimental syntax and semantic checker, a pure interpreter and bounded N1/N2 CPU tensor runtimes in the development repository. There is no verified release, downloadable executable, package registry, hosted API or supported installation command.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 
@@ -19,14 +19,15 @@ seloryn run example.sely
 
 `run` executes the same bounded constructs after all front-end diagnostics
 pass. It is pure: it has no filesystem, network, process or accelerator effects.
-The N1 bridge can allocate bounded CPU tensors and run checked F32/I64 kernels.
+The N1/N2 bridge can allocate bounded CPU tensors and run checked F32/I64
+kernels plus the tested N2 F32 numeric primitives.
 A valid program starts at `fn main()`, and its returned value is rendered to
 stdout.
 
 ## What's not yet available
 
 - No core IR, module system or standard library runtime.
-- No GPU, distributed or symbolic-shape execution; N1 supports only bounded CPU tensors.
+- No GPU, distributed or symbolic-shape execution; N1/N2 support only bounded CPU tensors.
 - No HTTP, file, process or package runtime.
 - No model loading, autodiff, optimizer or training.
 - No GPU, distributed backend, installer or supported release target.
@@ -58,8 +59,9 @@ fn main() -> Text:
 ```
 
 The interpreter returns the text value; it does not provide a `print` effect.
-[`examples/tensor-matmul.sely`](../../examples/tensor-matmul.sely) is a checked
-CPU tensor example.
+[`examples/tensor-matmul.sely`](../../examples/tensor-matmul.sely) and
+[`examples/tensor-numeric.sely`](../../examples/tensor-numeric.sely) are checked
+CPU tensor examples.
 
 ## File rules
 

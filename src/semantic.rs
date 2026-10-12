@@ -1059,7 +1059,8 @@ impl<'a> Checker<'a> {
             | Builtin::TensorElements
             | Builtin::TensorDtype => 1,
             Builtin::Sum | Builtin::Mean => 0,
-            Builtin::Matmul => 2,
+            Builtin::Matmul | Builtin::Softmax | Builtin::LogSumExp | Builtin::SumToShape => 2,
+            Builtin::Transpose | Builtin::Relu | Builtin::Exp | Builtin::Log => 1,
         };
         let valid_arity = if matches!(builtin, Builtin::Sum | Builtin::Mean) {
             arguments.len() == 1 || arguments.len() == 2
@@ -1179,6 +1180,25 @@ impl<'a> Checker<'a> {
                         "matmul operand",
                     );
                 }
+                Type::Tensor(TensorDtype::F32)
+            }
+            Builtin::Transpose => self.ensure_tensor_argument(&arguments[0], "transpose"),
+            Builtin::Relu | Builtin::Exp | Builtin::Log => {
+                self.ensure_expr_assignable(&arguments[0], &Type::Tensor(TensorDtype::F32), name);
+                Type::Tensor(TensorDtype::F32)
+            }
+            Builtin::Softmax | Builtin::LogSumExp => {
+                self.ensure_expr_assignable(&arguments[0], &Type::Tensor(TensorDtype::F32), name);
+                self.ensure_expr_assignable(&arguments[1], &Type::I64, "reduction axis");
+                Type::Tensor(TensorDtype::F32)
+            }
+            Builtin::SumToShape => {
+                self.ensure_expr_assignable(&arguments[0], &Type::Tensor(TensorDtype::F32), name);
+                self.ensure_expr_assignable(
+                    &arguments[1],
+                    &Type::List(Box::new(Type::I64)),
+                    "reduction target shape",
+                );
                 Type::Tensor(TensorDtype::F32)
             }
         }
@@ -1482,6 +1502,13 @@ fn builtin_name(builtin: Builtin) -> &'static str {
         Builtin::Sum => "tensor_sum",
         Builtin::Mean => "tensor_mean",
         Builtin::Matmul => "matmul",
+        Builtin::Transpose => "transpose",
+        Builtin::Relu => "tensor_relu",
+        Builtin::Exp => "tensor_exp",
+        Builtin::Log => "tensor_log",
+        Builtin::Softmax => "tensor_softmax",
+        Builtin::LogSumExp => "tensor_logsumexp",
+        Builtin::SumToShape => "tensor_sum_to_shape",
     }
 }
 

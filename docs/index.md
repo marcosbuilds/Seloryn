@@ -5,9 +5,9 @@
 The public documentation is deliberately short-named and categorized around
 Seloryn's AI-first mission: development, integration and serving with explicit
 typed boundaries. Every page distinguishes a proposed contract from an
-implemented, verified feature. **The E4 interpreter and bounded N1 CPU tensor
-runtime are experimental and pure; training and accelerator engines do not
-exist yet.**
+implemented, verified feature. **The E4 interpreter and bounded N1/N2 CPU
+tensor runtimes are experimental and pure; training and accelerator engines do
+not exist yet.**
 
 | Area | Start with | Continue |
 |---|---|---|
@@ -17,4 +17,4 @@ exist yet.**
 | **Systems** | [HTTP services](systems/http.md) | [Automation](systems/automation.md), [Security](systems/security.md) |
 | **Project** | [Architecture](project/architecture.md) | [Versioning](project/versions.md), [Status](project/status.md), [Licensing](project/licensing.md) |
 
-The checked runnable example is [`tensor-matmul.sely`](../examples/tensor-matmul.sely). Other forward-looking system and model examples remain design documentation.
+The checked runnable examples are [`tensor-matmul.sely`](../examples/tensor-matmul.sely) and [`tensor-numeric.sely`](../examples/tensor-numeric.sely). Other forward-looking system and model examples remain design documentation.

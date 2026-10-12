@@ -1,6 +1,6 @@
 # Current capability status
 
-**Primary truth source for Seloryn 0.00.** The repository contains an experimental syntax and semantic checker, a bounded pure E4 interpreter and a bounded pure N1 CPU tensor runtime. It does not contain a core IR, effects runtime, accelerator backend or public release. This page reports the observed implementation boundary.
+**Primary truth source for Seloryn 0.00.** The repository contains an experimental syntax and semantic checker, a bounded pure E4 interpreter and bounded pure N1/N2 CPU tensor runtimes. It does not contain a core IR, effects runtime, accelerator backend or public release. This page reports the observed implementation boundary.
 
 ## What works today
 
@@ -13,6 +13,7 @@
 | `Result`, `Option`, `require`, postfix `?` and `match` coverage | Experimental partial checker | [`check_require`](../../src/semantic.rs#L371), [`check_match`](../../src/semantic.rs#L409) |
 | Pure E4 interpreter for scalar/list values, list indexing and iteration, mutable `var` assignment, records, enums, `Result`, `Option`, calls, control flow and pipelines | Experimental implemented and tested | [`execute`](../../src/runtime.rs#L121), runtime and CLI tests |
 | N1 CPU tensors (`Tensor[F32]`/`Tensor[I64]`) | Experimental implemented and tested | [`src/tensor`](../../src/tensor), [`tensor_cpu.rs`](../../tests/tensor_cpu.rs) |
+| N2 CPU numeric closure | Experimental implemented and tested | [`src/tensor/ops.rs`](../../src/tensor/ops.rs), [`n2_probe.py`](../../tests/n2_probe.py), [`tensor-numeric.sely`](../../examples/tensor-numeric.sely) |
 | CLI `--help`, `--version`, `check` and `run` | Implemented development CLI | [`check_path`](../../src/main.rs#L86), [`run_path`](../../src/main.rs#L132), [CLI tests](../../tests/bootstrap_cli.rs#L61) |
 
 ## What is not implemented
@@ -74,6 +75,22 @@ rejection, bad shapes, incompatible matmul, invalid axes, per-tensor and global
 budget overflow. No GPU, autograd, training, tensor indexing, symbolic shape or
 performance claim follows from N1.
 
+## N2 CPU numeric evidence
+
+N2 is **experimental implemented** for the bounded pure CPU subset. It adds
+rank-2 shape/stride transpose views for both supported dtypes, F32 `relu`, `exp` and
+positive-domain `log`, stable axis `softmax` and `logsumexp`, plus F32
+`tensor_sum_to_shape` for reducing broadcasted results to a compatible operand
+shape. The runtime rejects empty selected reduction axes, invalid log domains,
+incompatible target shapes and non-finite results with `SEL-R210`/`SEL-R211`
+where applicable. [`tests/n2_probe.py`](../../tests/n2_probe.py) compares real
+CLI output against an independent Python standard-library reference and repeats
+negative diagnostics.
+
+N2 does not provide a tape, gradient API, optimizer, training loop, arbitrary
+tensor views, symbolic shapes, GPU or effects. N3 reverse-mode autograd remains
+the next numeric gate; the language version remains `0.00`.
+
 ## Gaps versus the design review
 
 E3 is therefore **not fully complete**. The checker proves a meaningful front-end subset, but E3.3, E3.4 and E3.5 still have the boundaries listed above. In particular:
@@ -81,6 +98,6 @@ E3 is therefore **not fully complete**. The checker proves a meaningful front-en
 - A successful `check` means syntax and supported static rules passed; `run` adds the separately tested pure E4 execution step.
 - Training, model-serving and GPU text in the repository describes design targets, not available capabilities.
 - Examples using `print`, modules, named record patterns or future libraries remain design concepts unless a page explicitly says otherwise.
-- E4 and N1 have bounded execution results; the core IR and later numeric gates remain future work.
+- E4, N1 and N2 have bounded execution results; the core IR and reverse-mode autograd remain future work.
 
 The implementation policy is staged: a feature becomes available only after source behavior, negative tests and platform evidence exist. The language version remains `0.00`; no release or earned gain is claimed by this status page.

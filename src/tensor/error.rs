@@ -41,6 +41,9 @@ pub enum TensorError {
         elements: usize,
         shape: Vec<usize>,
     },
+    TransposeRank {
+        rank: usize,
+    },
     MatmulRank {
         left: usize,
         right: usize,
@@ -52,6 +55,12 @@ pub enum TensorError {
     IntegerOverflow,
     DivisionByZero,
     NonFinite,
+    DomainError {
+        operation: &'static str,
+    },
+    EmptyReduction {
+        operation: &'static str,
+    },
     UnsupportedOperator {
         operator: String,
     },
@@ -68,12 +77,15 @@ impl TensorError {
             Self::GlobalAllocationBudget { .. } => "SEL-R209",
             Self::DataLength { .. } | Self::DtypeMismatch { .. } => "SEL-R203",
             Self::BroadcastMismatch { .. } => "SEL-R204",
-            Self::InvalidAxis { .. } | Self::MatmulRank { .. } | Self::MatmulShape { .. } => {
-                "SEL-R205"
-            }
+            Self::InvalidAxis { .. }
+            | Self::TransposeRank { .. }
+            | Self::MatmulRank { .. }
+            | Self::MatmulShape { .. } => "SEL-R205",
             Self::IntegerOverflow | Self::DivisionByZero => "SEL-R206",
             Self::NonFinite | Self::EmptyMean => "SEL-R207",
             Self::UnsupportedOperator { .. } => "SEL-R208",
+            Self::DomainError { .. } => "SEL-R210",
+            Self::EmptyReduction { .. } => "SEL-R211",
         }
     }
 }
@@ -126,6 +138,12 @@ impl fmt::Display for TensorError {
                 "cannot reshape {elements} elements to shape {:?}",
                 shape
             ),
+            Self::TransposeRank { rank } => {
+                write!(
+                    formatter,
+                    "transpose requires a rank-2 tensor, got rank {rank}"
+                )
+            }
             Self::MatmulRank { left, right } => write!(
                 formatter,
                 "matmul requires rank-2 tensors, got ranks {left} and {right}"
@@ -140,6 +158,18 @@ impl fmt::Display for TensorError {
             Self::IntegerOverflow => write!(formatter, "tensor integer arithmetic overflowed"),
             Self::DivisionByZero => write!(formatter, "tensor division by zero"),
             Self::NonFinite => write!(formatter, "tensor operation produced a non-finite F32"),
+            Self::DomainError { operation } => {
+                write!(
+                    formatter,
+                    "tensor operation `{operation}` received an invalid domain"
+                )
+            }
+            Self::EmptyReduction { operation } => {
+                write!(
+                    formatter,
+                    "tensor operation `{operation}` cannot reduce an empty axis"
+                )
+            }
             Self::UnsupportedOperator { operator } => {
                 write!(formatter, "tensor operator `{operator}` is unavailable")
             }

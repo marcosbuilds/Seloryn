@@ -253,14 +253,61 @@ impl Tensor {
                 shape: next_shape,
             });
         }
-        let mut reshaped = self.copy();
+        let mut reshaped = if self.is_contiguous() {
+            self.clone()
+        } else {
+            self.to_contiguous()?
+        };
         reshaped.shape = next_shape;
         reshaped.strides = contiguous_strides(&reshaped.shape);
         Ok(reshaped)
     }
 
-    pub fn copy(&self) -> Self {
-        self.clone()
+    fn is_contiguous(&self) -> bool {
+        self.strides() == contiguous_strides(&self.shape)
+    }
+
+    fn to_contiguous(&self) -> Result<Self, TensorError> {
+        let shape = shape_from_usize(&self.shape)?;
+        match &self.data {
+            TensorData::F32(_) => {
+                let values = (0..self.element_count())
+                    .map(|index| self.f32_at_flat(index))
+                    .collect();
+                Self::from_f32(values, &shape)
+            }
+            TensorData::I64(_) => {
+                let values = (0..self.element_count())
+                    .map(|index| self.i64_at_flat(index))
+                    .collect();
+                Self::from_i64(values, &shape)
+            }
+        }
+    }
+
+    fn storage_index(&self, index: usize) -> usize {
+        let logical_strides = contiguous_strides(&self.shape);
+        self.shape
+            .iter()
+            .enumerate()
+            .fold(0usize, |storage_index, (axis, dimension)| {
+                let coordinate = (index / logical_strides[axis]) % dimension;
+                storage_index + coordinate * self.strides[axis]
+            })
+    }
+
+    fn f32_at_flat(&self, index: usize) -> f32 {
+        let TensorData::F32(values) = &self.data else {
+            unreachable!("F32 tensor must hold F32 data")
+        };
+        values[self.storage_index(index)]
+    }
+
+    fn i64_at_flat(&self, index: usize) -> i64 {
+        let TensorData::I64(values) = &self.data else {
+            unreachable!("I64 tensor must hold I64 data")
+        };
+        values[self.storage_index(index)]
     }
 
     pub fn elementwise(&self, other: &Self, operator: &str) -> Result<Self, TensorError> {
@@ -275,12 +322,16 @@ impl Tensor {
         let output_allocation = reserve_output(self.dtype, output_elements)?;
         let output_shape_i64 = shape_from_usize(&output_shape)?;
         match (&self.data, &other.data) {
-            (TensorData::F32(left), TensorData::F32(right)) => {
+            (TensorData::F32(_), TensorData::F32(_)) => {
                 let mut values = (0..output_elements)
                     .map(|index| {
                         let left_index = broadcast_index(index, &output_shape, &self.shape);
                         let right_index = broadcast_index(index, &output_shape, &other.shape);
-                        float_operation(operator, left[left_index], right[right_index])
+                        float_operation(
+                            operator,
+                            self.f32_at_flat(left_index),
+                            other.f32_at_flat(right_index),
+                        )
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 values.shrink_to_fit();
@@ -292,12 +343,16 @@ impl Tensor {
                     output_allocation,
                 )
             }
-            (TensorData::I64(left), TensorData::I64(right)) => {
+            (TensorData::I64(_), TensorData::I64(_)) => {
                 let mut values = (0..output_elements)
                     .map(|index| {
                         let left_index = broadcast_index(index, &output_shape, &self.shape);
                         let right_index = broadcast_index(index, &output_shape, &other.shape);
-                        integer_operation(operator, left[left_index], right[right_index])
+                        integer_operation(
+                            operator,
+                            self.i64_at_flat(left_index),
+                            other.i64_at_flat(right_index),
+                        )
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 values.shrink_to_fit();
@@ -327,23 +382,24 @@ impl Tensor {
     pub fn sum_axis(&self, axis: Option<usize>) -> Result<Self, TensorError> {
         let axis = validate_axis(axis, self.rank())?;
         match (&self.data, axis) {
-            (TensorData::F32(values), None) => {
-                let sum = values.iter().try_fold(0.0f32, |sum, value| {
-                    let next = sum + value;
+            (TensorData::F32(_), None) => {
+                let sum = (0..self.element_count()).try_fold(0.0f32, |sum, index| {
+                    let next = sum + self.f32_at_flat(index);
                     next.is_finite()
                         .then_some(next)
                         .ok_or(TensorError::NonFinite)
                 })?;
                 Self::from_f32(vec![sum], &[])
             }
-            (TensorData::I64(values), None) => {
-                let sum = values.iter().try_fold(0i64, |sum, value| {
-                    sum.checked_add(*value).ok_or(TensorError::IntegerOverflow)
+            (TensorData::I64(_), None) => {
+                let sum = (0..self.element_count()).try_fold(0i64, |sum, index| {
+                    sum.checked_add(self.i64_at_flat(index))
+                        .ok_or(TensorError::IntegerOverflow)
                 })?;
                 Self::from_i64(vec![sum], &[])
             }
-            (TensorData::F32(values), Some(axis)) => self.reduce_f32(values, axis, false),
-            (TensorData::I64(values), Some(axis)) => self.reduce_i64(values, axis),
+            (TensorData::F32(_), Some(axis)) => self.reduce_f32(axis, false),
+            (TensorData::I64(_), Some(axis)) => self.reduce_i64(axis),
         }
     }
 
@@ -356,18 +412,20 @@ impl Tensor {
             });
         }
         match (&self.data, axis) {
-            (TensorData::F32(values), None) => {
-                if values.is_empty() {
+            (TensorData::F32(_), None) => {
+                if self.element_count() == 0 {
                     return Err(TensorError::EmptyMean);
                 }
-                let sum = values.iter().fold(0.0f32, |sum, value| sum + value);
-                let mean = sum / values.len() as f32;
+                let sum = (0..self.element_count())
+                    .map(|index| self.f32_at_flat(index))
+                    .sum::<f32>();
+                let mean = sum / self.element_count() as f32;
                 if !mean.is_finite() {
                     return Err(TensorError::NonFinite);
                 }
                 Self::from_f32(vec![mean], &[])
             }
-            (TensorData::F32(values), Some(axis)) => self.reduce_f32(values, axis, true),
+            (TensorData::F32(_), Some(axis)) => self.reduce_f32(axis, true),
             _ => Err(TensorError::DtypeMismatch {
                 expected: "F32",
                 actual: self.dtype.name(),
@@ -375,7 +433,7 @@ impl Tensor {
         }
     }
 
-    fn reduce_f32(&self, values: &[f32], axis: usize, mean: bool) -> Result<Self, TensorError> {
+    fn reduce_f32(&self, axis: usize, mean: bool) -> Result<Self, TensorError> {
         let axis_size = self.shape[axis];
         if mean && axis_size == 0 {
             return Err(TensorError::EmptyMean);
@@ -397,7 +455,7 @@ impl Tensor {
                 let mut sum = 0.0f32;
                 for axis_index in 0..axis_size {
                     let index = (outer_index * axis_size + axis_index) * inner + inner_index;
-                    sum += values[index];
+                    sum += self.f32_at_flat(index);
                 }
                 if mean {
                     sum /= axis_size as f32;
@@ -417,7 +475,7 @@ impl Tensor {
         )
     }
 
-    fn reduce_i64(&self, values: &[i64], axis: usize) -> Result<Self, TensorError> {
+    fn reduce_i64(&self, axis: usize) -> Result<Self, TensorError> {
         let axis_size = self.shape[axis];
         let outer = checked_product(&self.shape[..axis])?;
         let inner = checked_product(&self.shape[axis + 1..])?;
@@ -437,7 +495,7 @@ impl Tensor {
                 for axis_index in 0..axis_size {
                     let index = (outer_index * axis_size + axis_index) * inner + inner_index;
                     sum = sum
-                        .checked_add(values[index])
+                        .checked_add(self.i64_at_flat(index))
                         .ok_or(TensorError::IntegerOverflow)?;
                 }
                 output[outer_index * inner + inner_index] = sum;
@@ -477,7 +535,7 @@ impl Tensor {
                 right: other.shape.clone(),
             });
         }
-        let (TensorData::F32(left), TensorData::F32(right)) = (&self.data, &other.data) else {
+        let (TensorData::F32(_), TensorData::F32(_)) = (&self.data, &other.data) else {
             return Err(TensorError::DtypeMismatch {
                 expected: "F32",
                 actual: if self.dtype != TensorDtype::F32 {
@@ -496,7 +554,8 @@ impl Tensor {
             for column in 0..columns {
                 let mut sum = 0.0f32;
                 for index in 0..inner {
-                    sum += left[row * inner + index] * right[index * columns + column];
+                    sum += self.f32_at_flat(row * inner + index)
+                        * other.f32_at_flat(index * columns + column);
                 }
                 if !sum.is_finite() {
                     return Err(TensorError::NonFinite);
@@ -514,28 +573,276 @@ impl Tensor {
         )
     }
 
+    pub fn transpose(&self) -> Result<Self, TensorError> {
+        if self.rank() != 2 {
+            return Err(TensorError::TransposeRank { rank: self.rank() });
+        }
+        Ok(Self {
+            dtype: self.dtype,
+            shape: vec![self.shape[1], self.shape[0]],
+            strides: vec![self.strides[1], self.strides[0]],
+            data: self.data.clone(),
+            allocation: self.allocation.clone(),
+        })
+    }
+
+    pub fn relu(&self) -> Result<Self, TensorError> {
+        self.unary_f32(|value| value.max(0.0))
+    }
+
+    pub fn exp(&self) -> Result<Self, TensorError> {
+        self.unary_f32(f32::exp)
+    }
+
+    pub fn log(&self) -> Result<Self, TensorError> {
+        if self.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: self.dtype.name(),
+            });
+        }
+        let TensorData::F32(_) = &self.data else {
+            unreachable!("F32 tensor must hold F32 data")
+        };
+        let output_allocation = reserve_output(TensorDtype::F32, self.element_count())?;
+        let mut output = Vec::with_capacity(self.element_count());
+        for index in 0..self.element_count() {
+            let value = self.f32_at_flat(index);
+            if value <= 0.0 {
+                return Err(TensorError::DomainError { operation: "log" });
+            }
+            let result = value.ln();
+            if !result.is_finite() {
+                return Err(TensorError::NonFinite);
+            }
+            output.push(result);
+        }
+        Self::with_allocation(
+            TensorDtype::F32,
+            TensorData::F32(Arc::new(output)),
+            self.shape.clone(),
+            super::DEFAULT_MEMORY_BUDGET_BYTES,
+            output_allocation,
+        )
+    }
+
+    pub fn softmax(&self, axis: usize) -> Result<Self, TensorError> {
+        self.check_f32_axis(axis, "softmax")?;
+        let TensorData::F32(_) = &self.data else {
+            unreachable!("F32 tensor must hold F32 data")
+        };
+        let (outer, axis_size, inner) = reduction_layout(&self.shape, axis)?;
+        let output_elements = self.element_count();
+        let output_allocation = reserve_output(TensorDtype::F32, output_elements)?;
+        let mut output = vec![0.0f32; output_elements];
+        for outer_index in 0..outer {
+            for inner_index in 0..inner {
+                let maximum = (0..axis_size)
+                    .map(|axis_index| {
+                        self.f32_at_flat(
+                            (outer_index * axis_size + axis_index) * inner + inner_index,
+                        )
+                    })
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let normalizer = (0..axis_size).try_fold(0.0f64, |sum, axis_index| {
+                    let index = (outer_index * axis_size + axis_index) * inner + inner_index;
+                    let next =
+                        sum + (f64::from(self.f32_at_flat(index)) - f64::from(maximum)).exp();
+                    next.is_finite()
+                        .then_some(next)
+                        .ok_or(TensorError::NonFinite)
+                })?;
+                if normalizer <= 0.0 || !normalizer.is_finite() {
+                    return Err(TensorError::NonFinite);
+                }
+                for axis_index in 0..axis_size {
+                    let index = (outer_index * axis_size + axis_index) * inner + inner_index;
+                    let result = ((f64::from(self.f32_at_flat(index)) - f64::from(maximum)).exp()
+                        / normalizer) as f32;
+                    if !result.is_finite() {
+                        return Err(TensorError::NonFinite);
+                    }
+                    output[index] = result;
+                }
+            }
+        }
+        Self::with_allocation(
+            TensorDtype::F32,
+            TensorData::F32(Arc::new(output)),
+            self.shape.clone(),
+            super::DEFAULT_MEMORY_BUDGET_BYTES,
+            output_allocation,
+        )
+    }
+
+    pub fn logsumexp(&self, axis: usize) -> Result<Self, TensorError> {
+        self.check_f32_axis(axis, "logsumexp")?;
+        let TensorData::F32(_) = &self.data else {
+            unreachable!("F32 tensor must hold F32 data")
+        };
+        let (outer, axis_size, inner) = reduction_layout(&self.shape, axis)?;
+        let output_shape = self
+            .shape
+            .iter()
+            .enumerate()
+            .filter_map(|(index, dimension)| (index != axis).then_some(*dimension))
+            .collect::<Vec<_>>();
+        let output_elements = outer.checked_mul(inner).ok_or(TensorError::ShapeOverflow)?;
+        let output_allocation = reserve_output(TensorDtype::F32, output_elements)?;
+        let mut output = vec![0.0f32; output_elements];
+        for outer_index in 0..outer {
+            for inner_index in 0..inner {
+                let maximum = (0..axis_size)
+                    .map(|axis_index| {
+                        self.f32_at_flat(
+                            (outer_index * axis_size + axis_index) * inner + inner_index,
+                        )
+                    })
+                    .fold(f32::NEG_INFINITY, f32::max);
+                let sum = (0..axis_size).try_fold(0.0f64, |sum, axis_index| {
+                    let index = (outer_index * axis_size + axis_index) * inner + inner_index;
+                    let next =
+                        sum + (f64::from(self.f32_at_flat(index)) - f64::from(maximum)).exp();
+                    next.is_finite()
+                        .then_some(next)
+                        .ok_or(TensorError::NonFinite)
+                })?;
+                let result = f64::from(maximum) + sum.ln();
+                if !result.is_finite() {
+                    return Err(TensorError::NonFinite);
+                }
+                let result = result as f32;
+                if !result.is_finite() {
+                    return Err(TensorError::NonFinite);
+                }
+                output[outer_index * inner + inner_index] = result;
+            }
+        }
+        Self::with_allocation(
+            TensorDtype::F32,
+            TensorData::F32(Arc::new(output)),
+            output_shape,
+            super::DEFAULT_MEMORY_BUDGET_BYTES,
+            output_allocation,
+        )
+    }
+
+    pub fn sum_to_shape(&self, target_shape: &[i64]) -> Result<Self, TensorError> {
+        if self.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: self.dtype.name(),
+            });
+        }
+        let target_shape = checked_shape(target_shape)?;
+        let broadcasted = broadcast_shape(&target_shape, &self.shape)?;
+        if broadcasted != self.shape {
+            return Err(TensorError::BroadcastMismatch {
+                left: self.shape.clone(),
+                right: target_shape,
+            });
+        }
+        let TensorData::F32(_) = &self.data else {
+            unreachable!("F32 tensor must hold F32 data")
+        };
+        let output_elements = element_count(&target_shape)?;
+        let output_allocation = reserve_output(TensorDtype::F32, output_elements)?;
+        let mut output = vec![0.0f32; output_elements];
+        let input_strides = contiguous_strides(&self.shape);
+        let target_strides = contiguous_strides(&target_shape);
+        let rank_offset = self.rank() - target_shape.len();
+        for index in 0..self.element_count() {
+            let value = self.f32_at_flat(index);
+            let mut target_index = 0usize;
+            for (input_axis, input_stride) in input_strides.iter().enumerate().skip(rank_offset) {
+                let coordinate = (index / input_stride) % self.shape[input_axis];
+                let target_axis = input_axis - rank_offset;
+                let target_coordinate = if target_shape[target_axis] == 1 {
+                    0
+                } else {
+                    coordinate
+                };
+                target_index = target_index
+                    .checked_add(target_coordinate * target_strides[target_axis])
+                    .ok_or(TensorError::ShapeOverflow)?;
+            }
+            let next = output[target_index] + value;
+            if !next.is_finite() {
+                return Err(TensorError::NonFinite);
+            }
+            output[target_index] = next;
+        }
+        Self::with_allocation(
+            TensorDtype::F32,
+            TensorData::F32(Arc::new(output)),
+            target_shape,
+            super::DEFAULT_MEMORY_BUDGET_BYTES,
+            output_allocation,
+        )
+    }
+
+    fn unary_f32(&self, function: impl Fn(f32) -> f32) -> Result<Self, TensorError> {
+        if self.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: self.dtype.name(),
+            });
+        }
+        let TensorData::F32(_) = &self.data else {
+            unreachable!("F32 tensor must hold F32 data")
+        };
+        let output_allocation = reserve_output(TensorDtype::F32, self.element_count())?;
+        let mut output = Vec::with_capacity(self.element_count());
+        for index in 0..self.element_count() {
+            let value = self.f32_at_flat(index);
+            let result = function(value);
+            if !result.is_finite() {
+                return Err(TensorError::NonFinite);
+            }
+            output.push(result);
+        }
+        Self::with_allocation(
+            TensorDtype::F32,
+            TensorData::F32(Arc::new(output)),
+            self.shape.clone(),
+            super::DEFAULT_MEMORY_BUDGET_BYTES,
+            output_allocation,
+        )
+    }
+
+    fn check_f32_axis(&self, axis: usize, operation: &'static str) -> Result<(), TensorError> {
+        if self.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: self.dtype.name(),
+            });
+        }
+        validate_axis(Some(axis), self.rank())?;
+        if self.shape[axis] == 0 {
+            return Err(TensorError::EmptyReduction { operation });
+        }
+        Ok(())
+    }
+
     pub fn render(&self) -> String {
         self.render_with_limit(4096).0
     }
 
     pub(crate) fn render_with_limit(&self, max_values: usize) -> (String, usize) {
-        debug_assert_eq!(self.strides(), contiguous_strides(&self.shape));
-        let (values, truncated) = match &self.data {
-            TensorData::F32(values) => (
-                values
-                    .iter()
+        let (values, truncated) = match self.dtype {
+            TensorDtype::F32 => (
+                (0..self.element_count())
                     .take(max_values)
-                    .map(|value| format_f32(*value))
+                    .map(|index| format_f32(self.f32_at_flat(index)))
                     .collect::<Vec<_>>(),
-                values.len().saturating_sub(max_values),
+                self.element_count().saturating_sub(max_values),
             ),
-            TensorData::I64(values) => (
-                values
-                    .iter()
+            TensorDtype::I64 => (
+                (0..self.element_count())
                     .take(max_values)
-                    .map(ToString::to_string)
+                    .map(|index| self.i64_at_flat(index).to_string())
                     .collect::<Vec<_>>(),
-                values.len().saturating_sub(max_values),
+                self.element_count().saturating_sub(max_values),
             ),
         };
         let values = values.join(", ");
@@ -570,6 +877,13 @@ fn checked_product(shape: &[usize]) -> Result<usize, TensorError> {
             .checked_mul(*dimension)
             .ok_or(TensorError::ShapeOverflow)
     })
+}
+
+fn reduction_layout(shape: &[usize], axis: usize) -> Result<(usize, usize, usize), TensorError> {
+    validate_axis(Some(axis), shape.len())?;
+    let outer = checked_product(&shape[..axis])?;
+    let inner = checked_product(&shape[axis + 1..])?;
+    Ok((outer, shape[axis], inner))
 }
 
 fn shape_from_usize(shape: &[usize]) -> Result<Vec<i64>, TensorError> {
@@ -698,8 +1012,9 @@ impl fmt::Display for TensorDtype {
 
 #[cfg(test)]
 mod tests {
-    use super::{Tensor, TensorDtype};
+    use super::{Tensor, TensorData, TensorDtype};
     use crate::tensor::TensorError;
+    use std::sync::Arc;
 
     #[test]
     fn stores_rank_zero_empty_and_row_major_shapes() {
@@ -762,7 +1077,7 @@ mod tests {
         assert_eq!(reshaped.strides(), &[1]);
         assert_eq!(reshaped.dtype(), TensorDtype::I64);
         assert_eq!(reshaped, tensor.reshape(&[4]).expect("repeat reshape"));
-        assert_eq!(tensor.copy(), tensor);
+        assert_eq!(tensor.clone(), tensor);
         assert!(matches!(
             tensor.reshape(&[3]),
             Err(TensorError::InvalidReshape { .. })
@@ -813,19 +1128,11 @@ mod tests {
     }
 
     #[test]
-    fn overflowing_axis_reductions_report_errors_without_panicking() {
-        let zero_f32 =
-            Tensor::from_f32(Vec::new(), &[0, i64::MAX, i64::MAX]).expect("zero-storage tensor");
-        assert!(matches!(
-            zero_f32.sum_axis(Some(0)),
-            Err(TensorError::ShapeOverflow)
-        ));
-        let zero_i64 =
-            Tensor::from_i64(Vec::new(), &[0, i64::MAX, i64::MAX]).expect("zero-storage tensor");
-        assert!(matches!(
-            zero_i64.sum_axis(Some(0)),
-            Err(TensorError::ShapeOverflow)
-        ));
+    fn overflowing_shapes_report_errors_without_panicking() {
+        let zero_f32 = Tensor::from_f32(Vec::new(), &[0, i64::MAX, i64::MAX]);
+        assert!(matches!(zero_f32, Err(TensorError::ShapeOverflow)));
+        let zero_i64 = Tensor::from_i64(Vec::new(), &[0, i64::MAX, i64::MAX]);
+        assert!(matches!(zero_i64, Err(TensorError::ShapeOverflow)));
     }
 
     #[test]
@@ -848,6 +1155,132 @@ mod tests {
             matrix.matmul(&right).expect("matmul").render(),
             "Tensor[F32, shape=[2, 2], values=[19.0, 22.0, 43.0, 50.0]]"
         );
+    }
+
+    #[test]
+    fn computes_transpose_unary_stable_reductions_and_sum_to_shape() {
+        let matrix = Tensor::from_f32(vec![1.0, 2.0, 3.0, 4.0], &[2, 2]).expect("matrix");
+        let transposed = matrix.transpose().expect("transpose");
+        assert_eq!(transposed.strides(), &[1, 2]);
+        assert_eq!(transposed.allocated_bytes(), matrix.allocated_bytes());
+        match (&matrix.data, &transposed.data) {
+            (TensorData::F32(left), TensorData::F32(right)) => {
+                assert!(Arc::ptr_eq(left, right));
+            }
+            _ => panic!("transpose changed tensor dtype"),
+        }
+        assert!(Arc::ptr_eq(&matrix.allocation, &transposed.allocation));
+        assert_eq!(
+            transposed.render(),
+            "Tensor[F32, shape=[2, 2], values=[1.0, 3.0, 2.0, 4.0]]"
+        );
+        assert_eq!(
+            Tensor::from_i64(vec![1, 2, 3, 4, 5, 6], &[2, 3])
+                .expect("integer matrix")
+                .transpose()
+                .expect("integer transpose")
+                .render(),
+            "Tensor[I64, shape=[3, 2], values=[1, 4, 2, 5, 3, 6]]"
+        );
+
+        let values = Tensor::from_f32(vec![-1.0, 0.0, 1.0, 2.0], &[2, 2]).expect("values");
+        assert_eq!(
+            values.relu().expect("relu").render(),
+            "Tensor[F32, shape=[2, 2], values=[0.0, 0.0, 1.0, 2.0]]"
+        );
+        let logarithms = Tensor::from_f32(vec![1.0, std::f32::consts::E], &[2]).expect("logs");
+        let log = logarithms.log().expect("log");
+        let TensorData::F32(log_values) = &log.data else {
+            panic!("expected F32 log output")
+        };
+        assert!((log_values[0] - 0.0).abs() < 1e-6);
+        assert!((log_values[1] - 1.0).abs() < 1e-6);
+
+        let logits =
+            Tensor::from_f32(vec![1000.0, 1001.0, 1002.0, 1003.0], &[2, 2]).expect("logits");
+        let softmax = logits.softmax(1).expect("stable softmax");
+        let TensorData::F32(softmax_values) = &softmax.data else {
+            panic!("expected F32 softmax output")
+        };
+        assert!((softmax_values[0] + softmax_values[1] - 1.0).abs() < 1e-6);
+        assert!((softmax_values[2] + softmax_values[3] - 1.0).abs() < 1e-6);
+        let logsumexp = logits.logsumexp(1).expect("stable logsumexp");
+        let TensorData::F32(logsumexp_values) = &logsumexp.data else {
+            panic!("expected F32 logsumexp output")
+        };
+        assert!((logsumexp_values[0] - 1001.31323).abs() < 1e-3);
+        assert!((logsumexp_values[1] - 1003.31323).abs() < 1e-3);
+
+        let broadcasted = Tensor::from_f32(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3])
+            .expect("broadcasted gradient");
+        assert_eq!(
+            broadcasted
+                .sum_to_shape(&[1, 3])
+                .expect("sum rows")
+                .render(),
+            "Tensor[F32, shape=[1, 3], values=[5.0, 7.0, 9.0]]"
+        );
+        assert_eq!(
+            broadcasted.sum_to_shape(&[]).expect("sum all").render(),
+            "Tensor[F32, shape=[], values=[21.0]]"
+        );
+    }
+
+    #[test]
+    fn rejects_n2_invalid_rank_domain_empty_axis_and_target_shape() {
+        let vector = Tensor::from_f32(vec![1.0, 2.0], &[2]).expect("vector");
+        assert!(matches!(
+            vector.transpose(),
+            Err(TensorError::TransposeRank { rank: 1 })
+        ));
+        let nonpositive = Tensor::from_f32(vec![0.0, -1.0], &[2]).expect("nonpositive");
+        assert!(matches!(
+            nonpositive.log(),
+            Err(TensorError::DomainError { operation: "log" })
+        ));
+        let empty = Tensor::from_f32(Vec::new(), &[0, 2]).expect("empty");
+        assert!(matches!(
+            empty.softmax(0),
+            Err(TensorError::EmptyReduction {
+                operation: "softmax"
+            })
+        ));
+        assert_eq!(
+            empty.softmax(1).expect("empty non-reduced axis").shape(),
+            &[0, 2]
+        );
+        assert_eq!(
+            empty.logsumexp(1).expect("empty outer dimension").shape(),
+            &[0]
+        );
+        let rank_zero = Tensor::from_f32(vec![2.0], &[]).expect("rank-zero");
+        assert!(matches!(
+            rank_zero.softmax(0),
+            Err(TensorError::InvalidAxis { axis: 0, rank: 0 })
+        ));
+        assert!(matches!(
+            rank_zero.logsumexp(0),
+            Err(TensorError::InvalidAxis { axis: 0, rank: 0 })
+        ));
+        assert_eq!(
+            empty
+                .sum_to_shape(&[1, 2])
+                .expect("zero broadcast source")
+                .render(),
+            "Tensor[F32, shape=[1, 2], values=[0.0, 0.0]]"
+        );
+        let matrix = Tensor::from_f32(vec![1.0, 2.0, 3.0, 4.0], &[2, 2]).expect("matrix");
+        assert!(matches!(
+            matrix.sum_to_shape(&[3]),
+            Err(TensorError::BroadcastMismatch { .. })
+        ));
+        assert!(matches!(
+            Tensor::from_i64(vec![1], &[1]).expect("integer").relu(),
+            Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: "I64"
+            })
+        ));
     }
 
     #[test]

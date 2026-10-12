@@ -19,13 +19,14 @@ checks pass. Imports are diagnosed as unavailable, and nullable `T?` syntax
 remains reserved.
 
 `run` performs the same full front-end validation before evaluating the pure E4
-subset and the bounded N1 CPU tensor subset. A successful run prints one
+subset and the bounded N1/N2 CPU tensor subset. A successful run prints one
 deterministic rendered value to stdout. A source or runtime failure writes a
 stable `SEL-*` diagnostic to stderr and returns exit code 65; no runtime
 evaluation starts after a lexical, parse or semantic diagnostic. The
 interpreter performs no file, network, process or GPU effects. The behavior is
 covered by the CLI tests in [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs)
-and [`tests/tensor_cpu.rs`](../../tests/tensor_cpu.rs).
+and [`tests/tensor_cpu.rs`](../../tests/tensor_cpu.rs), with independent N2
+numeric references in [`tests/n2_probe.py`](../../tests/n2_probe.py).
 
 ## Future commands
 

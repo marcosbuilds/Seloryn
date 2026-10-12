@@ -1,9 +1,9 @@
 # Tensors
 
-**Current availability (`0.00`):** Seloryn has an experimental N1 CPU tensor
-runtime. It allocates owned, bounded buffers for `Tensor[F32]` and
-`Tensor[I64]`; it does not use a GPU, perform training or expose arbitrary
-views.
+**Current availability (`0.00`):** Seloryn has an experimental N1/N2 CPU
+tensor runtime. It allocates owned, bounded buffers for `Tensor[F32]` and
+`Tensor[I64]`; N2 adds a small pure numeric closure needed before autograd. It
+does not use a GPU, perform training or expose arbitrary views.
 
 ## Verified language bridge
 
@@ -23,6 +23,11 @@ is performed.
 | `tensor_sum(tensor[, axis])` | Reduces all elements or one nonnegative `I64` axis; I64 overflow is checked |
 | `tensor_mean(f32_tensor[, axis])` | Reduces all elements or one axis of finite F32 values; empty means fail |
 | `matmul(left, right)` | Computes rank-2 F32 matrix multiplication |
+| `transpose(tensor)` | Rank-2 shape/stride view, preserving dtype and sharing owned storage |
+| `tensor_relu(f32_tensor)` / `tensor_exp(f32_tensor)` / `tensor_log(f32_tensor)` | Pure F32 unary operations; `log` requires positive inputs and non-finite results fail |
+| `tensor_softmax(f32_tensor, axis)` | Numerically stable F32 softmax over one explicit axis |
+| `tensor_logsumexp(f32_tensor, axis)` | Numerically stable F32 log-sum-exp reduction over one explicit axis |
+| `tensor_sum_to_shape(f32_tensor, shape)` | Reduces a broadcasted F32 result back to a compatible operand shape |
 | `+`, `-`, `*`, `/` | Same-dtype tensor arithmetic with right-aligned broadcasting |
 
 The runnable example is [`examples/tensor-matmul.sely`](../../examples/tensor-matmul.sely):
@@ -51,12 +56,18 @@ total-process-memory limit for source lists, conversion scratch or metadata.
 Broadcast dimensions must be equal or one;
 zero and one are compatible, while other incompatible dimensions produce
 `SEL-R204`. An axis is a zero-based `I64` and must be less than the tensor rank;
-invalid axes produce `SEL-R205`.
+invalid axes produce `SEL-R205`. `tensor_log` rejects non-positive values with
+`SEL-R210`; `tensor_softmax` and `tensor_logsumexp` reject an empty selected
+axis with `SEL-R211`. `transpose` is a bounded view with permuted shape and
+strides; consumers that require contiguous storage materialize a checked copy.
+Other N2 computational outputs are fresh owned CPU buffers.
 
 N1 stores contiguous row-major strides, owns CPU memory and uses fresh outputs.
-It rejects negative or overflowing shapes, wrong data lengths, dtype mismatches,
-invalid axes, empty means, division by zero and non-finite F32 values with
-structured runtime diagnostics (`SEL-R201` through `SEL-R209`). A lexical,
+N2 keeps that representation and adds stable reference kernels; it does not add
+an execution graph or gradient metadata. The runtime rejects negative or
+overflowing shapes, wrong data lengths, dtype mismatches, invalid axes, empty
+means/reductions, invalid domains, division by zero and non-finite F32 values
+with structured runtime diagnostics (`SEL-R201` through `SEL-R211`). A lexical,
 syntactic or semantic diagnostic still stops execution before any tensor is
 created. The CLI renders at most 4096 tensor values and appends a deterministic
 `... (N more)` marker for larger results; this limits presentation memory and
@@ -66,5 +77,6 @@ does not change the tensor contents used by computation.
 
 There are no symbolic dimensions, arbitrary strided views, tensor indexing, device
 transfers, GPU backends, autograd, optimizers, checkpoints or training APIs.
-N1 supplies a correctness-oriented CPU reference path; it makes no performance
-or portability claim against established numerical runtimes.
+N1/N2 supply a correctness-oriented CPU reference path; they make no performance
+or portability claim against established numerical runtimes. The runnable N2
+smoke example is [`examples/tensor-numeric.sely`](../../examples/tensor-numeric.sely).

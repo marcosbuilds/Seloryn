@@ -11,7 +11,7 @@ pub fn checked_shape(shape: &[i64]) -> Result<Vec<usize>, TensorError> {
             maximum: MAX_RANK,
         });
     }
-    shape
+    let checked = shape
         .iter()
         .enumerate()
         .map(|(axis, dimension)| {
@@ -20,7 +20,13 @@ pub fn checked_shape(shape: &[i64]) -> Result<Vec<usize>, TensorError> {
                 value: *dimension,
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    checked.iter().rev().try_fold(1usize, |stride, dimension| {
+        stride
+            .checked_mul(*dimension)
+            .ok_or(TensorError::ShapeOverflow)
+    })?;
+    Ok(checked)
 }
 
 pub fn element_count(shape: &[usize]) -> Result<usize, TensorError> {
@@ -36,7 +42,9 @@ pub fn contiguous_strides(shape: &[usize]) -> Vec<usize> {
     let mut stride = 1usize;
     for (index, dimension) in shape.iter().enumerate().rev() {
         strides[index] = stride;
-        stride = stride.saturating_mul(*dimension);
+        stride = stride
+            .checked_mul(*dimension)
+            .expect("validated tensor shape has overflowing strides");
     }
     strides
 }

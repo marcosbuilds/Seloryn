@@ -1,8 +1,8 @@
 # Platform support
 
 **Development-host smoke verified:** Windows `cmd.exe`, PowerShell 5.1 and
-PowerShell 7.6 executed the release binary against the runnable N1 CPU tensor
-example. This is command evidence, not an installable-platform support badge.
+PowerShell 7.6 executed the release binary against the runnable N1/N2 CPU tensor
+examples. This is command evidence, not an installable-platform support badge.
 
 | Platform | Planned target | Validation |
 |---|---|---|

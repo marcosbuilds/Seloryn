@@ -233,3 +233,106 @@ fn reports_budget_overflow_and_deterministic_runtime_errors() {
     );
     assert!(first_stderr.contains("SEL-R202"));
 }
+
+#[test]
+fn runs_n2_primitives_end_to_end_with_real_tensors() {
+    let transpose = run_source(
+        "transpose-entrada-入口",
+        "fn main() -> Tensor[F32]:\r\n    return transpose(tensor_f32([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3]))\r\n",
+    );
+    assert!(
+        transpose.status.success(),
+        "{}",
+        String::from_utf8_lossy(&transpose.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&transpose.stdout),
+        "Tensor[F32, shape=[3, 2], values=[1.0, 4.0, 2.0, 5.0, 3.0, 6.0]]\n"
+    );
+
+    let unary = run_source(
+        "n2-unary",
+        "fn main() -> Tensor[F32]:\n    let values: Tensor[F32] = tensor_f32([-1.0, 0.0, 1.0, 2.0], [2, 2])\n    return tensor_relu(values)\n",
+    );
+    assert!(
+        unary.status.success(),
+        "{}",
+        String::from_utf8_lossy(&unary.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&unary.stdout),
+        "Tensor[F32, shape=[2, 2], values=[0.0, 0.0, 1.0, 2.0]]\n"
+    );
+
+    let stable = run_source(
+        "n2-stable",
+        "fn main() -> Tensor[F32]:\n    let values: Tensor[F32] = tensor_f32([1000.0, 1001.0, 1002.0, 1003.0], [2, 2])\n    return tensor_logsumexp(values, 1)\n",
+    );
+    assert!(
+        stable.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stable.stderr)
+    );
+    let stable_output = String::from_utf8_lossy(&stable.stdout);
+    assert!(stable_output.starts_with("Tensor[F32, shape=[2], values=[1001.313"));
+
+    let softmax = run_source(
+        "n2-softmax",
+        "fn main() -> Tensor[F32]:\n    let values: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0, 4.0], [2, 2])\n    return tensor_softmax(values, 1)\n",
+    );
+    assert!(
+        softmax.status.success(),
+        "{}",
+        String::from_utf8_lossy(&softmax.stderr)
+    );
+    assert!(String::from_utf8_lossy(&softmax.stdout).contains("0.26894143"));
+
+    let reduced = run_source(
+        "n2-sum-to-shape",
+        "fn main() -> Tensor[F32]:\n    let values: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])\n    return tensor_sum_to_shape(values, [1, 3])\n",
+    );
+    assert!(
+        reduced.status.success(),
+        "{}",
+        String::from_utf8_lossy(&reduced.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&reduced.stdout),
+        "Tensor[F32, shape=[1, 3], values=[5.0, 7.0, 9.0]]\n"
+    );
+}
+
+#[test]
+fn rejects_n2_static_and_runtime_failures_without_execution() {
+    let static_error = run_source(
+        "n2-static",
+        "fn main() -> Tensor[I64]:\n    let values: Tensor[I64] = tensor_i64([1], [1])\n    return tensor_relu(values)\n",
+    );
+    assert_eq!(static_error.status.code(), Some(65));
+    assert!(static_error.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&static_error.stderr).contains("SEL-T"));
+
+    let domain = run_source(
+        "n2-domain",
+        "fn main() -> Tensor[F32]:\n    return tensor_log(tensor_f32([0.0], [1]))\n",
+    );
+    assert_eq!(domain.status.code(), Some(65));
+    assert!(domain.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&domain.stderr).contains("SEL-R210"));
+
+    let empty = run_source(
+        "n2-empty",
+        "fn main() -> Tensor[F32]:\n    return tensor_softmax(tensor_zeros_f32([0, 2]), 0)\n",
+    );
+    assert_eq!(empty.status.code(), Some(65));
+    assert!(empty.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&empty.stderr).contains("SEL-R211"));
+
+    let shape = run_source(
+        "n2-target-shape",
+        "fn main() -> Tensor[F32]:\n    return tensor_sum_to_shape(tensor_zeros_f32([2, 2]), [3])\n",
+    );
+    assert_eq!(shape.status.code(), Some(65));
+    assert!(shape.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&shape.stderr).contains("SEL-R204"));
+}

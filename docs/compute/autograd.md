@@ -1,7 +1,10 @@
 # Automatic differentiation
 
 **Design target only:** Seloryn 0.00 has no automatic-differentiation engine
-or executable computation graph. The first ML-ready gradient engine is
+or executable computation graph. N2 now supplies the tested CPU forward
+primitives needed by that work—2D transpose, F32 unary operations, stable
+softmax/logsumexp and broadcast sum-to-shape—but it does not record gradients.
+The first ML-ready gradient engine is
 intended to use **reverse-mode automatic differentiation** over an explicit
 computation graph, with leaf parameters, intermediate values, saved tensors and
 one derivative rule per differentiable primitive.

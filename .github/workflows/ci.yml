@@ -45,6 +45,8 @@ jobs:
         run: cargo build --release --locked
       - name: Independent N1 CLI comparison
         run: python tests/n1_probe.py
+      - name: Independent N2 CLI comparison
+        run: python tests/n2_probe.py
       - name: PowerShell 5.1 CLI smoke
         if: runner.os == 'Windows'
         shell: powershell

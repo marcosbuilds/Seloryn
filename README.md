@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current status: 0.00, experimental E3 checker, E4 pure interpreter and N1 CPU tensor runtime.** Seloryn can validate and execute a bounded `.sely` subset through `check` and `run`. There is no module system, training runtime, HTTP/file standard library, installable release or GPU backend. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and [tensor reference](docs/compute/tensors.md).
+> **Current status: 0.00, experimental E3 checker, E4 pure interpreter and N1/N2 CPU tensor runtime.** Seloryn can validate and execute a bounded `.sely` subset through `check` and `run`. There is no module system, training runtime, HTTP/file standard library, installable release or GPU backend. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and [tensor reference](docs/compute/tensors.md).
 
 > **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** This repository records only what is implemented and verified.
 
@@ -31,7 +31,7 @@ instead of gaining features by default.
 | Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | `src/semantic.rs:101-1115`, semantic tests |
 | `seloryn check <file.sely>` diagnostics | Implemented in the development CLI | `src/main.rs:82-119`, `tests/bootstrap_cli.rs:61-178` |
 | Pure scalar/list interpreter and `seloryn run` | Experimental E4 implementation | [`src/runtime.rs`](src/runtime.rs), runtime and CLI tests; no effects |
-| CPU `Tensor[F32]` / `Tensor[I64]` buffers and N1 operations | Experimental N1 implementation | [`src/tensor`](src/tensor), tensor unit and CLI tests; CPU only |
+| CPU `Tensor[F32]` / `Tensor[I64]` buffers and N1/N2 operations | Experimental N1/N2 implementation | [`src/tensor`](src/tensor), tensor unit and CLI tests; CPU only |
 | Core IR | Not implemented; planned after interpreter evidence | The interpreter evaluates the checked AST directly |
 | Modules, files, HTTP, packages and standard library | Not implemented; imports are diagnosed as unavailable | No module or systems runtime exists |
 | Autodiff, training and model serving | Designed only; not checked or executable | See [autodiff](docs/compute/autograd.md) and [training](docs/compute/training.md) |
@@ -54,7 +54,7 @@ fn accuracy(predicted: Tensor[I64], expected: Tensor[I64]) -> Result[I64, Text]:
     return Ok(tensor_elements(predicted))
 ```
 
-The function above is intentionally illustrative beyond the current callable API. The verified runnable tensor example is [`examples/tensor-matmul.sely`](examples/tensor-matmul.sely); it returns a real CPU matmul result through `seloryn run`.
+The function above is intentionally illustrative beyond the current callable API. The verified runnable tensor examples are [`examples/tensor-matmul.sely`](examples/tensor-matmul.sely) and [`examples/tensor-numeric.sely`](examples/tensor-numeric.sely); they return real CPU results through `seloryn run`.
 
 ## Read next
 

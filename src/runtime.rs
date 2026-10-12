@@ -742,6 +742,8 @@ impl<'a> Interpreter<'a> {
             | Builtin::TensorElements
             | Builtin::TensorDtype => 1,
             Builtin::Sum | Builtin::Mean => 0,
+            Builtin::Transpose | Builtin::Relu | Builtin::Exp | Builtin::Log => 1,
+            Builtin::Softmax | Builtin::LogSumExp | Builtin::SumToShape => 2,
         };
         let valid_arity = if matches!(builtin, Builtin::Sum | Builtin::Mean) {
             arguments.len() == 1 || arguments.len() == 2
@@ -895,6 +897,46 @@ impl<'a> Interpreter<'a> {
                 let left = tensor_value(&values[0], span, self)?;
                 let right = tensor_value(&values[1], span, self)?;
                 left.matmul(right)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::Transpose => tensor_value(&values[0], span, self)?
+                .transpose()
+                .map(Value::Tensor)
+                .map_err(|error| Control::Runtime(self.tensor_error(error, span))),
+            Builtin::Relu => tensor_value(&values[0], span, self)?
+                .relu()
+                .map(Value::Tensor)
+                .map_err(|error| Control::Runtime(self.tensor_error(error, span))),
+            Builtin::Exp => tensor_value(&values[0], span, self)?
+                .exp()
+                .map(Value::Tensor)
+                .map_err(|error| Control::Runtime(self.tensor_error(error, span))),
+            Builtin::Log => tensor_value(&values[0], span, self)?
+                .log()
+                .map(Value::Tensor)
+                .map_err(|error| Control::Runtime(self.tensor_error(error, span))),
+            Builtin::Softmax => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                let axis = self.reduction_axis(&values[1], tensor.rank(), span)?;
+                tensor
+                    .softmax(axis)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::LogSumExp => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                let axis = self.reduction_axis(&values[1], tensor.rank(), span)?;
+                tensor
+                    .logsumexp(axis)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::SumToShape => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                let shape = shape_values(&values[1], span, self)?;
+                tensor
+                    .sum_to_shape(&shape)
                     .map(Value::Tensor)
                     .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
             }

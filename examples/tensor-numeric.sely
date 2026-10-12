@@ -1,0 +1,3 @@
+fn main() -> Tensor[F32]:
+    let logits: Tensor[F32] = tensor_f32([1000.0, 1001.0, 1002.0, 1003.0], [2, 2])
+    return tensor_softmax(logits, 1)
