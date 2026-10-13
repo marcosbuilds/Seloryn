@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   verify:
-    name: Rust and N1 / ${{ matrix.os }}
+    name: Rust and public gates / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -47,6 +47,10 @@ jobs:
         run: python tests/n1_probe.py
       - name: Independent N2 CLI comparison
         run: python tests/n2_probe.py
+      - name: Independent N3a CLI comparison
+        run: python tests/n3_probe.py
+      - name: Public projects and bundle probe
+        run: python tests/release_probe.py
       - name: PowerShell 5.1 CLI smoke
         if: runner.os == 'Windows'
         shell: powershell

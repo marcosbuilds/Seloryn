@@ -128,19 +128,15 @@ pub fn encode_bundle(path: &Path, profile: &str) -> Result<Vec<u8>, Diagnostic> 
     }
     let _ = load(path)?;
     let manifest = path.join("seloryn.toml");
-    let source_root = path.join(
-        value_for(
-            &fs::read_to_string(&manifest).map_err(|_| {
-                Diagnostic::new(
-                    "SEL-B001",
-                    "project manifest `seloryn.toml` is missing or unreadable",
-                    Span::new(0, 0),
-                )
-            })?,
-            "source_root",
+    let manifest_text = fs::read_to_string(&manifest).map_err(|_| {
+        Diagnostic::new(
+            "SEL-B001",
+            "project manifest `seloryn.toml` is missing or unreadable",
+            Span::new(0, 0),
         )
-        .unwrap_or_else(|| "src".to_owned()),
-    );
+    })?;
+    let source_root =
+        path.join(value_for(&manifest_text, "source_root").unwrap_or_else(|| "src".to_owned()));
     let mut files = vec![BundleFile {
         path: "seloryn.toml".to_owned(),
         bytes: fs::read(&manifest).map_err(|_| {
@@ -152,6 +148,16 @@ pub fn encode_bundle(path: &Path, profile: &str) -> Result<Vec<u8>, Diagnostic> 
         })?,
     }];
     collect_bundle_files(path, &source_root, &mut files)?;
+    for read_root in declared_read_roots(&manifest_text) {
+        validate_bundle_path(&read_root.replace('\\', "/"))?;
+        let directory = path.join(&read_root);
+        if !directory.starts_with(path) || !directory.is_dir() {
+            return Err(bundle_error(format!(
+                "declared read capability `{read_root}` is missing or not a directory"
+            )));
+        }
+        collect_bundle_files(path, &directory, &mut files)?;
+    }
     files.sort_by(|left, right| left.path.cmp(&right.path));
     let bundle = Bundle {
         profile: profile.to_owned(),
@@ -272,6 +278,11 @@ fn collect_bundle_files(
             .ok_or_else(|| bundle_error("project source path is not valid UTF-8"))?
             .replace('\\', "/");
         validate_bundle_path(&relative)?;
+        if files.iter().any(|file| file.path == relative) {
+            return Err(bundle_error(format!(
+                "project bundle contains duplicate path `{relative}`"
+            )));
+        }
         files.push(BundleFile {
             path: relative,
             bytes: fs::read(path).map_err(|_| bundle_error("project source could not be read"))?,
@@ -574,6 +585,28 @@ fn value_for(manifest: &str, key: &str) -> Option<String> {
         let (name, value) = line.split_once('=')?;
         (name.trim() == key).then(|| value.trim().trim_matches('"').to_owned())
     })
+}
+
+fn declared_read_roots(manifest: &str) -> Vec<String> {
+    let Some(value) = manifest.lines().find_map(|line| {
+        let (name, value) = line.split_once('=')?;
+        (name.trim() == "read").then(|| value.trim())
+    }) else {
+        return Vec::new();
+    };
+    let Some(contents) = value
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+    else {
+        return Vec::new();
+    };
+    contents
+        .split(',')
+        .map(str::trim)
+        .map(|value| value.trim_matches('"').trim_matches('\''))
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .collect()
 }
 
 fn normalize_path(path: &Path) -> PathBuf {

@@ -96,6 +96,47 @@ fn build_and_exec_reproduce_a_project_bundle() {
 }
 
 #[test]
+fn bundle_reproduces_declared_json_read_capability() {
+    let root = std::env::temp_dir().join(format!("seloryn-b1-data-{}", std::process::id()));
+    let source_root = root.join("src");
+    let data_root = root.join("data");
+    let output = root.join("bundle");
+    std::fs::create_dir_all(&source_root).expect("project source root");
+    std::fs::create_dir_all(&data_root).expect("project data root");
+    std::fs::write(
+        root.join("seloryn.toml"),
+        "[package]\nname = \"cli-data-fixture\"\nlanguage = \"0.00\"\nsource_root = \"src\"\nentry = \"main.sely\"\n\n[capabilities]\nread = [\"data\"]\n",
+    )
+    .expect("project manifest");
+    std::fs::write(data_root.join("config.json"), "{\"threshold\": 12.5}\n").expect("project data");
+    std::fs::write(
+        source_root.join("main.sely"),
+        "from json import read_file, get, as_f64\n\nfn main() -> Result[F64, JsonIoError]:\n    let document: Json = read_file(\"data/config.json\")?\n    let value: Json = get(document, [\"threshold\"])?\n    let threshold: F64 = as_f64(value)?\n    require threshold > 0.0 else JsonIoError(\"threshold must be positive\")\n    return Ok(threshold)\n",
+    )
+    .expect("project source");
+
+    let build = run_cli_owned(&[
+        "build".into(),
+        root.clone().into_os_string(),
+        "--profile".into(),
+        "release".into(),
+        "--output".into(),
+        output.clone().into_os_string(),
+    ]);
+    assert!(build.status.success(), "build stderr: {:?}", build.stderr);
+    let artifact = output.join("seloryn.selyapp");
+    let executed = run_cli_owned(&["exec".into(), artifact.into_os_string()]);
+    assert!(
+        executed.status.success(),
+        "exec stderr: {:?}",
+        executed.stderr
+    );
+    assert_eq!(executed.stdout, b"12.5\n");
+    assert!(executed.stderr.is_empty());
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
 fn runs_public_json_project_example_with_local_module() {
     let checked = run_cli(&["check", "examples/projects/json-config"]);
     assert!(checked.status.success());
@@ -214,6 +255,22 @@ fn check_accepts_result_and_exhaustive_match_semantics() {
             .expect("success output must be UTF-8")
             .contains("syntax + semantics")
     );
+}
+
+#[test]
+fn run_accepts_unqualified_enum_variant_constructors() {
+    let path = temporary_source("enum-constructor");
+    fs::write(
+        &path,
+        "enum Decision:\n    Accepted\n    Rejected(Text)\nfn main() -> Decision:\n    return Rejected(\"needs review\")\n",
+    )
+    .expect("write enum source");
+
+    let output = run_cli(&["run", path.to_str().expect("temporary path is UTF-8")]);
+    let _ = fs::remove_file(&path);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert_eq!(output.stdout, b"Decision.Rejected(\"needs review\")\n");
+    assert!(output.stderr.is_empty());
 }
 
 #[test]

@@ -1,0 +1,16 @@
+module app.loader
+
+from app.order_types import Order
+from json import get, as_text, as_f64, as_bool
+
+pub fn read_order(document: Json, key: Text) -> Result[Order, JsonIoError]:
+    let node: Json = get(document, [key])?
+    let id_value: Json = get(node, ["id"])?
+    let amount_value: Json = get(node, ["amount"])?
+    let enabled_value: Json = get(node, ["enabled"])?
+    let id: Text = as_text(id_value)?
+    let amount: F64 = as_f64(amount_value)?
+    let enabled: Bool = as_bool(enabled_value)?
+    require id != "" else JsonIoError("order id cannot be empty")
+    require amount >= 0.0 else JsonIoError("order amount cannot be negative")
+    return Ok(Order(id, amount, enabled))

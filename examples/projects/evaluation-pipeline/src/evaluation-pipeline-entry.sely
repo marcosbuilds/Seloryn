@@ -1,0 +1,16 @@
+from json import read_file
+from app.order_types import Settings
+from app.order_types import Order
+from app.order_types import Summary
+from app.validation import load_settings
+from app.loader import read_order
+from app.metrics import summarize
+
+fn main() -> Result[Summary, JsonIoError]:
+    let document: Json = read_file("data/pipeline.json")?
+    let settings: Settings = load_settings(document)?
+    let first: Order = read_order(document, "order_a")?
+    let second: Order = read_order(document, "order_b")?
+    let third: Order = read_order(document, "order_c")?
+    let orders: List[Order] = [first, second, third]
+    return summarize(settings, orders)

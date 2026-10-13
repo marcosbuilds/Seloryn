@@ -1,0 +1,12 @@
+[package]
+name = "evaluation-pipeline"
+language = "0.00"
+source_root = "src"
+entry = "evaluation-pipeline-entry.sely"
+
+[capabilities]
+read = ["data"]
+
+[limits]
+json_max_bytes = 8192
+json_max_depth = 16

@@ -9,3 +9,5 @@ capabilities; they are not packages published to a registry.
 - `linear-training/` runs the narrow `training.train_linear` fixture against
   small JSON datasets. It proves a bounded fixture contract, not a general
   optimizer or model framework.
+- `evaluation-pipeline/` combines local modules, JSON validation, typed
+  decisions and bounded CPU tensor metrics in one executable project.

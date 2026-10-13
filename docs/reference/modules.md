@@ -34,6 +34,11 @@ fn main() -> Result[Text, JsonIoError]:
 the manifest's JSON byte/depth limits; this is not unrestricted filesystem
 access or an external package resolver.
 
+The [`evaluation-pipeline`](../../examples/projects/evaluation-pipeline/README.md)
+example extends this boundary across several local modules and a declared
+`data` read directory. Its bundle can reproduce the same JSON input because
+`build` packages declared read directories; undeclared paths remain rejected.
+
 ### Future package separation
 
 Core: math/scalars, files, text, time, paths, JSON, Result, diagnostics. Standard modular extras: networking, servers, tensors, autodiff, neural networks, tokenizers, datasets, distributed execution and checkpoint I/O. Heavy backends must not be imported or initialized for unrelated command-line scripts.

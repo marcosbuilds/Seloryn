@@ -36,6 +36,9 @@ pub enum TensorError {
         axis: usize,
         rank: usize,
     },
+    NotScalar {
+        shape: Vec<usize>,
+    },
     EmptyMean,
     InvalidReshape {
         elements: usize,
@@ -78,6 +81,7 @@ impl TensorError {
             Self::DataLength { .. } | Self::DtypeMismatch { .. } => "SEL-R203",
             Self::BroadcastMismatch { .. } => "SEL-R204",
             Self::InvalidAxis { .. }
+            | Self::NotScalar { .. }
             | Self::TransposeRank { .. }
             | Self::MatmulRank { .. }
             | Self::MatmulShape { .. } => "SEL-R205",
@@ -131,6 +135,9 @@ impl fmt::Display for TensorError {
             ),
             Self::InvalidAxis { axis, rank } => {
                 write!(formatter, "tensor axis {axis} is invalid for rank {rank}")
+            }
+            Self::NotScalar { shape } => {
+                write!(formatter, "tensor shape {:?} is not a rank-0 scalar", shape)
             }
             Self::EmptyMean => write!(formatter, "mean of an empty tensor is undefined"),
             Self::InvalidReshape { elements, shape } => write!(

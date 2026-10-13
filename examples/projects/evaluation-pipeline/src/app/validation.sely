@@ -1,0 +1,25 @@
+module app.validation
+
+from app.order_types import Settings
+from app.order_types import Order
+from app.order_types import Decision
+from json import get, as_text, as_f64, as_bool
+
+pub fn load_settings(document: Json) -> Result[Settings, JsonIoError]:
+    let name_value: Json = get(document, ["name"])?
+    let minimum_value: Json = get(document, ["min_amount"])?
+    let enabled_value: Json = get(document, ["enabled"])?
+    let name: Text = as_text(name_value)?
+    let minimum: F64 = as_f64(minimum_value)?
+    let enabled: Bool = as_bool(enabled_value)?
+    require name != "" else JsonIoError("pipeline name cannot be empty")
+    require minimum >= 0.0 else JsonIoError("minimum amount cannot be negative")
+    require enabled else JsonIoError("pipeline is disabled")
+    return Ok(Settings(name, minimum, enabled))
+
+pub fn classify(order: Order, settings: Settings) -> Decision:
+    if not order.enabled:
+        return Rejected("order disabled")
+    if order.amount < settings.min_amount:
+        return Rejected("below minimum")
+    return Accepted

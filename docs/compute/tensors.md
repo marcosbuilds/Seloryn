@@ -20,6 +20,7 @@ is performed.
 | `tensor_shape(tensor)` | Returns dimensions as `List[I64]` |
 | `tensor_rank(tensor)` / `tensor_elements(tensor)` | Returns rank or element count as `I64` |
 | `tensor_dtype(tensor)` | Returns `"F32"` or `"I64"` |
+| `tensor_item_f32(tensor)` | Extracts one rank-0 `Tensor[F32]` as an `F32`; other shapes or dtypes fail |
 | `tensor_sum(tensor[, axis])` | Reduces all elements or one nonnegative `I64` axis; I64 overflow is checked |
 | `tensor_mean(f32_tensor[, axis])` | Reduces all elements or one axis of finite F32 values; empty means fail |
 | `matmul(left, right)` | Computes rank-2 F32 matrix multiplication |

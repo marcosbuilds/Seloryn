@@ -89,6 +89,20 @@ fn runs_broadcast_reshape_and_reduction_end_to_end() {
         String::from_utf8(output.stdout).expect("mean result is UTF-8"),
         "Tensor[F32, shape=[], values=[2.5]]\n"
     );
+
+    let source = "fn main() -> F32:\n    let values: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0, 4.0], [2, 2])\n    let mean: Tensor[F32] = tensor_mean(values)\n    return tensor_item_f32(mean)\n";
+    let output = run_source("mean-item", source);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(output.stdout, b"2.5\n");
+
+    let source = "fn main() -> F32:\n    let values: Tensor[F32] = tensor_f32([1.0, 2.0], [2])\n    return tensor_item_f32(values)\n";
+    let output = run_source("mean-item-invalid", source);
+    assert_eq!(output.status.code(), Some(65));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("SEL-R205"));
 }
 
 #[test]

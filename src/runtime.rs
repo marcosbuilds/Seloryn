@@ -613,13 +613,37 @@ impl<'a> Interpreter<'a> {
     fn eval_expr(&mut self, expression: &Expr) -> Eval<Value> {
         match expression {
             Expr::Name { name, .. } if name == "None" => Ok(Value::Option(None)),
-            Expr::Name { name, span } => self.lookup(name).ok_or_else(|| {
-                Control::Runtime(self.runtime(
-                    "SEL-R105",
-                    format!("runtime name `{name}` is unavailable"),
-                    *span,
-                ))
-            }),
+            Expr::Name { name, span } => {
+                if let Some(value) = self.lookup(name) {
+                    return Ok(value);
+                }
+                let variants = self
+                    .enums
+                    .iter()
+                    .filter_map(|(enum_name, definition)| {
+                        definition
+                            .variants
+                            .iter()
+                            .find(|variant| variant.name == *name)
+                            .map(|variant| (enum_name.clone(), variant.fields.len()))
+                    })
+                    .collect::<Vec<_>>();
+                if variants.len() == 1 && variants[0].1 == 0 {
+                    return Ok(Value::Enum {
+                        name: variants[0].0.clone(),
+                        variant: name.clone(),
+                        fields: Vec::new(),
+                    });
+                }
+                let message = if variants.len() > 1 {
+                    format!("enum variant `{name}` is ambiguous; qualify it")
+                } else if variants.len() == 1 {
+                    format!("enum variant `{name}` requires constructor arguments")
+                } else {
+                    format!("runtime name `{name}` is unavailable")
+                };
+                Err(Control::Runtime(self.runtime("SEL-R105", message, *span)))
+            }
             Expr::Integer { text, span } => self.parse_i64(text, *span).map(Value::I64),
             Expr::Float { text, span } => self.parse_f64(text, *span).map(Value::F64),
             Expr::String { value, .. } => Ok(Value::Text(value.clone())),
@@ -836,8 +860,39 @@ impl<'a> Interpreter<'a> {
                 };
                 return Ok(value);
             }
+            if is_named_error_constructor(name) {
+                if arguments.len() != 1 {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R103",
+                        format!("`{name}` expects one argument"),
+                        span,
+                    )));
+                }
+                return self.eval_expr(&arguments[0]);
+            }
             if self.records.contains_key(name) {
                 return self.construct_record(name, arguments, span);
+            }
+            let enum_names = self
+                .enums
+                .iter()
+                .filter(|(_, definition)| {
+                    definition
+                        .variants
+                        .iter()
+                        .any(|variant| variant.name == *name)
+                })
+                .map(|(enum_name, _)| enum_name.clone())
+                .collect::<Vec<_>>();
+            if enum_names.len() == 1 {
+                return self.construct_enum(&enum_names[0], name, arguments, span);
+            }
+            if enum_names.len() > 1 {
+                return Err(Control::Runtime(self.runtime(
+                    "SEL-R103",
+                    format!("enum variant `{name}` is ambiguous; qualify it"),
+                    span,
+                )));
             }
         }
         if let Expr::Member { object, name, .. } = callee
@@ -931,7 +986,7 @@ impl<'a> Interpreter<'a> {
                     Err(error) => Ok(json_error_result(error.message)),
                 }
             }
-            "as_text" | "as_i64" | "as_f32" | "as_bool" => {
+            "as_text" | "as_i64" | "as_f32" | "as_f64" | "as_bool" => {
                 let Some(Value::Json(value)) = values.first() else {
                     return Ok(json_error_result("accessor requires a Json value"));
                 };
@@ -941,6 +996,9 @@ impl<'a> Interpreter<'a> {
                         value.parse::<i64>().ok().map(Value::I64)
                     }
                     ("as_f32", JsonValue::Number(value)) => {
+                        value.parse::<f64>().ok().map(Value::F64)
+                    }
+                    ("as_f64", JsonValue::Number(value)) => {
                         value.parse::<f64>().ok().map(Value::F64)
                     }
                     ("as_bool", JsonValue::Bool(value)) => Some(Value::Bool(*value)),
@@ -1215,7 +1273,8 @@ impl<'a> Interpreter<'a> {
             Builtin::TensorShape
             | Builtin::TensorRank
             | Builtin::TensorElements
-            | Builtin::TensorDtype => 1,
+            | Builtin::TensorDtype
+            | Builtin::TensorItemF32 => 1,
             Builtin::Sum | Builtin::Mean => 0,
             Builtin::Transpose | Builtin::Relu | Builtin::Exp | Builtin::Log => 1,
             Builtin::Softmax | Builtin::LogSumExp | Builtin::SumToShape => 2,
@@ -1331,6 +1390,13 @@ impl<'a> Interpreter<'a> {
             Builtin::TensorDtype => {
                 let tensor = tensor_value(&values[0], span, self)?;
                 Ok(Value::Text(tensor.dtype().name().to_owned()))
+            }
+            Builtin::TensorItemF32 => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                tensor
+                    .scalar_f32()
+                    .map(|value| Value::F64(value as f64))
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
             }
             Builtin::Reshape => {
                 let tensor = tensor_value(&values[0], span, self)?;
@@ -1969,6 +2035,13 @@ fn json_error_result(message: impl Into<String>) -> Value {
         ok: false,
         value: Box::new(Value::Text(message.into())),
     }
+}
+
+fn is_named_error_constructor(name: &str) -> bool {
+    matches!(
+        name,
+        "JsonError" | "JsonIoError" | "ModelError" | "CheckpointError"
+    )
 }
 
 fn train_linear_json(

@@ -1,0 +1,20 @@
+{
+  "enabled": true,
+  "name": "regional-orders",
+  "min_amount": 50.0,
+  "order_a": {
+    "id": "A-100",
+    "amount": 120.0,
+    "enabled": true
+  },
+  "order_b": {
+    "id": "B-200",
+    "amount": 30.0,
+    "enabled": true
+  },
+  "order_c": {
+    "id": "C-300",
+    "amount": 90.0,
+    "enabled": false
+  }
+}

@@ -798,8 +798,41 @@ impl<'a> Checker<'a> {
                         Type::Function(signature.parameters, Box::new(signature.return_type))
                     }
                     None => {
-                        self.error("SEL-M002", format!("undefined name `{name}`"), *span);
-                        Type::Error
+                        let variants = self
+                            .enums
+                            .iter()
+                            .filter_map(|(enum_name, definition)| {
+                                definition
+                                    .variants
+                                    .iter()
+                                    .find(|variant| variant.name == *name)
+                                    .map(|variant| (enum_name.clone(), variant.fields.len()))
+                            })
+                            .collect::<Vec<_>>();
+                        if variants.len() > 1 {
+                            self.error(
+                                "SEL-M003",
+                                format!(
+                                    "enum variant `{name}` is ambiguous; qualify it as `Enum.{name}`"
+                                ),
+                                *span,
+                            );
+                            Type::Error
+                        } else if let Some((enum_name, field_count)) = variants.into_iter().next() {
+                            if field_count != 0 {
+                                self.error(
+                                    "SEL-T005",
+                                    format!("variant `{name}` requires constructor arguments"),
+                                    *span,
+                                );
+                                Type::Error
+                            } else {
+                                Type::Enum(enum_name)
+                            }
+                        } else {
+                            self.error("SEL-M002", format!("undefined name `{name}`"), *span);
+                            Type::Error
+                        }
                     }
                 }
             }
@@ -1027,6 +1060,13 @@ impl<'a> Checker<'a> {
                 self.ensure_expr_assignable(&arguments[0], &Type::Text, "print value");
                 return Type::Unit;
             }
+            if let Some(error_type) = named_error_type(name) {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(message) = arguments.first() {
+                    self.ensure_expr_assignable(message, &Type::Text, "error message");
+                }
+                return error_type;
+            }
             if let Some(builtin) = builtins::lookup(name) {
                 return self.type_of_builtin_call(builtin, arguments, span);
             }
@@ -1082,6 +1122,44 @@ impl<'a> Checker<'a> {
                 }
                 return Type::Record(name.clone());
             }
+            let enum_variants = self
+                .enums
+                .iter()
+                .filter_map(|(enum_name, definition)| {
+                    definition
+                        .variants
+                        .iter()
+                        .find(|variant| variant.name == *name)
+                        .map(|variant| (enum_name.clone(), variant.fields.clone()))
+                })
+                .collect::<Vec<_>>();
+            if enum_variants.len() > 1 {
+                self.error(
+                    "SEL-M003",
+                    format!("enum variant `{name}` is ambiguous; qualify it as `Enum.{name}`"),
+                    span,
+                );
+                return Type::Error;
+            }
+            if let Some((enum_name, fields)) = enum_variants.into_iter().next() {
+                if fields.len() != arguments.len() {
+                    self.error(
+                        "SEL-T005",
+                        format!("variant `{name}` expects {} argument(s)", fields.len()),
+                        span,
+                    );
+                }
+                for (argument, (field_type, _)) in arguments.iter().zip(fields.iter()) {
+                    let actual = self.type_of_expr(argument);
+                    self.ensure_assignable(
+                        &actual,
+                        field_type,
+                        argument.span(),
+                        "variant argument",
+                    );
+                }
+                return Type::Enum(enum_name);
+            }
             if let Some(Symbol::Function(signature)) = self.lookup(name) {
                 self.check_arguments(arguments, &signature.parameters, span, name);
                 return signature.return_type;
@@ -1131,7 +1209,8 @@ impl<'a> Checker<'a> {
             Builtin::TensorShape
             | Builtin::TensorRank
             | Builtin::TensorElements
-            | Builtin::TensorDtype => 1,
+            | Builtin::TensorDtype
+            | Builtin::TensorItemF32 => 1,
             Builtin::Sum | Builtin::Mean => 0,
             Builtin::Matmul | Builtin::Softmax | Builtin::LogSumExp | Builtin::SumToShape => 2,
             Builtin::Transpose | Builtin::Relu | Builtin::Exp | Builtin::Log => 1,
@@ -1216,6 +1295,14 @@ impl<'a> Checker<'a> {
             Builtin::TensorDtype => {
                 self.ensure_tensor_argument(&arguments[0], name);
                 Type::Text
+            }
+            Builtin::TensorItemF32 => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::Tensor(TensorDtype::F32),
+                    "tensor_item_f32 tensor",
+                );
+                Type::F32
             }
             Builtin::Reshape => {
                 let tensor_type = self.type_of_expr(&arguments[0]);
@@ -1316,7 +1403,7 @@ impl<'a> Checker<'a> {
                 }
                 result(Type::Json)
             }
-            "as_text" | "as_i64" | "as_f32" | "as_bool" => {
+            "as_text" | "as_i64" | "as_f32" | "as_f64" | "as_bool" => {
                 self.check_standard_arity(name, arguments, 1, span);
                 if let Some(value) = arguments.first() {
                     self.ensure_expr_assignable(value, &Type::Json, "JSON value");
@@ -1324,7 +1411,8 @@ impl<'a> Checker<'a> {
                 let value = match name {
                     "as_text" => Type::Text,
                     "as_i64" => Type::I64,
-                    "as_f32" => Type::F64,
+                    "as_f32" => Type::F32,
+                    "as_f64" => Type::F64,
                     "as_bool" => Type::Bool,
                     _ => Type::Error,
                 };
@@ -1780,6 +1868,7 @@ fn is_supported_standard_directive(text: &str) -> bool {
             "as_text",
             "as_i64",
             "as_f32",
+            "as_f64",
             "as_bool",
         ]
         .as_slice(),
@@ -1795,6 +1884,16 @@ fn is_supported_standard_directive(text: &str) -> bool {
         _ => return false,
     };
     symbols.iter().all(|symbol| allowed.contains(symbol))
+}
+
+fn named_error_type(name: &str) -> Option<Type> {
+    match name {
+        "JsonError" => Some(Type::JsonError),
+        "JsonIoError" => Some(Type::JsonIoError),
+        "ModelError" => Some(Type::ModelError),
+        "CheckpointError" => Some(Type::CheckpointError),
+        _ => None,
+    }
 }
 
 fn display_type(ty: &Type) -> String {
@@ -1852,6 +1951,7 @@ fn builtin_name(builtin: Builtin) -> &'static str {
         Builtin::TensorRank => "tensor_rank",
         Builtin::TensorElements => "tensor_elements",
         Builtin::TensorDtype => "tensor_dtype",
+        Builtin::TensorItemF32 => "tensor_item_f32",
         Builtin::Reshape => "reshape",
         Builtin::Sum => "tensor_sum",
         Builtin::Mean => "tensor_mean",

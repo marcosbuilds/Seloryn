@@ -239,6 +239,21 @@ impl Tensor {
         self.data.len()
     }
 
+    pub fn scalar_f32(&self) -> Result<f32, TensorError> {
+        if self.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: self.dtype.name(),
+            });
+        }
+        if !self.shape.is_empty() {
+            return Err(TensorError::NotScalar {
+                shape: self.shape.clone(),
+            });
+        }
+        Ok(self.f32_at_flat(0))
+    }
+
     #[cfg(test)]
     fn allocated_bytes(&self) -> usize {
         self.allocation.bytes

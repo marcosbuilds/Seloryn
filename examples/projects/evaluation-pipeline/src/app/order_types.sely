@@ -1,0 +1,24 @@
+module app.order_types
+
+pub record Settings:
+    name: Text
+    min_amount: F64
+    enabled: Bool
+
+pub record Order:
+    id: Text
+    amount: F64
+    enabled: Bool
+
+pub enum Decision:
+    Accepted
+    Rejected(Text)
+
+pub record Summary:
+    pipeline: Text
+    accepted: I64
+    rejected: I64
+    total_amount: F64
+    mean_amount: Tensor[F32]
+    labels: List[Text]
+    weights: Tensor[F32]

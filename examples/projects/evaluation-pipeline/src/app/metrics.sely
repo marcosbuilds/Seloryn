@@ -1,0 +1,30 @@
+module app.metrics
+
+from app.order_types import Decision
+from app.order_types import Settings
+from app.order_types import Order
+from app.order_types import Summary
+from app.validation import classify
+
+pub fn summarize(settings: Settings, orders: List[Order]) -> Result[Summary, JsonIoError]:
+    var accepted: I64 = 0
+    var rejected: I64 = 0
+    var total: F64 = 0.0
+    var amounts: List[F64] = []
+    var labels: List[Text] = []
+    for order in orders:
+        let decision: Decision = classify(order, settings)
+        amounts = amounts + [order.amount]
+        match decision:
+            case Accepted:
+                accepted = accepted + 1
+                total = total + order.amount
+                labels = labels + [order.id + ":accepted"]
+            case Rejected(reason):
+                rejected = rejected + 1
+                labels = labels + [order.id + ":" + reason]
+    require accepted > 0 else JsonIoError("no order passed the pipeline")
+    let values: Tensor[F32] = tensor_f32(amounts, [3])
+    let mean: Tensor[F32] = tensor_mean(values)
+    let weights: Tensor[F32] = tensor_softmax(values, 0)
+    return Ok(Summary(settings.name, accepted, rejected, total, mean, labels, weights))

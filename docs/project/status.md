@@ -97,7 +97,9 @@ shapes, GPU or effects. N3a adds only the scalar reverse-mode gate described in
 [`docs/compute/autograd.md`](../compute/autograd.md); it does not differentiate
 tensors or build a reusable tensor computation graph. The current N3/N4/CKPT
 fixtures are narrow, explicitly tested contracts and do not claim a general
-training framework. The language version remains `0.00`.
+training framework. A rank-0 F32 reduction can be converted explicitly with
+`tensor_item_f32`; non-scalar shapes and wrong dtypes fail with a structured
+diagnostic. The language version remains `0.00`.
 
 ## Gaps versus the design review
 
