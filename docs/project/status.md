@@ -17,7 +17,7 @@
 | Deterministic core IR boundary | Experimental implemented and tested | [`src/ir.rs`](../../src/ir.rs), runtime and lowering tests |
 | Local project modules and `seloryn.toml` | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`json-config`](../../examples/projects/json-config/README.md) |
 | JSON read/parse/encode/get with root and size limits | Experimental implemented and tested | [`src/json.rs`](../../src/json.rs), [`json-config`](../../examples/projects/json-config/README.md) |
-| Model contract, finite-difference scalar check, linear training and checkpoint-schema fixtures | Experimental implemented, narrow | Runtime fixtures and [`linear-training`](../../examples/projects/linear-training/README.md); no reverse-mode tape or general trainer |
+| Model contract, scalar reverse-mode tape, finite-difference check, linear training and checkpoint-schema fixtures | Experimental implemented, narrow | [`autograd`](../../examples/autograd/README.md), runtime/N3a probe and [`linear-training`](../../examples/projects/linear-training/README.md); no tensor tape or general trainer |
 | CLI `--help`, `--version`, `check`, `run`, `build` and `exec` | Implemented development CLI | [`src/main.rs`](../../src/main.rs), CLI and B1 fixtures |
 | Human/JSON diagnostics, stable source spans, `--quiet` and `from io import print` | Experimental F1 subset implemented and tested | [`Diagnostic`](../../src/diagnostic.rs), [`--format=json`](../../src/main.rs), CLI tests |
 
@@ -28,7 +28,7 @@
 | Core IR optimization and SSA passes | **Not implemented** | the current IR is deterministic and structural; no optimizer or SSA pass is claimed |
 | External packages, registry and broad standard library | **Not implemented** | local modules and narrow stdlib fixtures only |
 | HTTP, processes and unrestricted file effects | **Not implemented** | only bounded root-confined JSON reads are available |
-| General autograd, optimizers, MLPs and model serving | **Not implemented** | narrow scalar/broadcast/linear fixtures do not imply a general ML stack |
+| General tensor autograd, optimizers, MLPs and model serving | **Not implemented** | N3a is one-input scalar reverse mode; narrow broadcast/linear fixtures do not imply a general ML stack |
 | GPU, distributed execution and serving | **Not implemented** | no accelerator or production service exists |
 | Formatter, LSP, public installer and release artifacts | **Not implemented or verified** | local B2 scripts install an existing Windows binary; no supported release path exists |
 
@@ -93,9 +93,11 @@ CLI output against an independent Python standard-library reference and repeats
 negative diagnostics.
 
 N2 does not provide a general tape, optimizer, arbitrary tensor views, symbolic
-shapes, GPU or effects. The current N3/N4/CKPT fixtures are narrow, explicitly
-tested contracts and do not claim a general training framework. The language
-version remains `0.00`.
+shapes, GPU or effects. N3a adds only the scalar reverse-mode gate described in
+[`docs/compute/autograd.md`](../compute/autograd.md); it does not differentiate
+tensors or build a reusable tensor computation graph. The current N3/N4/CKPT
+fixtures are narrow, explicitly tested contracts and do not claim a general
+training framework. The language version remains `0.00`.
 
 ## Gaps versus the design review
 
@@ -104,6 +106,6 @@ E3 is therefore **not fully complete**. The checker proves a meaningful front-en
 - A successful `check` means syntax and supported static rules passed; `run` adds the separately tested pure E4 execution step.
 - General training, model-serving and GPU text in the repository describes design targets, not available capabilities.
 - Examples using broad effects, named record patterns or future libraries remain design concepts unless a page explicitly says otherwise.
-- E4, N1, N2, F3/F4 and the narrow F5/N3/N4/CKPT/B1 fixtures have bounded experimental results; broader autograd remains future work.
+- E4, N1, N2, F3/F4 and the narrow F5/N3a/N3/N4/CKPT/B1 fixtures have bounded experimental results; broader tensor autograd remains future work.
 
 The implementation policy is staged: a feature becomes available only after source behavior, negative tests and platform evidence exist. The language version remains `0.00`; no release or earned gain is claimed by this status page.

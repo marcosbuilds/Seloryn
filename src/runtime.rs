@@ -1,3 +1,4 @@
+use crate::autograd;
 use crate::builtins::{self, Builtin};
 use crate::diagnostic::{Diagnostic, Span};
 use crate::ir::{
@@ -1028,6 +1029,10 @@ impl<'a> Interpreter<'a> {
                         span,
                     )));
                 };
+                let analytic = autograd::differentiate_scalar(self.program, &function_name, *point)
+                    .map_err(|error| {
+                        Control::Runtime(self.runtime("SEL-R203", error.message, span))
+                    })?;
                 let epsilon = 1.0e-4;
                 let plus =
                     self.call_named(&function_name, vec![Value::F64(*point + epsilon)], span)?;
@@ -1041,22 +1046,49 @@ impl<'a> Interpreter<'a> {
                     )));
                 };
                 let derivative = (plus - minus) / (2.0 * epsilon);
-                // The public scalar fixture is rendered as a stable decimal;
-                // this removes platform noise from the finite-difference
-                // quotient without pretending to provide reverse autodiff.
-                let derivative = (derivative * 1_000_000.0).round() / 1_000_000.0;
+                if !derivative.is_finite() {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "gradcheck produced a non-finite finite-difference derivative",
+                        span,
+                    )));
+                }
+                let tolerance = 1.0e-3_f64.max(analytic.abs() * 1.0e-3);
+                if (analytic - derivative).abs() > tolerance {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        format!(
+                            "gradcheck mismatch: reverse={analytic}, finite_difference={derivative}, tolerance={tolerance}"
+                        ),
+                        span,
+                    )));
+                }
                 finite_f64(
-                    derivative,
+                    analytic,
                     "gradcheck produced a non-finite derivative",
                     span,
                     self,
                 )
             }
             "backward" => {
+                if let Some(Value::F64(point)) = values.get(1) {
+                    let Some(Value::Function(function_name)) = values.first().cloned() else {
+                        return Err(Control::Runtime(self.runtime(
+                            "SEL-R203",
+                            "backward requires a callable function",
+                            span,
+                        )));
+                    };
+                    return autograd::differentiate_scalar(self.program, &function_name, *point)
+                        .map(Value::F64)
+                        .map_err(|error| {
+                            Control::Runtime(self.runtime("SEL-R203", error.message, span))
+                        });
+                }
                 let Some(Value::Tensor(tensor)) = values.get(1) else {
                     return Err(Control::Runtime(self.runtime(
                         "SEL-R203",
-                        "backward requires a tensor parameter",
+                        "backward requires an F64 scalar point; tensor backward remains a fixture",
                         span,
                     )));
                 };
@@ -2229,6 +2261,30 @@ mod tests {
             panic!("gradcheck must return a floating-point derivative");
         };
         assert!((value - 9.0).abs() < 0.01, "observed derivative {value}");
+    }
+
+    #[test]
+    fn backward_executes_the_scalar_reverse_tape() {
+        let value = run(
+            "from autograd import backward\nfn f(x: F64) -> F64:\n    let square = x * x\n    return square + x / 2.0\nfn main() -> F64:\n    return backward(f, 4.0)\n",
+        )
+        .expect("backward must execute");
+        let Value::F64(value) = value else {
+            panic!("backward must return a scalar gradient");
+        };
+        assert!((value - 8.5).abs() < 1.0e-12, "observed gradient {value}");
+    }
+
+    #[test]
+    fn preserves_the_legacy_tensor_backward_fixture_without_calling_it_autograd() {
+        let value = run(
+            "from autograd import backward\nfn main() -> Tensor[F32]:\n    let input: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0], [1, 3])\n    return backward(0.0, input)\n",
+        )
+        .expect("legacy tensor fixture must remain executable");
+        assert_eq!(
+            value.render(),
+            "Tensor[F32, shape=[1, 3], values=[2.0, 2.0, 2.0]]"
+        );
     }
 
     #[test]

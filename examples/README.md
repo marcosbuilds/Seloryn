@@ -5,6 +5,7 @@ file is only described as runnable when the current CLI and tests execute it.
 
 ```text
 examples/
+  autograd/                   narrow scalar reverse-mode examples
   tensors/                     standalone CPU tensor programs
   projects/json-config/        local module + native json + external JSON
   projects/linear-training/    narrow fixture-driven linear training contract
@@ -23,6 +24,13 @@ seloryn check examples/projects/json-config
 seloryn run examples/projects/json-config
 ```
 
+Run the scalar reverse-mode example:
+
+```text
+seloryn run examples/autograd/scalar-gradient.sely
+seloryn run examples/autograd/scalar-gradcheck.sely
+```
+
 The project examples are deliberately small integration fixtures. They do not
-claim a package registry, general model framework, unrestricted file access or
-production training support.
+claim a package registry, general model framework, unrestricted file access,
+tensor autograd, optimizers or production training support.

@@ -1,0 +1,8 @@
+from autograd import backward
+
+fn loss(x: F64) -> F64:
+    let square = x * x
+    return square + x / 2.0
+
+fn main() -> F64:
+    return backward(loss, 4.0)

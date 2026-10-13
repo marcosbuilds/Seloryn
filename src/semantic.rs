@@ -1353,11 +1353,48 @@ impl<'a> Checker<'a> {
             }
             "gradcheck" => {
                 self.check_standard_arity(name, arguments, 2, span);
-                Type::F32
+                if let Some(function) = arguments.first() {
+                    self.check_scalar_autograd_callable(function, span);
+                }
+                if let Some(point) = arguments.get(1) {
+                    let point_type = self.type_of_expr(point);
+                    if !matches!(
+                        point_type,
+                        Type::F32 | Type::F64 | Type::Unknown | Type::Error
+                    ) {
+                        self.error(
+                            "SEL-M002",
+                            "gradcheck expects an F32/F64 scalar point",
+                            span,
+                        );
+                    }
+                }
+                Type::F64
             }
             "backward" => {
                 self.check_standard_arity(name, arguments, 2, span);
-                Type::Tensor(TensorDtype::F32)
+                let input_type = arguments
+                    .get(1)
+                    .map(|input| self.type_of_expr(input))
+                    .unwrap_or(Type::Unknown);
+                match input_type {
+                    Type::Tensor(TensorDtype::F32) => Type::Tensor(TensorDtype::F32),
+                    Type::F32 | Type::F64 => {
+                        if let Some(function) = arguments.first() {
+                            self.check_scalar_autograd_callable(function, span);
+                        }
+                        Type::F64
+                    }
+                    Type::Unknown | Type::Error => Type::F64,
+                    _ => {
+                        self.error(
+                            "SEL-M002",
+                            "backward expects an F32/F64 scalar point; tensor backward only accepts Tensor[F32] fixtures",
+                            span,
+                        );
+                        Type::Error
+                    }
+                }
             }
             "train_linear" | "resume_and_compare" => {
                 if name == "train_linear" {
@@ -1395,6 +1432,23 @@ impl<'a> Checker<'a> {
                 format!("standard function `{name}` expects {expected} argument(s)"),
                 span,
             );
+        }
+    }
+
+    fn check_scalar_autograd_callable(&mut self, expression: &Expr, span: Span) {
+        let callable = self.type_of_expr(expression);
+        match callable {
+            Type::Function(parameters, return_type)
+                if parameters.len() == 1
+                    && matches!(parameters[0], Type::F32 | Type::F64)
+                    && matches!(*return_type, Type::F32 | Type::F64) => {}
+            Type::Unknown | Type::Error => {}
+            Type::Function(_, _) => self.error(
+                "SEL-M002",
+                "autograd callable must have one F32/F64 parameter and return F32/F64",
+                span,
+            ),
+            _ => self.error("SEL-M002", "autograd expects a named scalar callable", span),
         }
     }
 

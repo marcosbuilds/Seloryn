@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current status: 0.00, experimental E3–F4 checker/runtime, N1/N2 CPU tensors, narrow N3/N4/CKPT fixtures and B1 bundles.** Seloryn can validate and execute a bounded `.sely` subset through `check`, `run` and local project commands. There is no package registry, general effects runtime, supported release or public installer; local B2 scripts only install an existing binary. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and [tensor reference](docs/compute/tensors.md).
+> **Current status: 0.00, experimental E3–F4 checker/runtime, N1/N2 CPU tensors, narrow N3a/N3/N4/CKPT fixtures and B1 bundles.** Seloryn can validate and execute a bounded `.sely` subset through `check`, `run` and local project commands. There is no package registry, general effects runtime, supported release or public installer; local B2 scripts only install an existing binary. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and [tensor reference](docs/compute/tensors.md).
 
 > **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** This repository records only what is implemented and verified.
 
@@ -35,7 +35,7 @@ instead of gaining features by default.
 | Deterministic core IR and execution boundary | Experimental implemented | `src/ir.rs`, runtime parity tests; bounded subset only |
 | Local modules and project manifests | Experimental implemented | F3 project fixtures; no registry or external package resolver |
 | JSON read/parse/encode/get and bounded file capability | Experimental implemented | F4 fixtures; paths remain root-confined |
-| Model contract, finite-difference gradient check, linear-training and checkpoint-validation fixtures | Experimental implemented, narrow | Runtime fixtures and public linear example; no reverse-mode tape, general provider or MLP claim |
+| Scalar reverse-mode tape, finite-difference gradient check, linear-training and checkpoint-validation fixtures | Experimental implemented, narrow | [`examples/autograd`](examples/autograd), runtime tests and public linear example; no tensor autograd, general provider or MLP claim |
 | `build`/`exec` `.selyapp` bundle path | Experimental B1 | Deterministic bundle and clean terminal fixtures; not an installer |
 | HTTP, packages, GPU and distributed execution | Not implemented or verified | No supported release artifact exists |
 | Local installer scripts | Experimental B2; Windows x64 lifecycle verified here | No public download, signing or cross-OS binary support |

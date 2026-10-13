@@ -1,5 +1,6 @@
 #![allow(clippy::result_large_err)]
 
+mod autograd;
 mod builtins;
 mod diagnostic;
 mod ir;
