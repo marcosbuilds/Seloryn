@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current status: 0.00, experimental E3 checker, E4 pure interpreter and N1/N2 CPU tensor runtime.** Seloryn can validate and execute a bounded `.sely` subset through `check` and `run`. There is no module system, training runtime, HTTP/file standard library, installable release or GPU backend. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and [tensor reference](docs/compute/tensors.md).
+> **Current status: 0.00, experimental E3–F4 checker/runtime, N1/N2 CPU tensors, narrow N3/N4/CKPT fixtures and B1 bundles.** Seloryn can validate and execute a bounded `.sely` subset through `check`, `run` and local project commands. There is no package registry, general effects runtime, supported release or public installer; local B2 scripts only install an existing binary. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and [tensor reference](docs/compute/tensors.md).
 
 > **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** This repository records only what is implemented and verified.
 
@@ -13,7 +13,7 @@
 
 ## What exists today vs. what is designed
 
-Seloryn is being designed as one expressive language for reliable AI development, integration and serving. The implemented result is a checker plus a pure interpreter for the validated scalar core and a bounded CPU tensor core; effects, training and accelerator layers remain roadmap work.
+Seloryn is being designed as one expressive language for reliable AI development, integration and serving. The implemented result is a checker, deterministic core IR, pure interpreter, local modules, bounded JSON/file capabilities, narrow model/training fixtures and a reproducible experimental bundle path. General effects, broad model APIs and accelerator layers remain roadmap work.
 
 ## Mission: AI development and integration
 
@@ -32,10 +32,13 @@ instead of gaining features by default.
 | `seloryn check <file.sely>` diagnostics | Implemented in the development CLI | `src/main.rs:82-119`, `tests/bootstrap_cli.rs:61-178` |
 | Pure scalar/list interpreter and `seloryn run` | Experimental E4 implementation | [`src/runtime.rs`](src/runtime.rs), runtime and CLI tests; no effects |
 | CPU `Tensor[F32]` / `Tensor[I64]` buffers and N1/N2 operations | Experimental N1/N2 implementation | [`src/tensor`](src/tensor), tensor unit and CLI tests; CPU only |
-| Core IR | Not implemented; planned after interpreter evidence | The interpreter evaluates the checked AST directly |
-| Modules, files, HTTP, packages and standard library | Not implemented; imports are diagnosed as unavailable | No module or systems runtime exists |
-| Autodiff, training and model serving | Designed only; not checked or executable | See [autodiff](docs/compute/autograd.md) and [training](docs/compute/training.md) |
-| GPU, distributed execution and installers | Not implemented or verified | No backend or release artifact exists |
+| Deterministic core IR and execution boundary | Experimental implemented | `src/ir.rs`, runtime parity tests; bounded subset only |
+| Local modules and project manifests | Experimental implemented | F3 project fixtures; no registry or external package resolver |
+| JSON read/parse/encode/get and bounded file capability | Experimental implemented | F4 fixtures; paths remain root-confined |
+| Model contract, scalar/broadcast gradient and linear-training fixtures | Experimental implemented, narrow | F5/N3/N4/CKPT fixtures; no general provider or MLP claim |
+| `build`/`exec` `.selyapp` bundle path | Experimental B1 | Deterministic bundle and clean terminal fixtures; not an installer |
+| HTTP, packages, GPU and distributed execution | Not implemented or verified | No supported release artifact exists |
+| Local installer scripts | Experimental B2; Windows x64 lifecycle verified here | No public download, signing or cross-OS binary support |
 
 | AI development | AI integration | AI serving | Evidence |
 |:--|:--|:--|:--|

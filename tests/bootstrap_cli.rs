@@ -9,6 +9,13 @@ fn run_cli(arguments: &[&str]) -> std::process::Output {
         .expect("the Seloryn CLI binary should start")
 }
 
+fn run_cli_owned(arguments: &[std::ffi::OsString]) -> std::process::Output {
+    std::process::Command::new(env!("CARGO_BIN_EXE_seloryn"))
+        .args(arguments)
+        .output()
+        .expect("the Seloryn CLI binary should start")
+}
+
 fn temporary_source(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("seloryn-check-{name}-{}.sely", std::process::id()))
 }
@@ -24,7 +31,7 @@ fn help_is_utf8_and_documents_only_available_commands() {
     assert!(stdout.contains("seloryn --help"));
     assert!(stdout.contains("seloryn check <file.sely>"));
     assert!(stdout.contains("seloryn run <file.sely>"));
-    assert!(stdout.contains("not available yet"));
+    assert!(stdout.contains("No installer or supported release is available yet"));
 }
 
 #[test]
@@ -38,6 +45,54 @@ fn version_reports_language_baseline_without_claiming_a_release() {
         stdout,
         "seloryn 0.00 build=local-development status=experimental-implemented\n"
     );
+}
+
+#[test]
+fn build_and_exec_reproduce_a_project_bundle() {
+    let root = std::env::temp_dir().join(format!("seloryn-b1-cli-{}", std::process::id()));
+    let source_root = root.join("src");
+    let first_output = root.join("first");
+    let second_output = root.join("second");
+    std::fs::create_dir_all(&source_root).expect("project source root");
+    std::fs::write(
+        root.join("seloryn.toml"),
+        "[package]\nname = \"cli-fixture\"\nlanguage = \"0.00\"\nsource_root = \"src\"\nentry = \"main.sely\"\n",
+    )
+    .expect("project manifest");
+    std::fs::write(
+        source_root.join("main.sely"),
+        "fn main() -> Result[Text, Text]:\n    return Ok(\"bundle fixture\")\n",
+    )
+    .expect("project source");
+
+    let build = |output: &std::path::Path| {
+        run_cli_owned(&[
+            std::ffi::OsString::from("build"),
+            root.clone().into_os_string(),
+            std::ffi::OsString::from("--profile"),
+            std::ffi::OsString::from("debug"),
+            std::ffi::OsString::from("--output"),
+            output.to_path_buf().into_os_string(),
+        ])
+    };
+    let first = build(&first_output);
+    let second = build(&second_output);
+    assert!(first.status.success(), "build stderr: {:?}", first.stderr);
+    assert!(second.status.success(), "build stderr: {:?}", second.stderr);
+    let first_artifact = first_output.join("seloryn.selyapp");
+    let second_artifact = second_output.join("seloryn.selyapp");
+    assert_eq!(
+        std::fs::read(&first_artifact).expect("first artifact"),
+        std::fs::read(&second_artifact).expect("second artifact")
+    );
+    let executed = run_cli_owned(&["exec".into(), first_artifact.into_os_string()]);
+    assert!(
+        executed.status.success(),
+        "exec stderr: {:?}",
+        executed.stderr
+    );
+    assert_eq!(executed.stdout, b"Ok(\"bundle fixture\")\n");
+    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]

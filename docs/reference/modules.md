@@ -11,7 +11,7 @@ from app.validation import validate_request
 - `import path as alias` binds a namespace; `from path import Item` binds an exported item by name. Hidden imports cannot shadow local declarations without explicit diagnostic.
 - `pub` marks externally visible declarations; private is default. Cyclic type references may be supported, cyclic initialization is rejected with exact cycle diagnostics.
 - Package metadata must include license, target language capability range, platform targets, integrity hashes, lockfile schema and reproducible installation behavior.
-- A package manifest and registry do **not** exist; no `seloryn add` is executable in this archive.
+- A local `seloryn.toml` project manifest and deterministic source-root resolver are implemented experimentally for the F3/B1 subset. A package registry, lockfile resolver and `seloryn add` do **not** exist in this archive.
 
 ### Future package separation
 

@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.00 currently provides an experimental syntax and semantic checker, a pure interpreter and bounded N1/N2 CPU tensor runtimes in the development repository. There is no verified release, downloadable executable, package registry, hosted API or supported installation command.
+**Availability:** Seloryn 0.00 currently provides an experimental syntax and semantic checker, deterministic core IR, pure interpreter, local project modules, bounded JSON capability, narrow training fixtures and an experimental `.selyapp` bundle path in the development repository. There is no verified release, package registry, hosted API or supported installation command; local installer scripts are only B2 development tooling.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 
@@ -13,12 +13,18 @@ seloryn --help
 seloryn --version
 seloryn check example.sely
 seloryn run example.sely
+seloryn check project-directory
+seloryn run project-directory
+seloryn build project-directory --profile debug --output artifact-directory
+seloryn exec artifact-directory
 ```
 
 `check` validates UTF-8, four-space layout, the implemented parser subset and selected semantic rules: local names and scopes, scalar types, typed list indexing and iteration, mutable `var` assignment, function calls and returns, records, enums, `Result`, `Option`, `require`, postfix `?`, pipelines and exhaustive `match`. It emits a structured source diagnostic and nonzero exit code for invalid input. The command path is implemented in [`src/main.rs:82`](../../src/main.rs#L82) and exercised by [`tests/bootstrap_cli.rs:61`](../../tests/bootstrap_cli.rs#L61).
 
 `run` executes the same bounded constructs after all front-end diagnostics
-pass. It is pure: it has no filesystem, network, process or accelerator effects.
+pass. A standalone source run has no filesystem, network, process or
+accelerator effects; a project run may perform the explicitly bounded JSON
+reads granted by its project root.
 The N1/N2 bridge can allocate bounded CPU tensors and run checked F32/I64
 kernels plus the tested N2 F32 numeric primitives.
 A valid program starts at `fn main()`, and its returned value is rendered to
@@ -26,11 +32,11 @@ stdout.
 
 ## What's not yet available
 
-- No core IR, module system or standard library runtime.
+- No package registry, external dependency resolver or broad standard library runtime.
 - No GPU, distributed or symbolic-shape execution; N1/N2 support only bounded CPU tensors.
 - No HTTP, file, process or package runtime.
-- No model loading, autodiff, optimizer or training.
-- No GPU, distributed backend, installer or supported release target.
+- No general model loading, optimizer, MLP training or production model serving; only the narrow fixture contracts are implemented.
+- No GPU, distributed backend, supported installer or supported release target; local B2 installer scripts are not a release.
 
 The current capability limits are recorded in the [status page](../project/status.md) and the [tensor reference](../compute/tensors.md).
 
@@ -49,6 +55,8 @@ The broader commands remain planned; the currently executable subset is:
 seloryn --version
 seloryn check hello.sely
 seloryn run hello.sely
+seloryn build project-directory --profile debug --output artifact-directory
+seloryn exec artifact-directory
 ```
 
 ## Runnable pure hello-world source

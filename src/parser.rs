@@ -220,6 +220,11 @@ pub enum Expr {
         arguments: Vec<Expr>,
         span: Span,
     },
+    NamedArgument {
+        name: String,
+        value: Box<Expr>,
+        span: Span,
+    },
     Index {
         object: Box<Expr>,
         index: Box<Expr>,
@@ -1073,7 +1078,24 @@ impl<'a> Parser<'a> {
         self.expect_symbol(Symbol::LeftParen, "expected `(`")?;
         let mut arguments = Vec::new();
         while !self.at_symbol(Symbol::RightParen) && !self.at(TokenKind::Eof) {
-            arguments.push(self.parse_expression(0)?);
+            let argument = if let TokenKind::Identifier(name) = self.peek().kind.clone()
+                && self
+                    .tokens
+                    .get(self.cursor + 1)
+                    .is_some_and(|token| token.kind == TokenKind::Symbol(Symbol::Equal))
+            {
+                let start = self.bump().span.start;
+                self.bump();
+                let value = self.parse_expression(0)?;
+                Expr::NamedArgument {
+                    name,
+                    span: Span::new(start, value.span().end),
+                    value: Box::new(value),
+                }
+            } else {
+                self.parse_expression(0)?
+            };
+            arguments.push(argument);
             if self.consume_symbol(Symbol::Comma).is_none() {
                 break;
             }
@@ -1253,6 +1275,7 @@ impl Expr {
             | Self::Unary { span, .. }
             | Self::Binary { span, .. }
             | Self::Call { span, .. }
+            | Self::NamedArgument { span, .. }
             | Self::Index { span, .. }
             | Self::Member { span, .. }
             | Self::Propagate { span, .. } => *span,

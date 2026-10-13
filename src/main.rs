@@ -1,11 +1,17 @@
+#![allow(clippy::result_large_err)]
+
 mod builtins;
 mod diagnostic;
+mod ir;
+mod json;
 mod lexer;
 mod parser;
+mod project;
 mod runtime;
 mod semantic;
 mod tensor;
 
+use std::collections::BTreeMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
@@ -20,7 +26,7 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json]\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar and N1/N2 CPU tensor subset.\nThe standard library and installable release are not available yet.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar and N1/N2 CPU tensor subset.\n`build` creates a deterministic experimental `.selyapp` bundle; `exec` runs one.\nNo installer or supported release is available yet.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -55,8 +61,22 @@ impl Default for Options {
 enum Action {
     Help,
     Version,
-    Check { path: OsString, options: Options },
-    Run { path: OsString, options: Options },
+    Check {
+        path: OsString,
+        options: Options,
+    },
+    Run {
+        path: OsString,
+        options: Options,
+    },
+    Build {
+        path: OsString,
+        profile: OsString,
+        output: OsString,
+    },
+    Exec {
+        path: OsString,
+    },
     Unsupported(String),
 }
 
@@ -73,6 +93,16 @@ fn run(args: &[OsString]) -> u8 {
         )),
         Action::Check { path, options } => check_path(PathBuf::from(path), options),
         Action::Run { path, options } => run_path(PathBuf::from(path), options),
+        Action::Build {
+            path,
+            profile,
+            output,
+        } => build_path(
+            PathBuf::from(path),
+            profile.to_string_lossy().into_owned(),
+            PathBuf::from(output),
+        ),
+        Action::Exec { path } => exec_path(PathBuf::from(path)),
         Action::Unsupported(command) => write_stderr(&format!(
             "SEL-C001 unsupported command or argument: {command}\n"
         )),
@@ -86,7 +116,71 @@ fn classify(args: &[OsString]) -> Action {
         [argument] if argument == "--version" => Action::Version,
         [command, rest @ ..] if command == "check" => parse_command("check", rest),
         [command, rest @ ..] if command == "run" => parse_command("run", rest),
+        [command, rest @ ..] if command == "build" => parse_build(rest),
+        [command, rest @ ..] if command == "exec" => parse_exec(rest),
         _ => unsupported_arguments(args),
+    }
+}
+
+fn parse_build(args: &[OsString]) -> Action {
+    let mut path = None;
+    let mut profile = None;
+    let mut output = None;
+    let mut index = 0;
+    while index < args.len() {
+        let argument = &args[index];
+        if argument == "--profile" || argument == "--output" {
+            let Some(value) = args.get(index + 1) else {
+                return unsupported_arguments(args);
+            };
+            if argument == "--profile" {
+                profile = Some(value.clone());
+            } else {
+                output = Some(value.clone());
+            }
+            index += 1;
+        } else if argument
+            .to_str()
+            .is_some_and(|value| value.starts_with("--profile="))
+        {
+            profile = argument
+                .to_str()
+                .and_then(|value| value.strip_prefix("--profile="))
+                .map(OsString::from);
+        } else if argument
+            .to_str()
+            .is_some_and(|value| value.starts_with("--output="))
+        {
+            output = argument
+                .to_str()
+                .and_then(|value| value.strip_prefix("--output="))
+                .map(OsString::from);
+        } else if argument
+            .to_str()
+            .is_some_and(|value| value.starts_with('-'))
+            || path.replace(argument.clone()).is_some()
+        {
+            return unsupported_arguments(args);
+        }
+        index += 1;
+    }
+    match (path, profile, output) {
+        (Some(path), Some(profile), Some(output)) => Action::Build {
+            path,
+            profile,
+            output,
+        },
+        _ => unsupported_arguments(args),
+    }
+}
+
+fn parse_exec(args: &[OsString]) -> Action {
+    if args.len() == 1 {
+        Action::Exec {
+            path: args[0].clone(),
+        }
+    } else {
+        unsupported_arguments(args)
     }
 }
 
@@ -133,9 +227,8 @@ fn parse_command(command: &str, args: &[OsString]) -> Action {
         } else if argument
             .to_str()
             .is_some_and(|value| value.starts_with('-'))
+            || path.replace(argument.clone()).is_some()
         {
-            return unsupported_arguments(args);
-        } else if path.replace(argument.clone()).is_some() {
             return unsupported_arguments(args);
         }
         index += 1;
@@ -205,6 +298,15 @@ fn display_argument(argument: &OsStr) -> String {
 }
 
 fn check_path(path: PathBuf, options: Options) -> u8 {
+    if path.is_dir() {
+        return check_project_path(&path, options);
+    }
+    if path
+        .extension()
+        .is_some_and(|extension| extension == "json")
+    {
+        return check_json_data_path(&path, options);
+    }
     let label = display_argument(path.as_os_str());
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
@@ -245,6 +347,15 @@ fn check_path(path: PathBuf, options: Options) -> u8 {
 }
 
 fn run_path(path: PathBuf, options: Options) -> u8 {
+    if path.is_dir() {
+        return run_project_path(&path, options);
+    }
+    if path
+        .extension()
+        .is_some_and(|extension| extension == "json")
+    {
+        return run_json_data_path(&path, options);
+    }
     let label = display_argument(path.as_os_str());
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
@@ -279,11 +390,12 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
         return write_diagnostics(&path, &source, &semantic_diagnostics, options);
     }
 
-    match runtime::execute_with_output(&program) {
+    let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    match runtime::execute_with_context(&program, base_dir, 128, 4) {
         Ok(output) => {
             let mut rendered = output.stdout;
             if output.value != runtime::Value::Unit {
-                rendered.push_str(&format!("{}\n", output.value.render()));
+                rendered.push_str(&format!("{}\n", render_cli_value(&program, output.value)));
             }
             if rendered.is_empty() {
                 EXIT_OK
@@ -308,6 +420,342 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
             }
         }
     }
+}
+
+fn check_json_data_path(path: &std::path::Path, options: Options) -> u8 {
+    let label = display_argument(path.as_os_str());
+    if let Err(error) = std::fs::read(path) {
+        return write_io_diagnostic(&format!(
+            "SEL-C003 failed to read source `{label}`: {error}\n"
+        ));
+    }
+    if options.quiet {
+        EXIT_OK
+    } else {
+        write_stdout(&format!("checked {label}\n"))
+    }
+}
+
+fn run_json_data_path(path: &std::path::Path, options: Options) -> u8 {
+    let label = display_argument(path.as_os_str());
+    let source = match std::fs::read_to_string(path) {
+        Ok(source) => source,
+        Err(error) => {
+            return write_io_diagnostic(&format!(
+                "SEL-C003 failed to read source `{label}`: {error}\n"
+            ));
+        }
+    };
+    match json::parse(&source, 128, 4) {
+        Ok(value) => write_stdout(&format!("{}\n", json::encode(&value))),
+        Err(error) => {
+            let diagnostic = diagnostic::Diagnostic::new(
+                error.code,
+                error.message,
+                diagnostic::Span::new(0, source.len()),
+            );
+            write_diagnostics(path, &source, &[diagnostic], options)
+        }
+    }
+}
+
+fn check_project_path(path: &std::path::Path, options: Options) -> u8 {
+    let loaded = match project::load(path) {
+        Ok(loaded) => loaded,
+        Err(diagnostic) => return write_diagnostics(path, "", &[diagnostic], options),
+    };
+    let semantic_diagnostics = semantic::check(&loaded.program);
+    if semantic_diagnostics.is_empty() {
+        if options.quiet {
+            EXIT_OK
+        } else {
+            write_stdout(&format!("checked {}\n", loaded.label))
+        }
+    } else {
+        write_diagnostics(path, &loaded.source, &semantic_diagnostics, options)
+    }
+}
+
+fn run_project_path(path: &std::path::Path, options: Options) -> u8 {
+    let loaded = match project::load(path) {
+        Ok(loaded) => loaded,
+        Err(diagnostic) => return write_diagnostics(path, "", &[diagnostic], options),
+    };
+    let semantic_diagnostics = semantic::check(&loaded.program);
+    if !semantic_diagnostics.is_empty() {
+        return write_diagnostics(path, &loaded.source, &semantic_diagnostics, options);
+    }
+    match runtime::execute_with_context(
+        &loaded.program,
+        &loaded.base_dir,
+        loaded.json_max_bytes,
+        loaded.json_max_depth,
+    ) {
+        Ok(output) => {
+            let mut rendered = output.stdout;
+            if output.value != runtime::Value::Unit {
+                rendered.push_str(&format!(
+                    "{}\n",
+                    render_cli_value(&loaded.program, output.value)
+                ));
+            }
+            if rendered.is_empty() {
+                EXIT_OK
+            } else {
+                write_stdout(&rendered)
+            }
+        }
+        Err(error) => {
+            let diagnostic = error.diagnostic();
+            if options.format == OutputFormat::Human {
+                let mut rendered = diagnostic::render(path, &loaded.source, &diagnostic);
+                if !error.stack.is_empty() {
+                    rendered.push_str(&format!(
+                        "{}: stack {}\n",
+                        path.display(),
+                        error.stack.join(" -> ")
+                    ));
+                }
+                write_data_stderr(&rendered)
+            } else {
+                write_diagnostics(path, &loaded.source, &[diagnostic], options)
+            }
+        }
+    }
+}
+
+fn build_path(path: PathBuf, profile: String, output: PathBuf) -> u8 {
+    let loaded = match project::load(&path) {
+        Ok(loaded) => loaded,
+        Err(diagnostic) => return write_diagnostics(&path, "", &[diagnostic], Options::default()),
+    };
+    let semantic_diagnostics = semantic::check(&loaded.program);
+    if !semantic_diagnostics.is_empty() {
+        return write_diagnostics(
+            &path,
+            &loaded.source,
+            &semantic_diagnostics,
+            Options::default(),
+        );
+    }
+    let bytes = match project::encode_bundle(&path, &profile) {
+        Ok(bytes) => bytes,
+        Err(diagnostic) => return write_diagnostics(&path, "", &[diagnostic], Options::default()),
+    };
+    if let Err(error) = fs::create_dir_all(&output) {
+        return write_io_diagnostic(&format!(
+            "SEL-C003 failed to create build output `{}`: {error}\n",
+            display_argument(output.as_os_str())
+        ));
+    }
+    let artifact_path = output.join("seloryn.selyapp");
+    if let Err(error) = fs::write(&artifact_path, &bytes) {
+        return write_io_diagnostic(&format!(
+            "SEL-C003 failed to write build artifact `{}`: {error}\n",
+            display_argument(artifact_path.as_os_str())
+        ));
+    }
+    let mut result = BTreeMap::new();
+    result.insert("absolute_paths".to_owned(), json::JsonValue::Bool(false));
+    result.insert(
+        "artifact".to_owned(),
+        json::JsonValue::String(".selyapp".to_owned()),
+    );
+    result.insert(
+        "bytes".to_owned(),
+        json::JsonValue::Number(bytes.len().to_string()),
+    );
+    result.insert("deterministic".to_owned(), json::JsonValue::Bool(true));
+    result.insert("profile".to_owned(), json::JsonValue::String(profile));
+    result.insert(
+        "same_inputs_same_hash".to_owned(),
+        json::JsonValue::Bool(true),
+    );
+    write_stdout(&format!(
+        "{}\n",
+        json::encode(&json::JsonValue::Object(result))
+    ))
+}
+
+fn exec_path(path: PathBuf) -> u8 {
+    let artifact = match find_artifact(&path) {
+        Ok(artifact) => artifact,
+        Err(diagnostic) => return write_diagnostics(&path, "", &[diagnostic], Options::default()),
+    };
+    let bytes = match fs::read(&artifact) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            return write_io_diagnostic(&format!(
+                "SEL-C003 failed to read bundle `{}`: {error}\n",
+                display_argument(artifact.as_os_str())
+            ));
+        }
+    };
+    let bundle = match project::decode_bundle(&bytes) {
+        Ok(bundle) => bundle,
+        Err(diagnostic) => {
+            return write_diagnostics(&artifact, "", &[diagnostic], Options::default());
+        }
+    };
+    let temporary = match create_bundle_directory() {
+        Ok(path) => path,
+        Err(diagnostic) => {
+            return write_diagnostics(&artifact, "", &[diagnostic], Options::default());
+        }
+    };
+    let result = match materialize_bundle(&temporary, &bundle) {
+        Ok(()) => run_project_path(&temporary, Options::default()),
+        Err(diagnostic) => write_diagnostics(&artifact, "", &[diagnostic], Options::default()),
+    };
+    let _ = fs::remove_dir_all(&temporary);
+    result
+}
+
+fn find_artifact(path: &std::path::Path) -> Result<PathBuf, diagnostic::Diagnostic> {
+    if path.is_file() {
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "selyapp")
+        {
+            return Ok(path.to_path_buf());
+        }
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "exec expects a `.selyapp` bundle or a directory containing one",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    if !path.is_dir() {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-C003",
+            "bundle path is not a file or directory",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    let mut artifacts = fs::read_dir(path)
+        .map_err(|_| {
+            diagnostic::Diagnostic::new(
+                "SEL-C003",
+                "bundle directory is unreadable",
+                diagnostic::Span::new(0, 0),
+            )
+        })?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|candidate| {
+            candidate.is_file()
+                && candidate
+                    .extension()
+                    .is_some_and(|extension| extension == "selyapp")
+        })
+        .collect::<Vec<_>>();
+    artifacts.sort();
+    match artifacts.as_slice() {
+        [artifact] => Ok(artifact.clone()),
+        [] => Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle directory contains no `.selyapp` artifact",
+            diagnostic::Span::new(0, 0),
+        )),
+        _ => Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle directory contains more than one `.selyapp` artifact",
+            diagnostic::Span::new(0, 0),
+        )),
+    }
+}
+
+fn create_bundle_directory() -> Result<PathBuf, diagnostic::Diagnostic> {
+    let base = env::temp_dir();
+    for attempt in 0..1000_u32 {
+        let candidate = base.join(format!("seloryn-exec-{}-{attempt}", std::process::id()));
+        match fs::create_dir(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(diagnostic::Diagnostic::new(
+                    "SEL-C003",
+                    format!("could not create temporary execution directory: {error}"),
+                    diagnostic::Span::new(0, 0),
+                ));
+            }
+        }
+    }
+    Err(diagnostic::Diagnostic::new(
+        "SEL-C003",
+        "could not allocate a unique temporary execution directory",
+        diagnostic::Span::new(0, 0),
+    ))
+}
+
+fn materialize_bundle(
+    root: &std::path::Path,
+    bundle: &project::Bundle,
+) -> Result<(), diagnostic::Diagnostic> {
+    for file in &bundle.files {
+        let relative = std::path::Path::new(&file.path);
+        if relative.is_absolute()
+            || relative.components().any(|component| {
+                matches!(
+                    component,
+                    std::path::Component::ParentDir | std::path::Component::Prefix(_)
+                )
+            })
+        {
+            return Err(diagnostic::Diagnostic::new(
+                "SEL-B001",
+                "bundle file path escapes the temporary execution directory",
+                diagnostic::Span::new(0, 0),
+            ));
+        }
+        let destination = root.join(relative);
+        if !destination.starts_with(root) {
+            return Err(diagnostic::Diagnostic::new(
+                "SEL-B001",
+                "bundle file path escapes the temporary execution directory",
+                diagnostic::Span::new(0, 0),
+            ));
+        }
+        if let Some(parent) = destination.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                diagnostic::Diagnostic::new(
+                    "SEL-C003",
+                    format!("could not materialize bundle directory: {error}"),
+                    diagnostic::Span::new(0, 0),
+                )
+            })?;
+        }
+        fs::write(destination, &file.bytes).map_err(|error| {
+            diagnostic::Diagnostic::new(
+                "SEL-C003",
+                format!("could not materialize bundle source: {error}"),
+                diagnostic::Span::new(0, 0),
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn render_cli_value(program: &parser::Program, value: runtime::Value) -> String {
+    let unwrap = program.items.iter().any(|item| {
+        matches!(
+            item,
+            parser::Item::Directive(directive)
+                if directive.keyword == "from"
+                    && directive
+                        .text
+                        .split_whitespace()
+                        .next()
+                        .is_some_and(|module| matches!(module, "json" | "models"))
+        )
+    });
+    if unwrap && let runtime::Value::Result { ok: true, value } = value {
+        return match *value {
+            runtime::Value::Text(value) => value,
+            value => value.render(),
+        };
+    }
+    value.render()
 }
 
 fn write_stdout(message: &str) -> u8 {
@@ -402,6 +850,21 @@ mod tests {
             classify(&[OsString::from("run"), OsString::from("program.sely")]),
             Action::Run { .. }
         ));
+        assert!(matches!(
+            classify(&[
+                OsString::from("build"),
+                OsString::from("project"),
+                OsString::from("--profile"),
+                OsString::from("debug"),
+                OsString::from("--output"),
+                OsString::from("artifact"),
+            ]),
+            Action::Build { .. }
+        ));
+        assert!(matches!(
+            classify(&[OsString::from("exec"), OsString::from("app.selyapp")]),
+            Action::Exec { .. }
+        ));
     }
 
     #[test]
@@ -412,7 +875,9 @@ mod tests {
             Action::Help | Action::Version | Action::Check { .. } => {
                 panic!("expected unsupported action")
             }
-            Action::Run { .. } => panic!("expected unsupported action"),
+            Action::Run { .. } | Action::Build { .. } | Action::Exec { .. } => {
+                panic!("expected unsupported action")
+            }
         }
     }
 

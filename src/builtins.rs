@@ -32,7 +32,7 @@ pub fn lookup(name: &str) -> Option<Builtin> {
         "tensor_elements" => Some(Builtin::TensorElements),
         "tensor_dtype" => Some(Builtin::TensorDtype),
         "reshape" => Some(Builtin::Reshape),
-        "tensor_sum" => Some(Builtin::Sum),
+        "tensor_sum" | "sum" => Some(Builtin::Sum),
         "tensor_mean" => Some(Builtin::Mean),
         "matmul" => Some(Builtin::Matmul),
         "transpose" => Some(Builtin::Transpose),

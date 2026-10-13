@@ -6,7 +6,7 @@ examples. This is command evidence, not an installable-platform support badge.
 
 | Platform | Planned target | Validation |
 |---|---|---|
-| Windows 10/11 x64 | Development host smoke observed | `cmd.exe`, PowerShell 5.1, PowerShell 7.6; Windows Terminal and installer remain unverified |
+| Windows 10/11 x64 | Development host smoke observed; local installer lifecycle verified | `cmd.exe`, PowerShell 5.1, PowerShell 7.6; Windows Terminal and public release remain unverified |
 | Linux x64 | Priority | Native shell, libc/runtime linkage, paths/signals |
 | macOS arm64 / x64 | Later | Gatekeeper, architecture, filesystem case rules |
 | Accelerators | Separate qualification | Driver, runtime, device families and numeric tolerance |

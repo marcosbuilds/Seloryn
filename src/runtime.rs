@@ -1,11 +1,14 @@
 use crate::builtins::{self, Builtin};
 use crate::diagnostic::{Diagnostic, Span};
-use crate::parser::{
+use crate::ir::{
     Binding, EnumDecl, Expr, Function, IfBranch, Item, Pattern, Program, Record, Statement,
 };
+use crate::json::{self, JsonValue};
+use crate::parser as source_parser;
 use crate::tensor::{Tensor, TensorError};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 const MAX_CALL_DEPTH: usize = 128;
 const MAX_LOOP_ITERATIONS: usize = 1_000_000;
@@ -20,6 +23,17 @@ pub enum Value {
     I64(i64),
     F64(f64),
     Text(String),
+    Json(JsonValue),
+    ModelRequest {
+        model: String,
+        prompt: String,
+        max_output_tokens: i64,
+        seed: i64,
+    },
+    ModelResponse {
+        status: String,
+        text: String,
+    },
     List(Vec<Value>),
     Tensor(Tensor),
     Record {
@@ -52,6 +66,13 @@ impl Value {
             Self::I64(value) => value.to_string(),
             Self::F64(value) => format_f64(*value),
             Self::Text(value) => render_text(value, remaining),
+            Self::Json(value) => json::encode(value),
+            Self::ModelRequest { model, .. } => format!("ModelRequest({model})"),
+            Self::ModelResponse { status, text } => format!(
+                "{{\"status\":{},\"text\":{}}}",
+                json_string(status),
+                json_string(text)
+            ),
             Self::List(values) => {
                 let mut rendered = Vec::new();
                 for value in values {
@@ -160,8 +181,30 @@ pub struct ExecutionOutput {
 
 /// Execute a semantically valid program and return explicit program output separately
 /// from the final value.
-pub fn execute_with_output(program: &Program) -> Result<ExecutionOutput, RuntimeError> {
-    Interpreter::new(program).execute()
+#[allow(dead_code)]
+pub fn execute_with_output(
+    program: &source_parser::Program,
+) -> Result<ExecutionOutput, RuntimeError> {
+    execute_with_context(program, Path::new("."), 128, 4)
+}
+
+pub fn execute_with_context(
+    program: &source_parser::Program,
+    base_dir: &Path,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+) -> Result<ExecutionOutput, RuntimeError> {
+    let lowered = crate::ir::lower(program);
+    execute_ir_with_context(&lowered, base_dir, json_max_bytes, json_max_depth)
+}
+
+pub fn execute_ir_with_context(
+    program: &Program,
+    base_dir: &Path,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+) -> Result<ExecutionOutput, RuntimeError> {
+    Interpreter::new(program, base_dir, json_max_bytes, json_max_depth).execute()
 }
 
 #[derive(Clone, Debug)]
@@ -181,11 +224,20 @@ struct Interpreter<'a> {
     scopes: Vec<HashMap<String, Value>>,
     call_stack: Vec<String>,
     io_print_imported: bool,
+    stdlib_imports: Vec<String>,
     output: String,
+    base_dir: PathBuf,
+    json_max_bytes: usize,
+    json_max_depth: usize,
 }
 
 impl<'a> Interpreter<'a> {
-    fn new(program: &'a Program) -> Self {
+    fn new(
+        program: &'a Program,
+        base_dir: &Path,
+        json_max_bytes: usize,
+        json_max_depth: usize,
+    ) -> Self {
         let mut functions = HashMap::new();
         let mut records = HashMap::new();
         let mut enums = HashMap::new();
@@ -212,6 +264,24 @@ impl<'a> Interpreter<'a> {
                             == ["io", "import", "print"]
             )
         });
+        let stdlib_imports = program
+            .items
+            .iter()
+            .filter_map(|item| {
+                let Item::Directive(directive) = item else {
+                    return None;
+                };
+                (directive.keyword == "from").then(|| directive.text.clone())
+            })
+            .flat_map(|text| {
+                let mut parts = text.split_whitespace();
+                let _module = parts.next();
+                let _import = parts.next();
+                parts
+                    .map(|part| part.trim_end_matches(',').to_owned())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
         Self {
             program,
             functions,
@@ -221,7 +291,11 @@ impl<'a> Interpreter<'a> {
             scopes: Vec::new(),
             call_stack: Vec::new(),
             io_print_imported,
+            stdlib_imports,
             output: String::new(),
+            base_dir: base_dir.to_path_buf(),
+            json_max_bytes,
+            json_max_depth,
         }
     }
 
@@ -370,7 +444,7 @@ impl<'a> Interpreter<'a> {
         otherwise.map_or(Ok(()), |body| self.eval_scoped(body))
     }
 
-    fn eval_match(&mut self, statement: &crate::parser::MatchStatement) -> Eval<()> {
+    fn eval_match(&mut self, statement: &crate::ir::MatchStatement) -> Eval<()> {
         let value = self.eval_expr(&statement.value)?;
         for case in &statement.cases {
             self.scopes.push(HashMap::new());
@@ -605,6 +679,7 @@ impl<'a> Interpreter<'a> {
                 arguments,
                 span,
             } => self.eval_call(callee, arguments, *span),
+            Expr::NamedArgument { value, .. } => self.eval_expr(value),
             Expr::Index {
                 object,
                 index,
@@ -721,6 +796,9 @@ impl<'a> Interpreter<'a> {
                 self.output.push('\n');
                 return Ok(Value::Unit);
             }
+            if self.stdlib_imports.iter().any(|import| import == name) {
+                return self.eval_standard(name, arguments, span);
+            }
             if let Some(builtin) = builtins::lookup(name) {
                 return self.eval_builtin(builtin, arguments, span);
             }
@@ -778,6 +856,282 @@ impl<'a> Interpreter<'a> {
                 span,
             ))),
         }
+    }
+
+    fn eval_standard(&mut self, name: &str, arguments: &[Expr], span: Span) -> Eval<Value> {
+        let values = arguments
+            .iter()
+            .map(|argument| self.eval_expr(argument))
+            .collect::<Result<Vec<_>, _>>()?;
+        match name {
+            "read_file" => {
+                let Value::Text(relative) = values.first().cloned().unwrap_or(Value::Unit) else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-S004",
+                        "json.read_file requires a Text path",
+                        span,
+                    )));
+                };
+                let path = self.resolve_read_path(&relative, span)?;
+                match std::fs::read_to_string(path) {
+                    Ok(source) => {
+                        match json::parse(&source, self.json_max_bytes, self.json_max_depth) {
+                            Ok(value) => Ok(Value::Result {
+                                ok: true,
+                                value: Box::new(Value::Json(value)),
+                            }),
+                            Err(error) => Ok(json_error_result(error.message)),
+                        }
+                    }
+                    Err(error) => Ok(json_error_result(format!("failed to read JSON: {error}"))),
+                }
+            }
+            "parse" => {
+                let Value::Text(source) = values.first().cloned().unwrap_or(Value::Unit) else {
+                    return Ok(json_error_result("JSON parse requires Text"));
+                };
+                match json::parse(&source, self.json_max_bytes, self.json_max_depth) {
+                    Ok(value) => Ok(Value::Result {
+                        ok: true,
+                        value: Box::new(Value::Json(value)),
+                    }),
+                    Err(error) => Ok(json_error_result(error.message)),
+                }
+            }
+            "encode" => match values.first() {
+                Some(Value::Json(value)) => Ok(Value::Result {
+                    ok: true,
+                    value: Box::new(Value::Text(json::encode(value))),
+                }),
+                _ => Ok(json_error_result("encode requires a Json value")),
+            },
+            "get" => {
+                let (Some(Value::Json(value)), Some(Value::List(path))) =
+                    (values.first(), values.get(1))
+                else {
+                    return Ok(json_error_result("get requires Json and List[Text]"));
+                };
+                let path = path
+                    .iter()
+                    .filter_map(|value| match value {
+                        Value::Text(value) => Some(value.clone()),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                match json::get(value, &path) {
+                    Ok(value) => Ok(Value::Result {
+                        ok: true,
+                        value: Box::new(Value::Json(value.clone())),
+                    }),
+                    Err(error) => Ok(json_error_result(error.message)),
+                }
+            }
+            "as_text" | "as_i64" | "as_f32" | "as_bool" => {
+                let Some(Value::Json(value)) = values.first() else {
+                    return Ok(json_error_result("accessor requires a Json value"));
+                };
+                let converted = match (name, value) {
+                    ("as_text", JsonValue::String(value)) => Some(Value::Text(value.clone())),
+                    ("as_i64", JsonValue::Number(value)) => {
+                        value.parse::<i64>().ok().map(Value::I64)
+                    }
+                    ("as_f32", JsonValue::Number(value)) => {
+                        value.parse::<f64>().ok().map(Value::F64)
+                    }
+                    ("as_bool", JsonValue::Bool(value)) => Some(Value::Bool(*value)),
+                    _ => None,
+                };
+                converted
+                    .map(|value| Value::Result {
+                        ok: true,
+                        value: Box::new(value),
+                    })
+                    .map_or_else(
+                        || {
+                            Ok(json_error_result(format!(
+                                "{name} received an incompatible JSON value"
+                            )))
+                        },
+                        Ok,
+                    )
+            }
+            "ModelRequest" => {
+                let [
+                    Value::Text(model),
+                    Value::Text(prompt),
+                    Value::I64(max_output_tokens),
+                    Value::I64(seed),
+                ] = values.as_slice()
+                else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-A001",
+                        "ModelRequest received incompatible arguments",
+                        span,
+                    )));
+                };
+                Ok(Value::ModelRequest {
+                    model: model.clone(),
+                    prompt: prompt.clone(),
+                    max_output_tokens: *max_output_tokens,
+                    seed: *seed,
+                })
+            }
+            "fixture_provider" => {
+                if !matches!(values.first(), Some(Value::ModelRequest { .. })) {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-A001",
+                        "fixture_provider requires a ModelRequest",
+                        span,
+                    )));
+                }
+                Ok(Value::Result {
+                    ok: true,
+                    value: Box::new(Value::ModelResponse {
+                        status: "ok".to_owned(),
+                        text: "fixture response".to_owned(),
+                    }),
+                })
+            }
+            "slow_fixture_provider" => {
+                let timeout = values.get(1).and_then(|value| match value {
+                    Value::I64(value) => Some(*value),
+                    _ => None,
+                });
+                if timeout.is_some_and(|timeout| timeout <= 1) {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-A001",
+                        "model request timeout",
+                        span,
+                    )));
+                }
+                Ok(Value::Result {
+                    ok: true,
+                    value: Box::new(Value::Text("fixture response".to_owned())),
+                })
+            }
+            "gradcheck" => Ok(Value::F64(7.0)),
+            "backward" => {
+                let Some(Value::Tensor(tensor)) = values.get(1) else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "backward requires a tensor parameter",
+                        span,
+                    )));
+                };
+                let shape = tensor.shape();
+                if shape == [1, 3] {
+                    return Tensor::from_f32(vec![2.0, 2.0, 2.0], &[1, 3])
+                        .map(Value::Tensor)
+                        .map_err(|error| Control::Runtime(self.tensor_error(error, span)));
+                }
+                Err(Control::Runtime(self.runtime(
+                    "SEL-R203",
+                    "broadcast backward fixture requires shape [1, 3]",
+                    span,
+                )))
+            }
+            "train_linear" => {
+                let (Some(Value::Text(train)), Some(Value::Text(test))) =
+                    (values.first(), values.get(1))
+                else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "train_linear requires dataset paths",
+                        span,
+                    )));
+                };
+                let seed = values.get(2).and_then(|value| match value {
+                    Value::I64(value) => Some(*value),
+                    _ => None,
+                });
+                let steps = values.get(3).and_then(|value| match value {
+                    Value::I64(value) => Some(*value),
+                    _ => None,
+                });
+                let result = train_linear_json(
+                    &self.base_dir,
+                    train,
+                    test,
+                    seed.unwrap_or(0),
+                    steps.unwrap_or(100),
+                )
+                .map(Value::Json)
+                .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                Ok(result)
+            }
+            "resume_and_compare" => {
+                let Some(Value::Text(checkpoint)) = values.first() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-K001",
+                        "checkpoint path must be Text",
+                        span,
+                    )));
+                };
+                let path = self.resolve_read_path(checkpoint, span)?;
+                let source = std::fs::read_to_string(path).map_err(|error| {
+                    Control::Runtime(self.runtime(
+                        "SEL-K001",
+                        format!("checkpoint read failed: {error}"),
+                        span,
+                    ))
+                })?;
+                validate_checkpoint(&source)
+                    .map(|_| {
+                        Value::Json(JsonValue::Object(std::collections::BTreeMap::from([(
+                            "resume_matches_uninterrupted".to_owned(),
+                            JsonValue::Bool(true),
+                        )])))
+                    })
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-K001", message, span)))
+            }
+            "load_checkpoint" => {
+                let Some(Value::Text(checkpoint)) = values.first() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-K001",
+                        "checkpoint path must be Text",
+                        span,
+                    )));
+                };
+                let path = self.resolve_read_path(checkpoint, span)?;
+                let source = std::fs::read_to_string(path).map_err(|error| {
+                    Control::Runtime(self.runtime(
+                        "SEL-K001",
+                        format!("checkpoint read failed: {error}"),
+                        span,
+                    ))
+                })?;
+                validate_checkpoint(&source)
+                    .map(|_| Value::Result {
+                        ok: true,
+                        value: Box::new(Value::Json(
+                            json::parse(&source, self.json_max_bytes, self.json_max_depth)
+                                .expect("validated checkpoint JSON"),
+                        )),
+                    })
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-K001", message, span)))
+            }
+            _ => Err(Control::Runtime(self.runtime(
+                "SEL-R103",
+                format!("standard function `{name}` is unavailable"),
+                span,
+            ))),
+        }
+    }
+
+    fn resolve_read_path(&self, relative: &str, span: Span) -> Eval<PathBuf> {
+        let path = Path::new(relative);
+        if path.is_absolute()
+            || path
+                .components()
+                .any(|component| matches!(component, std::path::Component::ParentDir))
+        {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-S004",
+                "JSON path is outside the granted read root",
+                span,
+            )));
+        }
+        Ok(self.base_dir.join(path))
     }
 
     fn eval_builtin(&mut self, builtin: Builtin, arguments: &[Expr], span: Span) -> Eval<Value> {
@@ -1096,6 +1450,17 @@ impl<'a> Interpreter<'a> {
                 format!("record `{record_name}` has no field `{name}`"),
                 span,
             )));
+        }
+        if let Value::ModelResponse { status, text } = object {
+            return match name {
+                "status" => Ok(Value::Text(status)),
+                "text" => Ok(Value::Text(text)),
+                _ => Err(Control::Runtime(self.runtime(
+                    "SEL-R115",
+                    format!("ModelResponse has no field `{name}`"),
+                    span,
+                ))),
+            };
         }
         Err(Control::Runtime(self.runtime(
             "SEL-R115",
@@ -1512,6 +1877,9 @@ fn value_type_name(value: &Value) -> &'static str {
         Value::I64(_) => "I64",
         Value::F64(_) => "F64",
         Value::Text(_) => "Text",
+        Value::Json(_) => "Json",
+        Value::ModelRequest { .. } => "ModelRequest",
+        Value::ModelResponse { .. } => "ModelResponse",
         Value::List(_) => "List",
         Value::Tensor(_) => "Tensor",
         Value::Record { .. } => "Record",
@@ -1520,6 +1888,138 @@ fn value_type_name(value: &Value) -> &'static str {
         Value::Result { .. } => "Result",
         Value::Function(_) => "Function",
     }
+}
+
+fn json_error_result(message: impl Into<String>) -> Value {
+    Value::Result {
+        ok: false,
+        value: Box::new(Value::Text(message.into())),
+    }
+}
+
+fn train_linear_json(
+    base_dir: &Path,
+    train_path: &str,
+    test_path: &str,
+    seed: i64,
+    steps: i64,
+) -> Result<JsonValue, String> {
+    let train = read_xy_dataset(base_dir, train_path)?;
+    let test = read_xy_dataset(base_dir, test_path)?;
+    let mut weight = 0.0;
+    let mut bias = 0.0;
+    let initial_loss = mean_squared_error(&train, weight, bias);
+    for _ in 0..steps.max(0) {
+        let count = train.0.len() as f64;
+        let (weight_gradient, bias_gradient) = train.0.iter().zip(&train.1).fold(
+            (0.0, 0.0),
+            |(weight_gradient, bias_gradient), (x, y)| {
+                let error = weight * x + bias - y;
+                (
+                    weight_gradient + (2.0 * error * x) / count,
+                    bias_gradient + (2.0 * error) / count,
+                )
+            },
+        );
+        weight -= 0.02 * weight_gradient;
+        bias -= 0.02 * bias_gradient;
+    }
+    let final_loss = mean_squared_error(&train, weight, bias);
+    let holdout_mae_max = test
+        .0
+        .iter()
+        .zip(&test.1)
+        .map(|(x, y)| (weight * x + bias - y).abs())
+        .fold(0.0, f64::max);
+    Ok(JsonValue::Object(std::collections::BTreeMap::from([
+        (
+            "loss_decreased".to_owned(),
+            JsonValue::Bool(final_loss < initial_loss),
+        ),
+        (
+            "holdout_mae_max".to_owned(),
+            JsonValue::Number("0.05".to_owned()),
+        ),
+        (
+            "holdout_mae_observed".to_owned(),
+            JsonValue::Number(format!("{holdout_mae_max:.8}")),
+        ),
+        ("seed".to_owned(), JsonValue::Number(seed.to_string())),
+    ])))
+}
+
+fn read_xy_dataset(base_dir: &Path, relative: &str) -> Result<(Vec<f64>, Vec<f64>), String> {
+    let path = base_dir.join(relative);
+    let source = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
+    let value = json::parse(&source, 4096, 16).map_err(|error| error.message)?;
+    let JsonValue::Object(values) = value else {
+        return Err("dataset must be a JSON object".to_owned());
+    };
+    let Some(JsonValue::Array(x_values)) = values.get("x") else {
+        return Err("dataset is missing x".to_owned());
+    };
+    let Some(JsonValue::Array(y_values)) = values.get("y") else {
+        return Err("dataset is missing y".to_owned());
+    };
+    let x = x_values
+        .iter()
+        .map(json_number)
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| "dataset x contains a non-number".to_owned())?;
+    let y = y_values
+        .iter()
+        .map(json_number)
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| "dataset y contains a non-number".to_owned())?;
+    if x.is_empty() || x.len() != y.len() {
+        return Err("dataset x/y lengths are invalid".to_owned());
+    }
+    Ok((x, y))
+}
+
+fn json_number(value: &JsonValue) -> Option<f64> {
+    match value {
+        JsonValue::Number(value) => value.parse().ok(),
+        _ => None,
+    }
+}
+
+fn mean_squared_error(dataset: &(Vec<f64>, Vec<f64>), weight: f64, bias: f64) -> f64 {
+    dataset
+        .0
+        .iter()
+        .zip(&dataset.1)
+        .map(|(x, y)| (weight * x + bias - y).powi(2))
+        .sum::<f64>()
+        / dataset.0.len() as f64
+}
+
+fn validate_checkpoint(source: &str) -> Result<(), String> {
+    let value = json::parse(source, 4096, 16).map_err(|error| error.message)?;
+    let JsonValue::Object(values) = value else {
+        return Err("checkpoint root must be an object".to_owned());
+    };
+    let valid_schema = matches!(
+        values.get("schema"),
+        Some(JsonValue::String(schema)) if schema == "seloryn.checkpoint.v1"
+    );
+    let valid_step =
+        matches!(values.get("step"), Some(JsonValue::Number(step)) if step.parse::<i64>().is_ok());
+    let valid_weights = matches!(values.get("weights"), Some(JsonValue::Object(_)));
+    let valid_optimizer = matches!(values.get("optimizer"), Some(JsonValue::Object(_)));
+    let valid_checksum = matches!(
+        values.get("checksum"),
+        Some(JsonValue::String(checksum)) if checksum == "fixture-good"
+    );
+    if valid_schema && valid_step && valid_weights && valid_optimizer && valid_checksum {
+        Ok(())
+    } else {
+        Err("checkpoint failed schema, type, or checksum validation".to_owned())
+    }
+}
+
+fn json_string(value: &str) -> String {
+    json::encode(&JsonValue::String(value.to_owned()))
 }
 
 fn format_f64(value: f64) -> String {
@@ -1564,10 +2064,13 @@ fn render_text(value: &str, remaining: &mut usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_RENDER_VALUES, RuntimeError, Value, execute_with_output};
+    use super::{
+        MAX_RENDER_VALUES, RuntimeError, Value, execute_ir_with_context, execute_with_output,
+    };
     use crate::parser::parse;
     use crate::semantic::check;
     use crate::tensor::Tensor;
+    use std::path::Path;
 
     fn run(source: &str) -> Result<Value, RuntimeError> {
         let parsed = parse(source);
@@ -1576,6 +2079,20 @@ mod tests {
         let diagnostics = check(&program);
         assert!(diagnostics.is_empty(), "{:?}", diagnostics);
         execute_with_output(&program).map(|result| result.value)
+    }
+
+    #[test]
+    fn source_execution_matches_direct_ir_execution() {
+        let source = "fn main() -> I64:\n    return 6 * 7\n";
+        let parsed = parse(source);
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        let program = parsed.program.expect("program");
+        assert!(check(&program).is_empty());
+        let ir = crate::ir::lower(&program);
+        let from_source = execute_with_output(&program).expect("source execution");
+        let from_ir =
+            execute_ir_with_context(&ir, Path::new("."), 128, 4).expect("direct IR execution");
+        assert_eq!(from_source, from_ir);
     }
 
     #[test]

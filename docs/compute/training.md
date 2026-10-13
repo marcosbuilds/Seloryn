@@ -1,9 +1,13 @@
 # Model training
 
-**Design target only:** Seloryn 0.00 has no trainer, dataset API, optimizer or
-model execution runtime. Seloryn's AI mission is to eventually train actual
-networks end-to-end, not just call external inference endpoints. This requires
-a reliable stack from dataset ingestion to optimizer checkpointing.
+**General training remains a design target:** Seloryn 0.00 does not have a
+general trainer, dataset API, optimizer or model execution runtime. The
+repository does contain a narrow, fixture-driven `training.train_linear`
+contract with real CPU parameter updates, MSE/SGD, a fixed seed, holdout
+evaluation and checkpoint validation. Its output reports `holdout_mae_max` as
+the accepted cap (`0.05`) and `holdout_mae_observed` as the measured value; it
+does not imply a general ML framework. Seloryn's AI mission is to eventually
+train actual networks end-to-end, not just call external inference endpoints.
 
 ### Intended training loop (unimplemented)
 
@@ -28,7 +32,9 @@ for batch in dataset.batches(size=64):
     metrics.record("loss", loss.item())
 ```
 
-The final optimizer, gradient-tape and layers APIs are candidates until fully tested; example is a **design target**. There is no existing trainer or dataset API yet.
+The final optimizer, gradient-tape and layers APIs are candidates until fully
+tested; this example is a **design target**. The narrow fixture is not exposed
+as a general dataset API.
 
 ### Minimum viable REAL training evidence
 

@@ -12,11 +12,19 @@ enum Type {
     Bool,
     I64,
     F64,
+    F32,
     Text,
     List(Box<Type>),
     Option(Box<Type>),
     Result(Box<Type>, Box<Type>),
     Tensor(TensorDtype),
+    Json,
+    JsonError,
+    JsonIoError,
+    ModelRequest,
+    ModelResponse,
+    ModelError,
+    CheckpointError,
     Record(String),
     Enum(String),
     Function(Vec<Type>, Box<Type>),
@@ -80,6 +88,7 @@ struct Checker<'a> {
     scopes: Vec<Scope>,
     current_function: Option<FunctionContext>,
     io_print_imported: bool,
+    stdlib_imports: HashSet<String>,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -93,6 +102,7 @@ impl<'a> Checker<'a> {
             scopes: Vec::new(),
             current_function: None,
             io_print_imported: false,
+            stdlib_imports: HashSet::new(),
             diagnostics: Vec::new(),
         }
     }
@@ -109,11 +119,19 @@ impl<'a> Checker<'a> {
             let Item::Directive(directive) = item else {
                 continue;
             };
-            if directive.keyword == "from"
-                && directive.text.split_whitespace().collect::<Vec<_>>()
-                    == ["io", "import", "print"]
-            {
-                self.io_print_imported = true;
+            if directive.keyword == "from" && is_supported_standard_directive(&directive.text) {
+                let mut parts = directive.text.split_whitespace();
+                let Some(module) = parts.next() else {
+                    continue;
+                };
+                let _ = parts.next();
+                for symbol in parts {
+                    self.stdlib_imports
+                        .insert(symbol.trim_end_matches(',').to_owned());
+                }
+                if module == "io" && self.stdlib_imports.contains("print") {
+                    self.io_print_imported = true;
+                }
             }
         }
     }
@@ -271,8 +289,7 @@ impl<'a> Checker<'a> {
                 Item::Binding(binding) => self.check_top_binding(binding),
                 Item::Directive(directive) => {
                     let supported = directive.keyword == "from"
-                        && directive.text.split_whitespace().collect::<Vec<_>>()
-                            == ["io", "import", "print"];
+                        && is_supported_standard_directive(&directive.text);
                     if !supported {
                         self.error(
                             "SEL-M001",
@@ -860,6 +877,7 @@ impl<'a> Checker<'a> {
                 arguments,
                 span,
             } => self.type_of_call(callee, arguments, *span),
+            Expr::NamedArgument { value, .. } => self.type_of_expr(value),
             Expr::Member {
                 object,
                 name,
@@ -995,6 +1013,9 @@ impl<'a> Checker<'a> {
 
     fn type_of_call(&mut self, callee: &Expr, arguments: &[Expr], span: Span) -> Type {
         if let Expr::Name { name, .. } = callee {
+            if self.stdlib_imports.contains(name) && name != "print" {
+                return self.type_of_standard_call(name, arguments, span);
+            }
             if name == "print" && self.io_print_imported {
                 if arguments.len() != 1 {
                     self.error("SEL-T005", "`print` expects one argument", span);
@@ -1257,6 +1278,126 @@ impl<'a> Checker<'a> {
         }
     }
 
+    fn type_of_standard_call(&mut self, name: &str, arguments: &[Expr], span: Span) -> Type {
+        let result = |value: Type| Type::Result(Box::new(value), Box::new(Type::JsonIoError));
+        match name {
+            "read_file" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(path) = arguments.first() {
+                    self.ensure_expr_assignable(path, &Type::Text, "JSON path");
+                }
+                result(Type::Json)
+            }
+            "parse" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(text) = arguments.first() {
+                    self.ensure_expr_assignable(text, &Type::Text, "JSON text");
+                }
+                result(Type::Json)
+            }
+            "encode" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(value, &Type::Json, "JSON value");
+                }
+                result(Type::Text)
+            }
+            "get" => {
+                self.check_standard_arity(name, arguments, 2, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(value, &Type::Json, "JSON value");
+                }
+                if let Some(path) = arguments.get(1) {
+                    self.ensure_expr_assignable(
+                        path,
+                        &Type::List(Box::new(Type::Text)),
+                        "JSON path",
+                    );
+                }
+                result(Type::Json)
+            }
+            "as_text" | "as_i64" | "as_f32" | "as_bool" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(value, &Type::Json, "JSON value");
+                }
+                let value = match name {
+                    "as_text" => Type::Text,
+                    "as_i64" => Type::I64,
+                    "as_f32" => Type::F64,
+                    "as_bool" => Type::Bool,
+                    _ => Type::Error,
+                };
+                result(value)
+            }
+            "ModelRequest" => {
+                self.check_standard_arity(name, arguments, 4, span);
+                Type::ModelRequest
+            }
+            "fixture_provider" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(request) = arguments.first() {
+                    self.ensure_expr_assignable(request, &Type::ModelRequest, "model request");
+                }
+                Type::Result(Box::new(Type::ModelResponse), Box::new(Type::ModelError))
+            }
+            "slow_fixture_provider" => {
+                self.check_standard_arity(name, arguments, 2, span);
+                if let Some(request) = arguments.first() {
+                    self.ensure_expr_assignable(request, &Type::ModelRequest, "model request");
+                }
+                if let Some(timeout) = arguments.get(1) {
+                    self.ensure_expr_assignable(timeout, &Type::I64, "model timeout");
+                }
+                Type::Result(Box::new(Type::Text), Box::new(Type::ModelError))
+            }
+            "gradcheck" => {
+                self.check_standard_arity(name, arguments, 2, span);
+                Type::F32
+            }
+            "backward" => {
+                self.check_standard_arity(name, arguments, 2, span);
+                Type::Tensor(TensorDtype::F32)
+            }
+            "train_linear" | "resume_and_compare" => {
+                if name == "train_linear" {
+                    self.check_standard_arity(name, arguments, 4, span);
+                } else {
+                    self.check_standard_arity(name, arguments, 2, span);
+                }
+                Type::Json
+            }
+            "load_checkpoint" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                Type::Result(Box::new(Type::Json), Box::new(Type::CheckpointError))
+            }
+            _ => {
+                self.error(
+                    "SEL-M002",
+                    format!("standard function `{name}` is unavailable"),
+                    span,
+                );
+                Type::Error
+            }
+        }
+    }
+
+    fn check_standard_arity(
+        &mut self,
+        name: &str,
+        arguments: &[Expr],
+        expected: usize,
+        span: Span,
+    ) {
+        if arguments.len() != expected {
+            self.error(
+                "SEL-T005",
+                format!("standard function `{name}` expects {expected} argument(s)"),
+                span,
+            );
+        }
+    }
+
     fn ensure_tensor_argument(&mut self, argument: &Expr, context: &str) -> Type {
         let actual = self.type_of_expr(argument);
         self.ensure_tensor_type(&actual, argument.span(), context);
@@ -1342,6 +1483,19 @@ impl<'a> Checker<'a> {
             );
             return Type::Error;
         }
+        if matches!(&object_type, Type::ModelResponse) {
+            return match name {
+                "status" | "text" => Type::Text,
+                _ => {
+                    self.error(
+                        "SEL-T007",
+                        format!("ModelResponse has no field `{name}`"),
+                        span,
+                    );
+                    Type::Error
+                }
+            };
+        }
         self.error("SEL-T007", format!("cannot access member `{name}`"), span);
         Type::Error
     }
@@ -1352,6 +1506,7 @@ impl<'a> Checker<'a> {
             "Bool" if expression.arguments.is_empty() => Type::Bool,
             "I64" if expression.arguments.is_empty() => Type::I64,
             "F64" if expression.arguments.is_empty() => Type::F64,
+            "F32" if expression.arguments.is_empty() => Type::F32,
             "Text" if expression.arguments.is_empty() => Type::Text,
             "Tensor" if expression.arguments.len() == 1 => {
                 match expression.arguments[0].name.as_str() {
@@ -1381,6 +1536,13 @@ impl<'a> Checker<'a> {
                 Box::new(self.type_from_expr(&expression.arguments[0])),
                 Box::new(self.type_from_expr(&expression.arguments[1])),
             ),
+            "Json" if expression.arguments.is_empty() => Type::Json,
+            "JsonError" if expression.arguments.is_empty() => Type::JsonError,
+            "JsonIoError" if expression.arguments.is_empty() => Type::JsonIoError,
+            "ModelRequest" if expression.arguments.is_empty() => Type::ModelRequest,
+            "ModelResponse" if expression.arguments.is_empty() => Type::ModelResponse,
+            "ModelError" if expression.arguments.is_empty() => Type::ModelError,
+            "CheckpointError" if expression.arguments.is_empty() => Type::CheckpointError,
             name if expression.arguments.is_empty() && self.records.contains_key(name) => {
                 Type::Record(name.to_owned())
             }
@@ -1428,6 +1590,9 @@ impl<'a> Checker<'a> {
         }
         if left == &Type::F64 && right == &Type::F64 {
             return Type::F64;
+        }
+        if left == &Type::F32 && right == &Type::F32 {
+            return Type::F32;
         }
         if let (Type::Tensor(left), Type::Tensor(right)) = (left, right)
             && left == right
@@ -1513,6 +1678,7 @@ fn assignable(actual: &Type, expected: &Type) -> bool {
         return true;
     }
     match (actual, expected) {
+        (Type::F64, Type::F32) => true,
         (Type::List(actual), Type::List(expected))
         | (Type::Option(actual), Type::Option(expected)) => assignable(actual, expected),
         (
@@ -1535,12 +1701,55 @@ fn assignable(actual: &Type, expected: &Type) -> bool {
     }
 }
 
+fn is_supported_standard_directive(text: &str) -> bool {
+    let mut parts = text.split_whitespace();
+    let Some(module) = parts.next() else {
+        return false;
+    };
+    if parts.next() != Some("import") {
+        return false;
+    }
+    let symbols = parts
+        .map(|part| part.trim_end_matches(','))
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    if symbols.is_empty() {
+        return false;
+    }
+    let allowed = match module {
+        "io" => ["print"].as_slice(),
+        "json" => [
+            "parse",
+            "read_file",
+            "encode",
+            "get",
+            "as_text",
+            "as_i64",
+            "as_f32",
+            "as_bool",
+        ]
+        .as_slice(),
+        "models" => [
+            "ModelRequest",
+            "ModelResponse",
+            "fixture_provider",
+            "slow_fixture_provider",
+        ]
+        .as_slice(),
+        "autograd" => ["backward", "gradcheck"].as_slice(),
+        "training" => ["train_linear", "resume_and_compare", "load_checkpoint"].as_slice(),
+        _ => return false,
+    };
+    symbols.iter().all(|symbol| allowed.contains(symbol))
+}
+
 fn display_type(ty: &Type) -> String {
     match ty {
         Type::Unit => "Unit".to_owned(),
         Type::Bool => "Bool".to_owned(),
         Type::I64 => "I64".to_owned(),
         Type::F64 => "F64".to_owned(),
+        Type::F32 => "F32".to_owned(),
         Type::Text => "Text".to_owned(),
         Type::List(inner) => format!("List[{}]", display_type(inner)),
         Type::Option(inner) => format!("Option[{}]", display_type(inner)),
@@ -1548,6 +1757,22 @@ fn display_type(ty: &Type) -> String {
             format!("Result[{}, {}]", display_type(value), display_type(error))
         }
         Type::Tensor(dtype) => format!("Tensor[{}]", dtype),
+        Type::Json
+        | Type::JsonError
+        | Type::JsonIoError
+        | Type::ModelRequest
+        | Type::ModelResponse
+        | Type::ModelError
+        | Type::CheckpointError => match ty {
+            Type::Json => "Json".to_owned(),
+            Type::JsonError => "JsonError".to_owned(),
+            Type::JsonIoError => "JsonIoError".to_owned(),
+            Type::ModelRequest => "ModelRequest".to_owned(),
+            Type::ModelResponse => "ModelResponse".to_owned(),
+            Type::ModelError => "ModelError".to_owned(),
+            Type::CheckpointError => "CheckpointError".to_owned(),
+            _ => unreachable!(),
+        },
         Type::Record(name) | Type::Enum(name) => name.clone(),
         Type::Function(parameters, return_type) => format!(
             "fn({}) -> {}",

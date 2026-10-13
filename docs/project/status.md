@@ -1,6 +1,6 @@
 # Current capability status
 
-**Primary truth source for Seloryn 0.00.** The repository contains an experimental syntax and semantic checker, a bounded pure E4 interpreter and bounded pure N1/N2 CPU tensor runtimes. It does not contain a core IR, effects runtime, accelerator backend or public release. This page reports the observed implementation boundary.
+**Primary truth source for Seloryn 0.00.** The repository contains an experimental syntax and semantic checker, a deterministic lowered core IR, a bounded pure E4 interpreter, local project modules, bounded JSON capability, narrow model/training fixtures and bounded pure N1/N2 CPU tensor runtimes. It does not contain a package registry, general effects runtime, accelerator backend, supported installer or public release. This page reports the observed implementation boundary.
 
 ## What works today
 
@@ -14,19 +14,23 @@
 | Pure E4 interpreter for scalar/list values, list indexing and iteration, mutable `var` assignment, records, enums, `Result`, `Option`, calls, control flow and pipelines | Experimental implemented and tested | [`execute`](../../src/runtime.rs#L121), runtime and CLI tests |
 | N1 CPU tensors (`Tensor[F32]`/`Tensor[I64]`) | Experimental implemented and tested | [`src/tensor`](../../src/tensor), [`tensor_cpu.rs`](../../tests/tensor_cpu.rs) |
 | N2 CPU numeric closure | Experimental implemented and tested | [`src/tensor/ops.rs`](../../src/tensor/ops.rs), [`n2_probe.py`](../../tests/n2_probe.py), [`tensor-numeric.sely`](../../examples/tensor-numeric.sely) |
-| CLI `--help`, `--version`, `check` and `run` | Implemented development CLI | [`check_path`](../../src/main.rs#L86), [`run_path`](../../src/main.rs#L132), [CLI tests](../../tests/bootstrap_cli.rs#L61) |
+| Deterministic core IR boundary | Experimental implemented and tested | [`src/ir.rs`](../../src/ir.rs), runtime and lowering tests |
+| Local project modules and `seloryn.toml` | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), F3 project fixtures |
+| JSON read/parse/encode/get with root and size limits | Experimental implemented and tested | [`src/json.rs`](../../src/json.rs), F4 fixtures |
+| Model contract, scalar/broadcast gradient, linear training and checkpoint fixtures | Experimental implemented, narrow | Runtime fixture builtins; F5/N3/N4/CKPT gate cases |
+| CLI `--help`, `--version`, `check`, `run`, `build` and `exec` | Implemented development CLI | [`src/main.rs`](../../src/main.rs), CLI and B1 fixtures |
 | Human/JSON diagnostics, stable source spans, `--quiet` and `from io import print` | Experimental F1 subset implemented and tested | [`Diagnostic`](../../src/diagnostic.rs), [`--format=json`](../../src/main.rs), CLI tests |
 
 ## What is not implemented
 
 | Capability | State | Consequence |
 |---|---|---|
-| Core IR | **Not implemented** | E4 evaluates the checked AST directly; no lowering or optimizer exists |
-| Modules, packages and standard library | **Not implemented except the narrow `io.print` F1 fixture** | general imports return an explicit unavailable diagnostic |
-| Files, HTTP, processes and automation | **Not implemented** | no systems program can run |
-| Autograd, optimizers, checkpoints and training | **Not implemented** | no model can train |
+| Core IR optimization and SSA passes | **Not implemented** | the current IR is deterministic and structural; no optimizer or SSA pass is claimed |
+| External packages, registry and broad standard library | **Not implemented** | local modules and narrow stdlib fixtures only |
+| HTTP, processes and unrestricted file effects | **Not implemented** | only bounded root-confined JSON reads are available |
+| General autograd, optimizers, MLPs and model serving | **Not implemented** | narrow scalar/broadcast/linear fixtures do not imply a general ML stack |
 | GPU, distributed execution and serving | **Not implemented** | no accelerator or production service exists |
-| Formatter, LSP, installer and release artifacts | **Not implemented or verified** | no supported installation path exists |
+| Formatter, LSP, public installer and release artifacts | **Not implemented or verified** | local B2 scripts install an existing Windows binary; no supported release path exists |
 
 ## E3 gate fulfillment
 
@@ -39,13 +43,13 @@ Percentages below are engineering estimates of the design gate, not test coverag
 | E3.2 — types and inference | 65% | [`type_of_expr`](../../src/semantic.rs#L652), [`type_from_expr`](../../src/semantic.rs#L1005) | No user generics or symbolic shape constraints |
 | E3.3 — records, enums and fallibility | 75% | [`check_require`](../../src/semantic.rs#L371), [`type_of_call`](../../src/semantic.rs#L845), Result/Option tests | General error conversion and runtime resource behavior remain outside E3/E4 |
 | E3.4 — exhaustive `match` | 70% | [`check_match`](../../src/semantic.rs#L409), [`required_coverage`](../../src/semantic.rs#L632), match tests | Structural/named-field patterns and ranges remain outside; the validated constructor subset executes |
-| E3.5 — semantic CLI proof | 55% | [`check_path`](../../src/main.rs#L83), 15 CLI integration tests | No JSON diagnostics, property/fuzz campaign, golden corpus or Linux/macOS execution evidence |
+| E3.5 — semantic CLI proof | 70% | [`check_path`](../../src/main.rs#L83), structured diagnostics and CLI integration tests | Property/fuzz campaign, golden corpus and Linux/macOS execution evidence remain absent |
 
 ## E4 execution evidence
 
 E4 is **experimental implemented** for the validated E3 subset. `seloryn run`
 reads UTF-8 source, stops on any lexical, parse or semantic diagnostic, then
-executes `fn main()` through the pure tree-walk interpreter. The runtime covers
+executes `fn main()` through the deterministic lowered IR interpreter. The runtime covers
 `Bool`, `I64`, `F64`, `Text`, `Unit`, `List`, nominal records, closed enums,
 `Option`, `Result`, `if`, `match`, `require`, calls, recursion, return,
 `??`, postfix `?`, list indexing, list iteration, mutable `var` assignment, list
@@ -56,11 +60,11 @@ overflowing the host runtime. Large values are rendered with a deterministic
 truncation marker; storage and computation remain bounded by their separate
 runtime limits.
 
-Evidence is [`src/runtime.rs`](../../src/runtime.rs) plus the CLI tests in
+Evidence is [`src/ir.rs`](../../src/ir.rs) and [`src/runtime.rs`](../../src/runtime.rs) plus the CLI tests in
 [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs). The interpreter does
 not perform filesystem, network, process, module or GPU effects. The N1 bridge
 adds owned CPU buffers and numeric kernels without adding effects or a `print`
-API. The core IR and all systems/runtime gates remain future work.
+API. The IR is structural and deterministic; optimization, effects and broader runtime gates remain future work.
 
 ## N1 CPU tensor evidence
 
@@ -88,17 +92,18 @@ where applicable. [`tests/n2_probe.py`](../../tests/n2_probe.py) compares real
 CLI output against an independent Python standard-library reference and repeats
 negative diagnostics.
 
-N2 does not provide a tape, gradient API, optimizer, training loop, arbitrary
-tensor views, symbolic shapes, GPU or effects. N3 reverse-mode autograd remains
-the next numeric gate; the language version remains `0.00`.
+N2 does not provide a general tape, optimizer, arbitrary tensor views, symbolic
+shapes, GPU or effects. The current N3/N4/CKPT fixtures are narrow, explicitly
+tested contracts and do not claim a general training framework. The language
+version remains `0.00`.
 
 ## Gaps versus the design review
 
 E3 is therefore **not fully complete**. The checker proves a meaningful front-end subset, but E3.3, E3.4 and E3.5 still have the boundaries listed above. In particular:
 
 - A successful `check` means syntax and supported static rules passed; `run` adds the separately tested pure E4 execution step.
-- Training, model-serving and GPU text in the repository describes design targets, not available capabilities.
-- Examples using `print`, modules, named record patterns or future libraries remain design concepts unless a page explicitly says otherwise.
-- E4, N1 and N2 have bounded execution results; the core IR and reverse-mode autograd remain future work.
+- General training, model-serving and GPU text in the repository describes design targets, not available capabilities.
+- Examples using broad effects, named record patterns or future libraries remain design concepts unless a page explicitly says otherwise.
+- E4, N1, N2, F3/F4 and the narrow F5/N3/N4/CKPT/B1 fixtures have bounded experimental results; broader autograd remains future work.
 
 The implementation policy is staged: a feature becomes available only after source behavior, negative tests and platform evidence exist. The language version remains `0.00`; no release or earned gain is claimed by this status page.
