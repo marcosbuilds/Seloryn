@@ -14,7 +14,12 @@ error[SEL-T102]: expected Bool, got Text
   = help: use a Bool predicate such as username.length > 0
 ```
 
-A diagnostic has stable `code`, severity, module, source span (byte offsets and Unicode-aware display columns), primary and secondary labels, help, machine-readable JSON form and reproducible ordering. No stacktrace dump by default.
+A diagnostic has stable `code`, severity, category, source file, a primary
+source span (byte offsets and Unicode-aware display columns), help,
+machine-readable JSON form and reproducible ordering. Runtime JSON diagnostics
+also carry the deterministic function stack. Secondary labels, related
+diagnostics and module identities remain future fields; they are not claimed by
+the current CLI.
 
 | Family | Codes | Example |
 |---|---|---|

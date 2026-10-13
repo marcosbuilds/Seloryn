@@ -20,13 +20,43 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely>\n  seloryn run <file.sely>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar and N1/N2 CPU tensor subset.\nThe standard library and installable release are not available yet.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json]\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar and N1/N2 CPU tensor subset.\nThe standard library and installable release are not available yet.\n";
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OutputFormat {
+    Human,
+    Json,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ColorMode {
+    Auto,
+    Always,
+    Never,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Options {
+    format: OutputFormat,
+    color: ColorMode,
+    quiet: bool,
+}
+
+impl Default for Options {
+    fn default() -> Self {
+        Self {
+            format: OutputFormat::Human,
+            color: ColorMode::Auto,
+            quiet: false,
+        }
+    }
+}
 
 enum Action {
     Help,
     Version,
-    Check(OsString),
-    Run(OsString),
+    Check { path: OsString, options: Options },
+    Run { path: OsString, options: Options },
     Unsupported(String),
 }
 
@@ -41,8 +71,8 @@ fn run(args: &[OsString]) -> u8 {
         Action::Version => write_stdout(&format!(
             "seloryn {LANGUAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=experimental-implemented\n"
         )),
-        Action::Check(path) => check_path(PathBuf::from(path)),
-        Action::Run(path) => run_path(PathBuf::from(path)),
+        Action::Check { path, options } => check_path(PathBuf::from(path), options),
+        Action::Run { path, options } => run_path(PathBuf::from(path), options),
         Action::Unsupported(command) => write_stderr(&format!(
             "SEL-C001 unsupported command or argument: {command}\n"
         )),
@@ -54,14 +84,103 @@ fn classify(args: &[OsString]) -> Action {
         [] => Action::Help,
         [argument] if argument == "--help" || argument == "-h" => Action::Help,
         [argument] if argument == "--version" => Action::Version,
-        [command, path] if command == "check" => Action::Check(path.clone()),
-        [command, path] if command == "run" => Action::Run(path.clone()),
-        _ => Action::Unsupported(
-            args.iter()
-                .map(|argument| display_argument(argument))
-                .collect::<Vec<_>>()
-                .join(" "),
-        ),
+        [command, rest @ ..] if command == "check" => parse_command("check", rest),
+        [command, rest @ ..] if command == "run" => parse_command("run", rest),
+        _ => unsupported_arguments(args),
+    }
+}
+
+fn parse_command(command: &str, args: &[OsString]) -> Action {
+    let mut options = Options::default();
+    let mut path = None;
+    let mut index = 0;
+    while index < args.len() {
+        let argument = &args[index];
+        if argument == "--quiet" {
+            options.quiet = true;
+        } else if argument == "--format" || argument == "--color" {
+            let Some(value) = args.get(index + 1) else {
+                return unsupported_arguments(args);
+            };
+            if argument == "--format" {
+                let Some(format) = parse_format(value) else {
+                    return unsupported_arguments(args);
+                };
+                options.format = format;
+            } else {
+                let Some(color) = parse_color(value) else {
+                    return unsupported_arguments(args);
+                };
+                options.color = color;
+            }
+            index += 1;
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--format="))
+        {
+            let Some(format) = parse_format_text(value) else {
+                return unsupported_arguments(args);
+            };
+            options.format = format;
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--color="))
+        {
+            let Some(color) = parse_color_text(value) else {
+                return unsupported_arguments(args);
+            };
+            options.color = color;
+        } else if argument
+            .to_str()
+            .is_some_and(|value| value.starts_with('-'))
+        {
+            return unsupported_arguments(args);
+        } else if path.replace(argument.clone()).is_some() {
+            return unsupported_arguments(args);
+        }
+        index += 1;
+    }
+    let Some(path) = path else {
+        return unsupported_arguments(args);
+    };
+    match command {
+        "check" => Action::Check { path, options },
+        "run" => Action::Run { path, options },
+        _ => Action::Unsupported(command.to_owned()),
+    }
+}
+
+fn unsupported_arguments(args: &[OsString]) -> Action {
+    Action::Unsupported(
+        args.iter()
+            .map(|argument| display_argument(argument))
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
+fn parse_format(argument: &OsString) -> Option<OutputFormat> {
+    parse_format_text(argument.to_str()?)
+}
+
+fn parse_format_text(value: &str) -> Option<OutputFormat> {
+    match value {
+        "human" => Some(OutputFormat::Human),
+        "json" => Some(OutputFormat::Json),
+        _ => None,
+    }
+}
+
+fn parse_color(argument: &OsString) -> Option<ColorMode> {
+    parse_color_text(argument.to_str()?)
+}
+
+fn parse_color_text(value: &str) -> Option<ColorMode> {
+    match value {
+        "auto" => Some(ColorMode::Auto),
+        "always" => Some(ColorMode::Always),
+        "never" => Some(ColorMode::Never),
+        _ => None,
     }
 }
 
@@ -85,7 +204,7 @@ fn display_argument(argument: &OsStr) -> String {
     displayed
 }
 
-fn check_path(path: PathBuf) -> u8 {
+fn check_path(path: PathBuf, options: Options) -> u8 {
     let label = display_argument(path.as_os_str());
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
@@ -104,7 +223,7 @@ fn check_path(path: PathBuf) -> u8 {
                 format!("source is not valid UTF-8 at byte offset {offset}"),
                 diagnostic::Span::new(offset, offset.saturating_add(1)),
             );
-            return write_diagnostics(&diagnostic::render_at_start(&path, &diagnostic));
+            return write_diagnostics(&path, "", &[diagnostic], options);
         }
     };
 
@@ -115,23 +234,17 @@ fn check_path(path: PathBuf) -> u8 {
         };
         let semantic_diagnostics = semantic::check(&program);
         if semantic_diagnostics.is_empty() {
+            if options.quiet {
+                return EXIT_OK;
+            }
             return write_stdout(&format!("checked {label} (syntax + semantics)\n"));
         }
-        let rendered = semantic_diagnostics
-            .iter()
-            .map(|diagnostic| diagnostic::render(&path, &source, diagnostic))
-            .collect::<String>();
-        return write_diagnostics(&rendered);
+        return write_diagnostics(&path, &source, &semantic_diagnostics, options);
     }
-    let rendered = parsed
-        .diagnostics
-        .iter()
-        .map(|diagnostic| diagnostic::render(&path, &source, diagnostic))
-        .collect::<String>();
-    write_diagnostics(&rendered)
+    write_diagnostics(&path, &source, &parsed.diagnostics, options)
 }
 
-fn run_path(path: PathBuf) -> u8 {
+fn run_path(path: PathBuf, options: Options) -> u8 {
     let label = display_argument(path.as_os_str());
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
@@ -150,44 +263,49 @@ fn run_path(path: PathBuf) -> u8 {
                 format!("source is not valid UTF-8 at byte offset {offset}"),
                 diagnostic::Span::new(offset, offset.saturating_add(1)),
             );
-            return write_diagnostics(&diagnostic::render_at_start(&path, &diagnostic));
+            return write_diagnostics(&path, "", &[diagnostic], options);
         }
     };
 
     let parsed = parser::parse(&source);
     if !parsed.diagnostics.is_empty() {
-        let rendered = parsed
-            .diagnostics
-            .iter()
-            .map(|diagnostic| diagnostic::render(&path, &source, diagnostic))
-            .collect::<String>();
-        return write_diagnostics(&rendered);
+        return write_diagnostics(&path, &source, &parsed.diagnostics, options);
     }
     let Some(program) = parsed.program else {
         return write_stderr("SEL-C004 parser returned no program without diagnostics\n");
     };
     let semantic_diagnostics = semantic::check(&program);
     if !semantic_diagnostics.is_empty() {
-        let rendered = semantic_diagnostics
-            .iter()
-            .map(|diagnostic| diagnostic::render(&path, &source, diagnostic))
-            .collect::<String>();
-        return write_diagnostics(&rendered);
+        return write_diagnostics(&path, &source, &semantic_diagnostics, options);
     }
 
-    match runtime::execute(&program) {
-        Ok(value) => write_stdout(&format!("{}\n", value.render())),
+    match runtime::execute_with_output(&program) {
+        Ok(output) => {
+            let mut rendered = output.stdout;
+            if output.value != runtime::Value::Unit {
+                rendered.push_str(&format!("{}\n", output.value.render()));
+            }
+            if rendered.is_empty() {
+                EXIT_OK
+            } else {
+                write_stdout(&rendered)
+            }
+        }
         Err(error) => {
             let diagnostic = error.diagnostic();
-            let mut rendered = diagnostic::render(&path, &source, &diagnostic);
-            if !error.stack.is_empty() {
-                rendered.push_str(&format!(
-                    "{}: stack {}\n",
-                    path.display(),
-                    error.stack.join(" -> ")
-                ));
+            if options.format == OutputFormat::Human {
+                let mut rendered = diagnostic::render(&path, &source, &diagnostic);
+                if !error.stack.is_empty() {
+                    rendered.push_str(&format!(
+                        "{}: stack {}\n",
+                        path.display(),
+                        error.stack.join(" -> ")
+                    ));
+                }
+                write_data_stderr(&rendered)
+            } else {
+                write_diagnostics(&path, &source, &[diagnostic], options)
             }
-            write_diagnostics(&rendered)
         }
     }
 }
@@ -206,11 +324,28 @@ fn write_stderr(message: &str) -> u8 {
     }
 }
 
-fn write_diagnostics(message: &str) -> u8 {
+fn write_data_stderr(message: &str) -> u8 {
     match io::stderr().write_all(message.as_bytes()) {
         Ok(()) => EXIT_DATA,
         Err(error) => write_io_error("stderr", error),
     }
+}
+
+fn write_diagnostics(
+    path: &std::path::Path,
+    source: &str,
+    diagnostics: &[diagnostic::Diagnostic],
+    options: Options,
+) -> u8 {
+    let _ = options.color;
+    let rendered = match options.format {
+        OutputFormat::Human => diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic::render(path, source, diagnostic))
+            .collect::<String>(),
+        OutputFormat::Json => diagnostic::render_json(path, source, diagnostics),
+    };
+    write_data_stderr(&rendered)
 }
 
 fn write_io_diagnostic(message: &str) -> u8 {
@@ -257,7 +392,7 @@ mod tests {
     fn check_requires_exactly_one_source_path() {
         assert!(matches!(
             classify(&[OsString::from("check"), OsString::from("program.sely")]),
-            Action::Check(_)
+            Action::Check { .. }
         ));
         assert!(matches!(
             classify(&[OsString::from("check")]),
@@ -265,7 +400,7 @@ mod tests {
         ));
         assert!(matches!(
             classify(&[OsString::from("run"), OsString::from("program.sely")]),
-            Action::Run(_)
+            Action::Run { .. }
         ));
     }
 
@@ -274,10 +409,10 @@ mod tests {
         let action = classify(&[OsString::from("入口")]);
         match action {
             Action::Unsupported(message) => assert_eq!(message, "入口"),
-            Action::Help | Action::Version | Action::Check(_) => {
+            Action::Help | Action::Version | Action::Check { .. } => {
                 panic!("expected unsupported action")
             }
-            Action::Run(_) => panic!("expected unsupported action"),
+            Action::Run { .. } => panic!("expected unsupported action"),
         }
     }
 

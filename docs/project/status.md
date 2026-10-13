@@ -15,13 +15,14 @@
 | N1 CPU tensors (`Tensor[F32]`/`Tensor[I64]`) | Experimental implemented and tested | [`src/tensor`](../../src/tensor), [`tensor_cpu.rs`](../../tests/tensor_cpu.rs) |
 | N2 CPU numeric closure | Experimental implemented and tested | [`src/tensor/ops.rs`](../../src/tensor/ops.rs), [`n2_probe.py`](../../tests/n2_probe.py), [`tensor-numeric.sely`](../../examples/tensor-numeric.sely) |
 | CLI `--help`, `--version`, `check` and `run` | Implemented development CLI | [`check_path`](../../src/main.rs#L86), [`run_path`](../../src/main.rs#L132), [CLI tests](../../tests/bootstrap_cli.rs#L61) |
+| Human/JSON diagnostics, stable source spans, `--quiet` and `from io import print` | Experimental F1 subset implemented and tested | [`Diagnostic`](../../src/diagnostic.rs), [`--format=json`](../../src/main.rs), CLI tests |
 
 ## What is not implemented
 
 | Capability | State | Consequence |
 |---|---|---|
 | Core IR | **Not implemented** | E4 evaluates the checked AST directly; no lowering or optimizer exists |
-| Modules, packages and standard library | **Not implemented** | imports return an explicit unavailable diagnostic |
+| Modules, packages and standard library | **Not implemented except the narrow `io.print` F1 fixture** | general imports return an explicit unavailable diagnostic |
 | Files, HTTP, processes and automation | **Not implemented** | no systems program can run |
 | Autograd, optimizers, checkpoints and training | **Not implemented** | no model can train |
 | GPU, distributed execution and serving | **Not implemented** | no accelerator or production service exists |

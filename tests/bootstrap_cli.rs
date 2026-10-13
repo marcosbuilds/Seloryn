@@ -176,6 +176,59 @@ fn check_rejects_semantic_name_type_and_match_errors() {
 }
 
 #[test]
+fn check_json_has_one_structured_document_and_no_stdout() {
+    let path = temporary_source("json-diagnostic");
+    fs::write(&path, "fn main() -> Unit:\n    if 1:\n        return\n")
+        .expect("write JSON diagnostic source");
+
+    let output = run_cli(&[
+        "check",
+        path.to_str().expect("temporary path is UTF-8"),
+        "--format=json",
+    ]);
+    let _ = fs::remove_file(&path);
+    assert_eq!(output.status.code(), Some(65));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("JSON diagnostics must be UTF-8");
+    assert!(stderr.starts_with("{\"diagnostics\":["));
+    assert!(stderr.contains("\"code\":\"SEL-T004\""));
+    assert!(stderr.contains("\"start\":{\"line\":2"));
+    assert!(stderr.ends_with("]}\n"));
+}
+
+#[test]
+fn quiet_check_suppresses_success_line() {
+    let path = temporary_source("quiet");
+    fs::write(&path, "fn main() -> Unit:\n    return\n").expect("write quiet source");
+
+    let output = run_cli(&[
+        "check",
+        path.to_str().expect("temporary path is UTF-8"),
+        "--quiet",
+    ]);
+    let _ = fs::remove_file(&path);
+    assert!(output.status.success());
+    assert!(output.stdout.is_empty());
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn io_print_is_explicit_and_does_not_duplicate_unit() {
+    let path = temporary_source("io-print");
+    fs::write(
+        &path,
+        "from io import print\n\nfn main() -> Unit:\n    print(\"hello\")\n",
+    )
+    .expect("write print source");
+
+    let output = run_cli(&["run", path.to_str().expect("temporary path is UTF-8")]);
+    let _ = fs::remove_file(&path);
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"hello\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn run_executes_crlf_unicode_source_and_prints_a_value() {
     let path = temporary_source("run-unicode");
     fs::write(

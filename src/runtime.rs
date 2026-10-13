@@ -146,12 +146,21 @@ impl RuntimeError {
     }
 
     pub fn diagnostic(&self) -> Diagnostic {
-        Diagnostic::new(self.code, self.message.clone(), self.span)
+        let mut diagnostic = Diagnostic::new(self.code, self.message.clone(), self.span);
+        diagnostic.stack = self.stack.clone();
+        diagnostic
     }
 }
 
-/// Execute a semantically valid program without performing external effects.
-pub fn execute(program: &Program) -> Result<Value, RuntimeError> {
+#[derive(Clone, Debug, PartialEq)]
+pub struct ExecutionOutput {
+    pub value: Value,
+    pub stdout: String,
+}
+
+/// Execute a semantically valid program and return explicit program output separately
+/// from the final value.
+pub fn execute_with_output(program: &Program) -> Result<ExecutionOutput, RuntimeError> {
     Interpreter::new(program).execute()
 }
 
@@ -171,6 +180,8 @@ struct Interpreter<'a> {
     globals: HashMap<String, Value>,
     scopes: Vec<HashMap<String, Value>>,
     call_stack: Vec<String>,
+    io_print_imported: bool,
+    output: String,
 }
 
 impl<'a> Interpreter<'a> {
@@ -192,6 +203,15 @@ impl<'a> Interpreter<'a> {
                 Item::Binding(_) | Item::Directive(_) | Item::Statement(_) => {}
             }
         }
+        let io_print_imported = program.items.iter().any(|item| {
+            matches!(
+                item,
+                Item::Directive(directive)
+                    if directive.keyword == "from"
+                        && directive.text.split_whitespace().collect::<Vec<_>>()
+                            == ["io", "import", "print"]
+            )
+        });
         Self {
             program,
             functions,
@@ -200,10 +220,12 @@ impl<'a> Interpreter<'a> {
             globals: HashMap::new(),
             scopes: Vec::new(),
             call_stack: Vec::new(),
+            io_print_imported,
+            output: String::new(),
         }
     }
 
-    fn execute(mut self) -> Result<Value, RuntimeError> {
+    fn execute(mut self) -> Result<ExecutionOutput, RuntimeError> {
         for item in &self.program.items {
             match item {
                 Item::Binding(binding) => {
@@ -227,8 +249,13 @@ impl<'a> Interpreter<'a> {
                 self.program.span,
             ));
         }
-        self.call_named("main", Vec::new(), self.program.span)
-            .map_err(Self::runtime_error)
+        let value = self
+            .call_named("main", Vec::new(), self.program.span)
+            .map_err(Self::runtime_error)?;
+        Ok(ExecutionOutput {
+            value,
+            stdout: self.output,
+        })
     }
 
     fn call_named(&mut self, name: &str, arguments: Vec<Value>, span: Span) -> Eval<Value> {
@@ -674,6 +701,26 @@ impl<'a> Interpreter<'a> {
 
     fn eval_call(&mut self, callee: &Expr, arguments: &[Expr], span: Span) -> Eval<Value> {
         if let Expr::Name { name, .. } = callee {
+            if name == "print" && self.io_print_imported {
+                if arguments.len() != 1 {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R103",
+                        "`print` expects one argument",
+                        span,
+                    )));
+                }
+                let value = self.eval_expr(&arguments[0])?;
+                let Value::Text(value) = value else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "print expects a Text value",
+                        arguments[0].span(),
+                    )));
+                };
+                self.output.push_str(&value);
+                self.output.push('\n');
+                return Ok(Value::Unit);
+            }
             if let Some(builtin) = builtins::lookup(name) {
                 return self.eval_builtin(builtin, arguments, span);
             }
@@ -1517,7 +1564,7 @@ fn render_text(value: &str, remaining: &mut usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_RENDER_VALUES, RuntimeError, Value, execute};
+    use super::{MAX_RENDER_VALUES, RuntimeError, Value, execute_with_output};
     use crate::parser::parse;
     use crate::semantic::check;
     use crate::tensor::Tensor;
@@ -1528,7 +1575,7 @@ mod tests {
         let program = parsed.program.expect("program");
         let diagnostics = check(&program);
         assert!(diagnostics.is_empty(), "{:?}", diagnostics);
-        execute(&program)
+        execute_with_output(&program).map(|result| result.value)
     }
 
     #[test]

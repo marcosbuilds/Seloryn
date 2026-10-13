@@ -17,37 +17,148 @@ pub struct Diagnostic {
     pub code: &'static str,
     pub message: String,
     pub span: Span,
+    pub severity: &'static str,
+    pub category: &'static str,
+    pub help: Option<String>,
+    pub stack: Vec<String>,
 }
 
 impl Diagnostic {
     pub fn new(code: &'static str, message: impl Into<String>, span: Span) -> Self {
+        let (severity, category) = metadata(code);
         Self {
             code,
             message: message.into(),
             span,
+            severity,
+            category,
+            help: default_help(code),
+            stack: Vec::new(),
         }
+    }
+
+    pub fn with_help(
+        code: &'static str,
+        message: impl Into<String>,
+        span: Span,
+        help: impl Into<String>,
+    ) -> Self {
+        let mut diagnostic = Self::new(code, message, span);
+        diagnostic.help = Some(help.into());
+        diagnostic
     }
 }
 
 pub fn render(path: &Path, source: &str, diagnostic: &Diagnostic) -> String {
     let (line, column) = line_column(source, diagnostic.span.start);
-    format!(
+    let mut rendered = format!(
         "{}:{}:{}: {} {}\n",
         path.display(),
         line,
         column,
         diagnostic.code,
         diagnostic.message
-    )
+    );
+    if let Some(help) = &diagnostic.help {
+        rendered.push_str(&format!("  help: {help}\n"));
+    }
+    rendered
 }
 
-pub fn render_at_start(path: &Path, diagnostic: &Diagnostic) -> String {
-    format!(
-        "{}:1:1: {} {}\n",
-        path.display(),
-        diagnostic.code,
-        diagnostic.message
-    )
+pub fn render_json(path: &Path, source: &str, diagnostics: &[Diagnostic]) -> String {
+    let mut rendered = String::from("{\"diagnostics\":[");
+    for (index, diagnostic) in diagnostics.iter().enumerate() {
+        if index > 0 {
+            rendered.push(',');
+        }
+        let (start_line, start_column) = line_column(source, diagnostic.span.start);
+        let (end_line, end_column) = line_column(source, diagnostic.span.end);
+        rendered.push_str("{\"code\":");
+        rendered.push_str(&json_string(diagnostic.code));
+        rendered.push_str(",\"severity\":");
+        rendered.push_str(&json_string(diagnostic.severity));
+        rendered.push_str(",\"category\":");
+        rendered.push_str(&json_string(diagnostic.category));
+        rendered.push_str(",\"message\":");
+        rendered.push_str(&json_string(&diagnostic.message));
+        rendered.push_str(",\"file\":");
+        rendered.push_str(&json_string(&path.to_string_lossy()));
+        rendered.push_str(",\"primary\":{\"start_byte\":");
+        rendered.push_str(&diagnostic.span.start.to_string());
+        rendered.push_str(",\"end_byte\":");
+        rendered.push_str(&diagnostic.span.end.to_string());
+        rendered.push_str(",\"start\":{\"line\":");
+        rendered.push_str(&start_line.to_string());
+        rendered.push_str(",\"column\":");
+        rendered.push_str(&start_column.to_string());
+        rendered.push_str("},\"end\":{\"line\":");
+        rendered.push_str(&end_line.to_string());
+        rendered.push_str(",\"column\":");
+        rendered.push_str(&end_column.to_string());
+        rendered.push_str("}}");
+        rendered.push_str(",\"help\":");
+        match &diagnostic.help {
+            Some(help) => rendered.push_str(&json_string(help)),
+            None => rendered.push_str("null"),
+        }
+        rendered.push_str(",\"stack\":[");
+        for (index, frame) in diagnostic.stack.iter().enumerate() {
+            if index > 0 {
+                rendered.push(',');
+            }
+            rendered.push_str(&json_string(frame));
+        }
+        rendered.push(']');
+        rendered.push('}');
+    }
+    rendered.push_str("]}\n");
+    rendered
+}
+
+fn metadata(code: &str) -> (&'static str, &'static str) {
+    let category = match code.as_bytes().get(4).copied() {
+        Some(b'L') => "lexical",
+        Some(b'P') => "parser",
+        Some(b'T') => "type",
+        Some(b'M') => "module",
+        Some(b'R') => "runtime",
+        Some(b'S') => "security",
+        Some(b'C') => "cli",
+        _ => "internal",
+    };
+    ("error", category)
+}
+
+fn default_help(code: &str) -> Option<String> {
+    match code.as_bytes().get(4).copied() {
+        Some(b'L') => Some("check UTF-8, indentation, and literal syntax".to_owned()),
+        Some(b'P') => Some("check the surrounding syntax and block indentation".to_owned()),
+        Some(b'T') => Some("check the expected and actual types".to_owned()),
+        Some(b'M') => Some("check the referenced name or module".to_owned()),
+        Some(b'R') => Some("handle the reported runtime condition".to_owned()),
+        Some(b'C') => Some("check the command and its arguments".to_owned()),
+        _ => None,
+    }
+}
+
+fn json_string(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len() + 2);
+    escaped.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            character if character.is_control() => {
+                escaped.push_str(&format!("\\u{:04x}", character as u32));
+            }
+            character => escaped.push(character),
+        }
+    }
+    escaped.push('"');
+    escaped
 }
 
 fn line_column(source: &str, offset: usize) -> (usize, usize) {
@@ -75,7 +186,7 @@ mod tests {
         let diagnostic = Diagnostic::new("SEL-P001", "expected expression", Span::new(6, 6));
         assert_eq!(
             render(Path::new("sample.sely"), "first\nsecond", &diagnostic),
-            "sample.sely:2:1: SEL-P001 expected expression\n"
+            "sample.sely:2:1: SEL-P001 expected expression\n  help: check the surrounding syntax and block indentation\n"
         );
     }
 }

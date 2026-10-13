@@ -79,6 +79,7 @@ struct Checker<'a> {
     globals: HashMap<String, Symbol>,
     scopes: Vec<Scope>,
     current_function: Option<FunctionContext>,
+    io_print_imported: bool,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -91,14 +92,30 @@ impl<'a> Checker<'a> {
             globals: HashMap::new(),
             scopes: Vec::new(),
             current_function: None,
+            io_print_imported: false,
             diagnostics: Vec::new(),
         }
     }
 
     fn run(mut self) -> Vec<Diagnostic> {
         self.collect_declarations();
+        self.collect_supported_imports();
         self.check_items();
         self.diagnostics
+    }
+
+    fn collect_supported_imports(&mut self) {
+        for item in &self.program.items {
+            let Item::Directive(directive) = item else {
+                continue;
+            };
+            if directive.keyword == "from"
+                && directive.text.split_whitespace().collect::<Vec<_>>()
+                    == ["io", "import", "print"]
+            {
+                self.io_print_imported = true;
+            }
+        }
     }
 
     fn collect_declarations(&mut self) {
@@ -252,11 +269,18 @@ impl<'a> Checker<'a> {
             match item {
                 Item::Function(function) => self.check_function(function),
                 Item::Binding(binding) => self.check_top_binding(binding),
-                Item::Directive(directive) => self.error(
-                    "SEL-M001",
-                    format!("{} resolution is not implemented in E3", directive.keyword),
-                    directive.span,
-                ),
+                Item::Directive(directive) => {
+                    let supported = directive.keyword == "from"
+                        && directive.text.split_whitespace().collect::<Vec<_>>()
+                            == ["io", "import", "print"];
+                    if !supported {
+                        self.error(
+                            "SEL-M001",
+                            format!("{} resolution is not implemented in E3", directive.keyword),
+                            directive.span,
+                        );
+                    }
+                }
                 Item::Statement(statement) => self.check_statement(statement),
                 Item::Record(_) | Item::Enum(_) => {}
             }
@@ -308,7 +332,16 @@ impl<'a> Checker<'a> {
             .annotation
             .as_ref()
             .map_or_else(|| actual.clone(), |ty| self.type_from_expr(ty));
-        self.ensure_assignable(&actual, &expected, binding.value.span(), "binding value");
+        if binding.annotation.is_some() {
+            self.ensure_annotated_assignable(
+                &actual,
+                &expected,
+                binding.value.span(),
+                "binding value",
+            );
+        } else {
+            self.ensure_assignable(&actual, &expected, binding.value.span(), "binding value");
+        }
         self.globals.insert(
             binding.name.clone(),
             Symbol::Value {
@@ -365,7 +398,16 @@ impl<'a> Checker<'a> {
             .annotation
             .as_ref()
             .map_or_else(|| actual.clone(), |ty| self.type_from_expr(ty));
-        self.ensure_assignable(&actual, &expected, binding.value.span(), "binding value");
+        if binding.annotation.is_some() {
+            self.ensure_annotated_assignable(
+                &actual,
+                &expected,
+                binding.value.span(),
+                "binding value",
+            );
+        } else {
+            self.ensure_assignable(&actual, &expected, binding.value.span(), "binding value");
+        }
         self.declare_local(
             binding.name.clone(),
             Symbol::Value {
@@ -953,6 +995,17 @@ impl<'a> Checker<'a> {
 
     fn type_of_call(&mut self, callee: &Expr, arguments: &[Expr], span: Span) -> Type {
         if let Expr::Name { name, .. } = callee {
+            if name == "print" && self.io_print_imported {
+                if arguments.len() != 1 {
+                    self.error("SEL-T005", "`print` expects one argument", span);
+                    for argument in arguments {
+                        self.type_of_expr(argument);
+                    }
+                    return Type::Error;
+                }
+                self.ensure_expr_assignable(&arguments[0], &Type::Text, "print value");
+                return Type::Unit;
+            }
             if let Some(builtin) = builtins::lookup(name) {
                 return self.type_of_builtin_call(builtin, arguments, span);
             }
@@ -1423,6 +1476,28 @@ impl<'a> Checker<'a> {
                 ),
                 span,
             );
+        }
+    }
+
+    fn ensure_annotated_assignable(
+        &mut self,
+        actual: &Type,
+        expected: &Type,
+        span: Span,
+        context: &str,
+    ) {
+        if !assignable(actual, expected) {
+            let diagnostic = Diagnostic::with_help(
+                "SEL-T102",
+                format!(
+                    "{context} expects {}, got {}",
+                    display_type(expected),
+                    display_type(actual)
+                ),
+                span,
+                "change the annotation or the value so their types agree",
+            );
+            self.diagnostics.push(diagnostic);
         }
     }
 
