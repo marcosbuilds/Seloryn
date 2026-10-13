@@ -28,11 +28,13 @@ rendered final value to stdout. Source and runtime failures write stable
 starts after a lexical, parse or semantic diagnostic. `--format=json` emits one
 JSON document containing the diagnostics, source byte spans, Unicode-aware
 locations, help and runtime stack. `--quiet` suppresses the successful `check`
-line. The interpreter performs no file, network, process or GPU effects. The
+line. A standalone source run performs no file, network, process or GPU
+effects; a project run may perform only its explicitly bounded JSON reads. The
 behavior is covered by the CLI tests in
 [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs) and
 [`tests/tensor_cpu.rs`](../../tests/tensor_cpu.rs), with independent N2 numeric
-references in [`tests/n2_probe.py`](../../tests/n2_probe.py).
+references in [`tests/n2_probe.py`](../../tests/n2_probe.py). Public project
+examples are grouped under [`examples/projects`](../../examples/projects/README.md).
 
 `build` validates a local `seloryn.toml` project, packages its validated source
 files into a deterministic experimental `.selyapp` bundle and writes JSON build

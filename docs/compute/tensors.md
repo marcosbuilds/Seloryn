@@ -30,7 +30,7 @@ is performed.
 | `tensor_sum_to_shape(f32_tensor, shape)` | Reduces a broadcasted F32 result back to a compatible operand shape |
 | `+`, `-`, `*`, `/` | Same-dtype tensor arithmetic with right-aligned broadcasting |
 
-The runnable example is [`examples/tensor-matmul.sely`](../../examples/tensor-matmul.sely):
+The runnable example is [`examples/tensors/tensor-matmul.sely`](../../examples/tensors/tensor-matmul.sely):
 
 ```seloryn
 fn main() -> Tensor[F32]:
@@ -39,7 +39,7 @@ fn main() -> Tensor[F32]:
     return matmul(left, right)
 ```
 
-`seloryn run examples/tensor-matmul.sely` prints:
+`seloryn run examples/tensors/tensor-matmul.sely` prints:
 
 ```text
 Tensor[F32, shape=[2, 2], values=[19.0, 22.0, 43.0, 50.0]]
@@ -79,4 +79,4 @@ There are no symbolic dimensions, arbitrary strided views, tensor indexing, devi
 transfers, GPU backends, autograd, optimizers, checkpoints or training APIs.
 N1/N2 supply a correctness-oriented CPU reference path; they make no performance
 or portability claim against established numerical runtimes. The runnable N2
-smoke example is [`examples/tensor-numeric.sely`](../../examples/tensor-numeric.sely).
+smoke example is [`examples/tensors/tensor-numeric.sely`](../../examples/tensors/tensor-numeric.sely).

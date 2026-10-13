@@ -1,0 +1,9 @@
+[package]
+name = "linear-training-example"
+language = "0.00"
+source_root = "src"
+entry = "linear-training-entry.sely"
+
+[limits]
+json_max_bytes = 4096
+json_max_depth = 16

@@ -10,13 +10,13 @@ On the validated Windows x64 host:
 
 ```powershell
 $hash = (Get-FileHash .\target\release\seloryn.exe -Algorithm SHA256).Hash
-.\scripts\install-seloryn-windows.ps1 -Action Install `
+.\scripts\install\install-seloryn-windows.ps1 -Action Install `
   -BinaryPath .\target\release\seloryn.exe `
   -InstallRoot .\local-install `
   -ExpectedSha256 $hash
-.\scripts\install-seloryn-windows.ps1 -Action DiagnosePath -InstallRoot .\local-install
-.\scripts\install-seloryn-windows.ps1 -Action Rollback -InstallRoot .\local-install
-.\scripts\install-seloryn-windows.ps1 -Action Uninstall -InstallRoot .\local-install
+.\scripts\install\install-seloryn-windows.ps1 -Action DiagnosePath -InstallRoot .\local-install
+.\scripts\install\install-seloryn-windows.ps1 -Action Rollback -InstallRoot .\local-install
+.\scripts\install\install-seloryn-windows.ps1 -Action Uninstall -InstallRoot .\local-install
 ```
 
 The POSIX script has the equivalent `install`, `rollback`, `uninstall` and

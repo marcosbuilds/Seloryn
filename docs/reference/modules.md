@@ -13,6 +13,27 @@ from app.validation import validate_request
 - Package metadata must include license, target language capability range, platform targets, integrity hashes, lockfile schema and reproducible installation behavior.
 - A local `seloryn.toml` project manifest and deterministic source-root resolver are implemented experimentally for the F3/B1 subset. A package registry, lockfile resolver and `seloryn add` do **not** exist in this archive.
 
+## Executable local and standard modules
+
+The public [`json-config` example](../../examples/projects/json-config/README.md)
+combines a local module with the native `json` module:
+
+```seloryn
+from app.format import label
+from json import read_file, get, as_text
+
+fn main() -> Result[Text, JsonIoError]:
+    let document: Json = read_file("data/config.json")?
+    let model: Json = get(document, ["model", "name"])?
+    let name: Text = as_text(model)?
+    return Ok(label(name))
+```
+
+`seloryn run examples/projects/json-config` returns
+`configured model: gpt-local`. The read is limited to the project root and
+the manifest's JSON byte/depth limits; this is not unrestricted filesystem
+access or an external package resolver.
+
 ### Future package separation
 
 Core: math/scalars, files, text, time, paths, JSON, Result, diagnostics. Standard modular extras: networking, servers, tensors, autodiff, neural networks, tokenizers, datasets, distributed execution and checkpoint I/O. Heavy backends must not be imported or initialized for unrelated command-line scripts.

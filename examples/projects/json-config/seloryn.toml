@@ -1,0 +1,12 @@
+[package]
+name = "json-config-example"
+language = "0.00"
+source_root = "src"
+entry = "json-config-entry.sely"
+
+[capabilities]
+read = ["data"]
+
+[limits]
+json_max_bytes = 4096
+json_max_depth = 16

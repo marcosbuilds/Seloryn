@@ -1,0 +1,4 @@
+module app.format
+
+pub fn label(name: Text) -> Text:
+    return "configured model: " + name

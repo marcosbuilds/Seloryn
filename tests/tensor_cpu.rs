@@ -50,7 +50,7 @@ fn runs_f32_matmul_end_to_end_from_crlf_unicode_path() {
 #[test]
 fn runs_the_public_tensor_example() {
     let output = Command::new(env!("CARGO_BIN_EXE_seloryn"))
-        .args(["run", "examples/tensor-matmul.sely"])
+        .args(["run", "examples/tensors/tensor-matmul.sely"])
         .output()
         .expect("start public example");
     assert!(

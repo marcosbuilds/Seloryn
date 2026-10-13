@@ -1,0 +1,8 @@
+from app.format import label
+from json import read_file, get, as_text
+
+fn main() -> Result[Text, JsonIoError]:
+    let document: Json = read_file("data/config.json")?
+    let model: Json = get(document, ["model", "name"])?
+    let name: Text = as_text(model)?
+    return Ok(label(name))
