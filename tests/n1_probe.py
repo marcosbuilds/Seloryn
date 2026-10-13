@@ -107,11 +107,6 @@ def main():
          '    if value <= 1:\n        return 1\n'
          '    else:\n        return value * factorial(value - 1)\n'
          'fn main() -> I64:\n    return factorial(5)\n', '120\n'),
-        ('result-error',
-         'fn validate() -> Result[I64, Text]:\n'
-         '    require false else "bad"\n    return Ok(1)\n'
-         'fn main() -> Result[I64, Text]:\n    return validate()\n',
-         'Err("bad")\n'),
         ('option', main_source([
             'let maybe: Option[I64] = None',
             'return maybe ?? 7',
@@ -151,6 +146,11 @@ def main():
         ('static-type', main_source([
             'return tensor_i64([1], [1]) + tensor_f32([1.0], [1])'
         ]), 'SEL-T003'),
+        ('result-error',
+         'fn validate() -> Result[I64, Text]:\n'
+         '    require false else "bad"\n    return Ok(1)\n'
+         'fn main() -> Result[I64, Text]:\n    return validate()\n',
+         'SEL-R127'),
     ]
     count = 0
     with tempfile.TemporaryDirectory(prefix='seloryn-n1-proof-') as tmp:

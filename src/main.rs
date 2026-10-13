@@ -393,17 +393,7 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
 
     let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
     match runtime::execute_with_context(&program, base_dir, 128, 4) {
-        Ok(output) => {
-            let mut rendered = output.stdout;
-            if output.value != runtime::Value::Unit {
-                rendered.push_str(&format!("{}\n", render_cli_value(&program, output.value)));
-            }
-            if rendered.is_empty() {
-                EXIT_OK
-            } else {
-                write_stdout(&rendered)
-            }
-        }
+        Ok(output) => write_execution_output(&path, &source, &program, output, options),
         Err(error) => {
             let diagnostic = error.diagnostic();
             if options.format == OutputFormat::Human {
@@ -493,18 +483,7 @@ fn run_project_path(path: &std::path::Path, options: Options) -> u8 {
         loaded.json_max_depth,
     ) {
         Ok(output) => {
-            let mut rendered = output.stdout;
-            if output.value != runtime::Value::Unit {
-                rendered.push_str(&format!(
-                    "{}\n",
-                    render_cli_value(&loaded.program, output.value)
-                ));
-            }
-            if rendered.is_empty() {
-                EXIT_OK
-            } else {
-                write_stdout(&rendered)
-            }
+            write_execution_output(path, &loaded.source, &loaded.program, output, options)
         }
         Err(error) => {
             let diagnostic = error.diagnostic();
@@ -522,6 +501,40 @@ fn run_project_path(path: &std::path::Path, options: Options) -> u8 {
                 write_diagnostics(path, &loaded.source, &[diagnostic], options)
             }
         }
+    }
+}
+
+fn write_execution_output(
+    path: &std::path::Path,
+    source: &str,
+    program: &parser::Program,
+    output: runtime::ExecutionOutput,
+    options: Options,
+) -> u8 {
+    let runtime::ExecutionOutput { value, stdout } = output;
+    if let runtime::Value::Result { ok: false, .. } = &value {
+        if !stdout.is_empty() {
+            let status = write_stdout(&stdout);
+            if status != EXIT_OK {
+                return status;
+            }
+        }
+        let diagnostic = diagnostic::Diagnostic::new(
+            "SEL-R127",
+            format!("program returned {}", value.render()),
+            diagnostic::Span::new(0, 0),
+        );
+        return write_diagnostics(path, source, &[diagnostic], options);
+    }
+
+    let mut rendered = stdout;
+    if value != runtime::Value::Unit {
+        rendered.push_str(&format!("{}\n", render_cli_value(program, value)));
+    }
+    if rendered.is_empty() {
+        EXIT_OK
+    } else {
+        write_stdout(&rendered)
     }
 }
 

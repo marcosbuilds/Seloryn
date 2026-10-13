@@ -1,6 +1,6 @@
 # Errors and diagnostics
 
-Failures have two distinct layers: **compiler diagnostics** for invalid source, and **typed runtime results** for valid programs encountering failures. No generic `except: pass`, no false-success return values.
+Failures have two distinct layers: **compiler diagnostics** for invalid source, and **typed runtime results** for valid programs encountering failures. The CLI promotes a top-level `Err(E)` returned by `main` to `SEL-R127`, preserving a nonzero process status for automation. No generic `except: pass`, no false-success return values.
 
 ### Compile-time diagnostics
 

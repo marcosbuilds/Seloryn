@@ -23,9 +23,11 @@ packages and nullable `T?` syntax remain unavailable.
 `run` performs the same full front-end validation before evaluating the pure E4
 subset and the bounded N1/N2 CPU tensor subset. A successful run prints
 explicit `from io import print` output and, when non-`Unit`, one deterministic
-rendered final value to stdout. Source and runtime failures write stable
-`SEL-*` diagnostics to stderr and return exit code 65; no runtime evaluation
-starts after a lexical, parse or semantic diagnostic. `--format=json` emits one
+rendered final value to stdout. A typed `Err(E)` returned by `main` is promoted
+to `SEL-R127` at the CLI boundary and returns exit code 65, so a failed result
+cannot look like a successful process to automation. Source, runtime and
+top-level result failures write stable `SEL-*` diagnostics to stderr; no runtime
+evaluation starts after a lexical, parse or semantic diagnostic. `--format=json` emits one
 JSON document containing the diagnostics, source byte spans, Unicode-aware
 locations, help and runtime stack. `--quiet` suppresses the successful `check`
 line. A standalone source run performs no file, network, process or GPU

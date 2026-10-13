@@ -413,6 +413,34 @@ fn run_does_not_execute_after_a_static_error() {
 }
 
 #[test]
+fn run_returns_nonzero_for_a_typed_result_error() {
+    let path = temporary_source("run-result-error");
+    fs::write(
+        &path,
+        "fn main() -> Result[I64, Text]:\n    return Err(\"policy disabled\")\n",
+    )
+    .expect("write Result error source");
+
+    let output = run_cli(&["run", path.to_str().expect("temporary path is UTF-8")]);
+    let json_output = run_cli(&[
+        "run",
+        path.to_str().expect("temporary path is UTF-8"),
+        "--format=json",
+    ]);
+    let _ = fs::remove_file(&path);
+    assert_eq!(output.status.code(), Some(65));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("diagnostics must be UTF-8");
+    assert!(stderr.contains("SEL-R127"));
+    assert!(stderr.contains("program returned Err(\"policy disabled\")"));
+    assert_eq!(json_output.status.code(), Some(65));
+    assert!(json_output.stdout.is_empty());
+    let json_stderr = String::from_utf8(json_output.stderr).expect("JSON must be UTF-8");
+    assert!(json_stderr.starts_with("{\"diagnostics\":["));
+    assert!(json_stderr.contains("\"code\":\"SEL-R127\""));
+}
+
+#[test]
 fn run_reports_the_same_structured_runtime_error_each_time() {
     let path = temporary_source("run-runtime-error");
     fs::write(&path, "fn main() -> I64:\n    return 1 / 0\n").expect("write runtime-error source");
