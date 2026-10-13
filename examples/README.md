@@ -15,6 +15,7 @@ Run a standalone tensor example with the release binary:
 
 ```text
 seloryn run examples/tensors/tensor-matmul.sely
+seloryn run examples/tensors/tensor-index.sely
 ```
 
 Run a project example by passing its project directory:

@@ -75,9 +75,9 @@ This EBNF summarizes accepted design intent; production-ready conformance gramma
 | `match` statements | Partial checker plus E4 execution | [`parse_match`](../../src/parser.rs#L650), [`check_match`](../../src/semantic.rs#L409), [`execute`](../../src/runtime.rs#L121); Bool/Option/Result/enum coverage and constructor cases execute, but structural patterns are absent |
 | `Result` and postfix `?` | Static checks plus E4 propagation | [`type_of_expr`](../../src/semantic.rs#L652), runtime tests; `?` returns a compatible `Err` from the current function |
 | `Option` and `??` | Static checks plus E4 values/fallback | [`type_of_binary`](../../src/semantic.rs#L760), runtime tests; nullable `T?` and `?.` remain reserved |
-| Modules and imports | Reserved/unavailable in E3 | `seloryn check` emits `SEL-M001`; no resolver or package graph exists |
+| Local modules and standard imports | F3 experimental subset | `seloryn.toml` resolves local modules and the bounded `json`/other standard fixtures; external packages, registry and lockfiles remain unavailable |
 | `Tensor[F32]` and `Tensor[I64]` | N1/N2 experimental | Runtime shapes and CPU kernels are checked by [`src/tensor`](../../src/tensor) and CLI tests; symbolic shape parameters remain unavailable |
-| List indexing, `for` iteration and `var` assignment | E4 experimental | `List[T]` indexing, bounded iteration, mutable bindings and list concatenation execute; tensor indexing remains unavailable |
+| List indexing, tensor element reads, `for` iteration and `var` assignment | E4 experimental | `List[T]` indexing, typed read-only tensor coordinates, bounded iteration, mutable bindings and list concatenation execute; slicing and tensor mutation remain unavailable |
 
 Status labels mean: **implemented** is present and tested in the checker; **partial** has explicit gaps; **reserved** produces a diagnostic rather than silently working; **designed** has no current implementation.
 

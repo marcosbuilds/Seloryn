@@ -74,6 +74,10 @@ CPU tensor examples. Project examples are listed in
 
 ## File rules
 
-Sources use `.sely`, UTF-8 and either LF or CRLF on input. The canonical formatter emits LF. Semantic indentation consists of four ASCII spaces; leading tab characters in blocks are rejected. Editors should display whitespace. The module resolver must never execute an arbitrary path just because a program imports a name.
+Sources use `.sely`, UTF-8 and either LF or CRLF on input. No canonical
+formatter is available yet; semantic indentation consists of four ASCII spaces
+and leading tab characters in blocks are rejected. Editors should display
+whitespace. The module resolver must never execute an arbitrary path just
+because a program imports a name.
 
 See [CLI](cli.md), [platforms](platforms.md), [language specification](../reference/grammar.md), and [current status](../project/status.md). The broader design remains a proposal until each runtime gate has evidence.

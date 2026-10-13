@@ -50,6 +50,9 @@ def main() -> int:
     training = run("run", "examples/projects/linear-training")
     assert '"loss_decreased":true' in training.stdout
 
+    indexed = run("run", "examples/tensors/tensor-index.sely")
+    assert indexed.stdout == "3.0\n"
+
     checked = run("check", "examples/projects/evaluation-pipeline")
     assert "checked project" in checked.stdout
     pipeline = run("run", "examples/projects/evaluation-pipeline")

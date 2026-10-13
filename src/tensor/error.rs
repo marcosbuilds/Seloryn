@@ -36,6 +36,10 @@ pub enum TensorError {
         axis: usize,
         rank: usize,
     },
+    InvalidIndex {
+        indices: Vec<i64>,
+        shape: Vec<usize>,
+    },
     NotScalar {
         shape: Vec<usize>,
     },
@@ -81,6 +85,7 @@ impl TensorError {
             Self::DataLength { .. } | Self::DtypeMismatch { .. } => "SEL-R203",
             Self::BroadcastMismatch { .. } => "SEL-R204",
             Self::InvalidAxis { .. }
+            | Self::InvalidIndex { .. }
             | Self::NotScalar { .. }
             | Self::TransposeRank { .. }
             | Self::MatmulRank { .. }
@@ -135,6 +140,13 @@ impl fmt::Display for TensorError {
             ),
             Self::InvalidAxis { axis, rank } => {
                 write!(formatter, "tensor axis {axis} is invalid for rank {rank}")
+            }
+            Self::InvalidIndex { indices, shape } => {
+                write!(
+                    formatter,
+                    "tensor index {:?} is invalid for shape {:?}",
+                    indices, shape
+                )
             }
             Self::NotScalar { shape } => {
                 write!(formatter, "tensor shape {:?} is not a rank-0 scalar", shape)

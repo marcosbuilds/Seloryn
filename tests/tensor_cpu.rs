@@ -205,6 +205,56 @@ fn runs_i64_tensor_and_inspection_builtins() {
 }
 
 #[test]
+fn runs_typed_tensor_indexing_and_rejects_invalid_coordinates() {
+    let f32_output = run_source(
+        "index-f32",
+        "fn main() -> F32:\n    let values: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0, 4.0], [2, 2])\n    return tensor_get_f32(values, [1, 0])\n",
+    );
+    assert!(
+        f32_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&f32_output.stderr)
+    );
+    assert_eq!(f32_output.stdout, b"3.0\n");
+
+    let transposed_output = run_source(
+        "index-transposed-rectangular",
+        "fn main() -> F32:\n    let values: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], [2, 3])\n    return tensor_get_f32(transpose(values), [2, 1])\n",
+    );
+    assert!(
+        transposed_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&transposed_output.stderr)
+    );
+    assert_eq!(transposed_output.stdout, b"6.0\n");
+
+    let i64_output = run_source(
+        "index-i64",
+        "fn main() -> I64:\n    let values: Tensor[I64] = tensor_i64([7, 8, 9], [3])\n    return tensor_get_i64(values, [2])\n",
+    );
+    assert!(
+        i64_output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&i64_output.stderr)
+    );
+    assert_eq!(i64_output.stdout, b"9\n");
+
+    let invalid = run_source(
+        "index-invalid",
+        "fn main() -> F32:\n    let values: Tensor[F32] = tensor_f32([1.0, 2.0], [2])\n    return tensor_get_f32(values, [2])\n",
+    );
+    assert_eq!(invalid.status.code(), Some(65));
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("SEL-R205"));
+
+    let static_dtype = run_source(
+        "index-static-dtype",
+        "fn main() -> F32:\n    let values: Tensor[I64] = tensor_i64([1], [1])\n    return tensor_get_f32(values, [0])\n",
+    );
+    assert_eq!(static_dtype.status.code(), Some(65));
+    assert!(String::from_utf8_lossy(&static_dtype.stderr).contains("SEL-T002"));
+}
+
+#[test]
 fn rejects_static_dtype_mismatch_before_execution() {
     let source = "fn main() -> Tensor[F32]:\n    let left: Tensor[I64] = tensor_i64([1], [1])\n    let right: Tensor[F32] = tensor_f32([2.0], [1])\n    return left + right\n";
     let output = run_source("static-dtype", source);

@@ -1211,6 +1211,7 @@ impl<'a> Checker<'a> {
             | Builtin::TensorElements
             | Builtin::TensorDtype
             | Builtin::TensorItemF32 => 1,
+            Builtin::TensorGetF32 | Builtin::TensorGetI64 => 2,
             Builtin::Sum | Builtin::Mean => 0,
             Builtin::Matmul | Builtin::Softmax | Builtin::LogSumExp | Builtin::SumToShape => 2,
             Builtin::Transpose | Builtin::Relu | Builtin::Exp | Builtin::Log => 1,
@@ -1303,6 +1304,32 @@ impl<'a> Checker<'a> {
                     "tensor_item_f32 tensor",
                 );
                 Type::F32
+            }
+            Builtin::TensorGetF32 => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::Tensor(TensorDtype::F32),
+                    "tensor_get_f32 tensor",
+                );
+                self.ensure_expr_assignable(
+                    &arguments[1],
+                    &Type::List(Box::new(Type::I64)),
+                    "tensor_get_f32 indices",
+                );
+                Type::F32
+            }
+            Builtin::TensorGetI64 => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::Tensor(TensorDtype::I64),
+                    "tensor_get_i64 tensor",
+                );
+                self.ensure_expr_assignable(
+                    &arguments[1],
+                    &Type::List(Box::new(Type::I64)),
+                    "tensor_get_i64 indices",
+                );
+                Type::I64
             }
             Builtin::Reshape => {
                 let tensor_type = self.type_of_expr(&arguments[0]);
@@ -1952,6 +1979,8 @@ fn builtin_name(builtin: Builtin) -> &'static str {
         Builtin::TensorElements => "tensor_elements",
         Builtin::TensorDtype => "tensor_dtype",
         Builtin::TensorItemF32 => "tensor_item_f32",
+        Builtin::TensorGetF32 => "tensor_get_f32",
+        Builtin::TensorGetI64 => "tensor_get_i64",
         Builtin::Reshape => "reshape",
         Builtin::Sum => "tensor_sum",
         Builtin::Mean => "tensor_mean",

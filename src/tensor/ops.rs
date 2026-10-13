@@ -254,6 +254,64 @@ impl Tensor {
         Ok(self.f32_at_flat(0))
     }
 
+    pub fn get_f32(&self, indices: &[i64]) -> Result<f32, TensorError> {
+        if self.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: self.dtype.name(),
+            });
+        }
+        let flat = self.checked_flat_index(indices)?;
+        Ok(self.f32_at_flat(flat))
+    }
+
+    pub fn get_i64(&self, indices: &[i64]) -> Result<i64, TensorError> {
+        if self.dtype != TensorDtype::I64 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "I64",
+                actual: self.dtype.name(),
+            });
+        }
+        let flat = self.checked_flat_index(indices)?;
+        Ok(self.i64_at_flat(flat))
+    }
+
+    fn checked_flat_index(&self, indices: &[i64]) -> Result<usize, TensorError> {
+        if indices.len() != self.rank() {
+            return Err(TensorError::InvalidIndex {
+                indices: indices.to_vec(),
+                shape: self.shape.clone(),
+            });
+        }
+        let strides = contiguous_strides(&self.shape);
+        indices
+            .iter()
+            .enumerate()
+            .try_fold(0usize, |flat, (axis, index)| {
+                let coordinate =
+                    usize::try_from(*index).map_err(|_| TensorError::InvalidIndex {
+                        indices: indices.to_vec(),
+                        shape: self.shape.clone(),
+                    })?;
+                if coordinate >= self.shape[axis] {
+                    return Err(TensorError::InvalidIndex {
+                        indices: indices.to_vec(),
+                        shape: self.shape.clone(),
+                    });
+                }
+                flat.checked_add(coordinate.checked_mul(strides[axis]).ok_or_else(|| {
+                    TensorError::InvalidIndex {
+                        indices: indices.to_vec(),
+                        shape: self.shape.clone(),
+                    }
+                })?)
+                .ok_or_else(|| TensorError::InvalidIndex {
+                    indices: indices.to_vec(),
+                    shape: self.shape.clone(),
+                })
+            })
+    }
+
     #[cfg(test)]
     fn allocated_bytes(&self) -> usize {
         self.allocation.bytes
@@ -1239,6 +1297,38 @@ mod tests {
             broadcasted.sum_to_shape(&[]).expect("sum all").render(),
             "Tensor[F32, shape=[], values=[21.0]]"
         );
+    }
+
+    #[test]
+    fn indexes_contiguous_and_transposed_tensors_with_checked_bounds() {
+        let matrix = Tensor::from_f32(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], &[2, 3]).expect("matrix");
+        assert_eq!(matrix.get_f32(&[1, 0]).expect("contiguous index"), 4.0);
+        let transposed = matrix.transpose().expect("transpose");
+        assert_eq!(transposed.shape(), &[3, 2]);
+        assert_eq!(transposed.get_f32(&[0, 1]).expect("view index"), 4.0);
+        assert_eq!(transposed.get_f32(&[2, 1]).expect("last view index"), 6.0);
+
+        let integers = Tensor::from_i64(vec![7, 8, 9], &[3]).expect("integers");
+        assert_eq!(integers.get_i64(&[2]).expect("integer index"), 9);
+        assert!(matches!(
+            integers.get_i64(&[-1]),
+            Err(TensorError::InvalidIndex { .. })
+        ));
+        assert!(matches!(
+            integers.get_i64(&[3]),
+            Err(TensorError::InvalidIndex { .. })
+        ));
+        assert!(matches!(
+            integers.get_i64(&[]),
+            Err(TensorError::InvalidIndex { .. })
+        ));
+        assert!(matches!(
+            integers.get_f32(&[0]),
+            Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: "I64"
+            })
+        ));
     }
 
     #[test]

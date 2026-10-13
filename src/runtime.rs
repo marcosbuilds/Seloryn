@@ -1289,6 +1289,7 @@ impl<'a> Interpreter<'a> {
             | Builtin::TensorElements
             | Builtin::TensorDtype
             | Builtin::TensorItemF32 => 1,
+            Builtin::TensorGetF32 | Builtin::TensorGetI64 => 2,
             Builtin::Sum | Builtin::Mean => 0,
             Builtin::Transpose | Builtin::Relu | Builtin::Exp | Builtin::Log => 1,
             Builtin::Softmax | Builtin::LogSumExp | Builtin::SumToShape => 2,
@@ -1410,6 +1411,22 @@ impl<'a> Interpreter<'a> {
                 tensor
                     .scalar_f32()
                     .map(|value| Value::F64(value as f64))
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::TensorGetF32 => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                let indices = shape_values(&values[1], span, self)?;
+                tensor
+                    .get_f32(&indices)
+                    .map(|value| Value::F64(value as f64))
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::TensorGetI64 => {
+                let tensor = tensor_value(&values[0], span, self)?;
+                let indices = shape_values(&values[1], span, self)?;
+                tensor
+                    .get_i64(&indices)
+                    .map(Value::I64)
                     .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
             }
             Builtin::Reshape => {

@@ -3,7 +3,7 @@
 **Current availability (`0.00`):** Seloryn has an experimental N1/N2 CPU
 tensor runtime. It allocates owned, bounded buffers for `Tensor[F32]` and
 `Tensor[I64]`; N2 adds a small pure numeric closure needed before autograd. It
-does not use a GPU, perform training or expose arbitrary views.
+does not use a GPU, perform training or expose arbitrary views or slicing.
 
 ## Verified language bridge
 
@@ -21,6 +21,7 @@ is performed.
 | `tensor_rank(tensor)` / `tensor_elements(tensor)` | Returns rank or element count as `I64` |
 | `tensor_dtype(tensor)` | Returns `"F32"` or `"I64"` |
 | `tensor_item_f32(tensor)` | Extracts one rank-0 `Tensor[F32]` as an `F32`; other shapes or dtypes fail |
+| `tensor_get_f32(tensor, indices)` / `tensor_get_i64(tensor, indices)` | Reads one element with a full `List[I64]` coordinate; dtype, rank and bounds are checked |
 | `tensor_sum(tensor[, axis])` | Reduces all elements or one nonnegative `I64` axis; I64 overflow is checked |
 | `tensor_mean(f32_tensor[, axis])` | Reduces all elements or one axis of finite F32 values; empty means fail |
 | `matmul(left, right)` | Computes rank-2 F32 matrix multiplication |
@@ -46,6 +47,18 @@ fn main() -> Tensor[F32]:
 Tensor[F32, shape=[2, 2], values=[19.0, 22.0, 43.0, 50.0]]
 ```
 
+Read-only indexing is also executable:
+
+```seloryn
+fn main() -> F32:
+    let values: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0, 4.0], [2, 2])
+    return tensor_get_f32(values, [1, 0])
+```
+
+`seloryn run examples/tensors/tensor-index.sely` prints `3.0`. Indexing is
+element access only; slicing, mutation and arbitrary view construction remain
+outside the current contract.
+
 ## Safety boundary
 
 Shapes are ordered nonnegative dimensions with rank at most 32. Rank zero has
@@ -57,7 +70,7 @@ total-process-memory limit for source lists, conversion scratch or metadata.
 Broadcast dimensions must be equal or one;
 zero and one are compatible, while other incompatible dimensions produce
 `SEL-R204`. An axis is a zero-based `I64` and must be less than the tensor rank;
-invalid axes produce `SEL-R205`. `tensor_log` rejects non-positive values with
+invalid axes and tensor coordinates produce `SEL-R205`. `tensor_log` rejects non-positive values with
 `SEL-R210`; `tensor_softmax` and `tensor_logsumexp` reject an empty selected
 axis with `SEL-R211`. `transpose` is a bounded view with permuted shape and
 strides; consumers that require contiguous storage materialize a checked copy.
@@ -76,8 +89,8 @@ does not change the tensor contents used by computation.
 
 ## Not available yet
 
-There are no symbolic dimensions, arbitrary strided views, tensor indexing, device
-transfers, GPU backends, autograd, optimizers, checkpoints or training APIs.
+There are no symbolic dimensions, arbitrary strided views, device transfers, GPU
+backends, autograd, optimizers, checkpoints or training APIs.
 N1/N2 supply a correctness-oriented CPU reference path; they make no performance
 or portability claim against established numerical runtimes. The runnable N2
 smoke example is [`examples/tensors/tensor-numeric.sely`](../../examples/tensors/tensor-numeric.sely).
