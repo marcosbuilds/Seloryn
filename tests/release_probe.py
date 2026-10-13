@@ -30,6 +30,16 @@ def run(*arguments: str) -> subprocess.CompletedProcess[str]:
     return result
 
 
+def assert_pipeline_output(result: subprocess.CompletedProcess[str]) -> None:
+    output = result.stdout
+    assert 'pipeline: "regional-orders"' in output
+    assert "accepted: 1" in output
+    assert "rejected: 2" in output
+    assert "total_amount: 120.0" in output
+    assert 'labels: ["A-100:accepted", "B-200:below minimum", "C-300:order disabled"]' in output
+    assert "Tensor[F32" in output
+
+
 def main() -> int:
     if not BINARY.is_file():
         raise AssertionError(f"release binary is missing: {BINARY}")
@@ -43,8 +53,7 @@ def main() -> int:
     checked = run("check", "examples/projects/evaluation-pipeline")
     assert "checked project" in checked.stdout
     pipeline = run("run", "examples/projects/evaluation-pipeline")
-    assert "regional-orders" in pipeline.stdout
-    assert "Tensor[F32" in pipeline.stdout
+    assert_pipeline_output(pipeline)
 
     project = ROOT / "examples" / "projects" / "evaluation-pipeline"
     with tempfile.TemporaryDirectory(prefix="seloryn-release-") as temporary:
@@ -52,8 +61,7 @@ def main() -> int:
         artifact = Path(temporary) / "seloryn.selyapp"
         assert artifact.is_file(), artifact
         bundled = run("exec", str(artifact))
-        assert "regional-orders" in bundled.stdout
-        assert "Tensor[F32" in bundled.stdout
+        assert_pipeline_output(bundled)
 
     print("Seloryn public project and bundle checks completed successfully")
     return 0

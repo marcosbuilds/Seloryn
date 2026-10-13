@@ -17,6 +17,7 @@
 | Deterministic core IR boundary | Experimental implemented and tested | [`src/ir.rs`](../../src/ir.rs), runtime and lowering tests |
 | Local project modules and `seloryn.toml` | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`json-config`](../../examples/projects/json-config/README.md) |
 | JSON read/parse/encode/get with root and size limits | Experimental implemented and tested | [`src/json.rs`](../../src/json.rs), [`json-config`](../../examples/projects/json-config/README.md) |
+| Multi-file project execution with typed business decisions and bundle parity | Experimental implemented and tested | [`evaluation-pipeline`](../../examples/projects/evaluation-pipeline/README.md), [`release_probe.py`](../../tests/release_probe.py) |
 | Model contract, scalar reverse-mode tape, finite-difference check, linear training and checkpoint-schema fixtures | Experimental implemented, narrow | [`autograd`](../../examples/autograd/README.md), runtime/N3a probe and [`linear-training`](../../examples/projects/linear-training/README.md); no tensor tape or general trainer |
 | CLI `--help`, `--version`, `check`, `run`, `build` and `exec` | Implemented development CLI | [`src/main.rs`](../../src/main.rs), CLI and B1 fixtures |
 | Human/JSON diagnostics, stable source spans, `--quiet` and `from io import print` | Experimental F1 subset implemented and tested | [`Diagnostic`](../../src/diagnostic.rs), [`--format=json`](../../src/main.rs), CLI tests |

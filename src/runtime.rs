@@ -536,11 +536,10 @@ impl<'a> Interpreter<'a> {
             Pattern::Wildcard(_) => Ok(true),
             Pattern::Binding { name, .. } => {
                 if self.is_constructor_binding(name, value) {
-                    Ok(true)
-                } else {
-                    bindings.push((name.clone(), value.clone()));
-                    Ok(true)
+                    return Ok(self.constructor_binding_matches(name, value));
                 }
+                bindings.push((name.clone(), value.clone()));
+                Ok(true)
             }
             Pattern::Boolean {
                 value: expected, ..
@@ -606,8 +605,23 @@ impl<'a> Interpreter<'a> {
     }
 
     fn is_constructor_binding(&self, name: &str, value: &Value) -> bool {
-        matches!(value, Value::Enum { variant, fields, .. } if variant == name && fields.is_empty())
-            || matches!(value, Value::Option(None) if name == "None")
+        match value {
+            Value::Option(_) => name == "None",
+            Value::Enum {
+                name: enum_name, ..
+            } => self.enums.get(enum_name).is_some_and(|definition| {
+                definition
+                    .variants
+                    .iter()
+                    .any(|variant| variant.name == name && variant.fields.is_empty())
+            }),
+            _ => false,
+        }
+    }
+
+    fn constructor_binding_matches(&self, name: &str, value: &Value) -> bool {
+        matches!(value, Value::Option(None) if name == "None")
+            || matches!(value, Value::Enum { variant, fields, .. } if variant == name && fields.is_empty())
     }
 
     fn eval_expr(&mut self, expression: &Expr) -> Eval<Value> {
@@ -2272,6 +2286,24 @@ mod tests {
         )
         .expect("execution should succeed");
         assert_eq!(value.render(), "[[1, 2, 3], [5, 4]]");
+    }
+
+    #[test]
+    fn bare_enum_constructor_does_not_match_a_different_variant() {
+        let value = run(
+            "enum Decision:\n    Accepted\n    Rejected(Text)\nfn classify(value: Decision) -> I64:\n    match value:\n        case Accepted:\n            return 1\n        case Rejected(reason):\n            return 2\nfn main() -> I64:\n    return classify(Rejected(\"below minimum\"))\n",
+        )
+        .expect("enum matching should execute");
+        assert_eq!(value, Value::I64(2));
+    }
+
+    #[test]
+    fn enum_variant_names_remain_bindings_for_other_value_types() {
+        let value = run(
+            "enum Marker:\n    Ready\nfn main() -> I64:\n    match 7:\n        case Ready:\n            return Ready\n",
+        )
+        .expect("a binding with a colliding name should execute");
+        assert_eq!(value, Value::I64(7));
     }
 
     #[test]
