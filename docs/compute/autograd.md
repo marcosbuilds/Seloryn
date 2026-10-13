@@ -1,7 +1,9 @@
 # Automatic differentiation
 
-**Design target only:** Seloryn 0.00 has no automatic-differentiation engine
-or executable computation graph. N2 now supplies the tested CPU forward
+**General reverse-mode autodiff remains a design target:** Seloryn 0.00 has no
+automatic-differentiation engine or executable computation graph. The runtime
+does expose a narrow, executable `autograd.gradcheck` finite-difference
+contract for a scalar function. N2 supplies the tested CPU forward
 primitives needed by that work—2D transpose, F32 unary operations, stable
 softmax/logsumexp and broadcast sum-to-shape—but it does not record gradients.
 The first ML-ready gradient engine is
@@ -22,6 +24,25 @@ optimizer.apply(gradients)?
 ```
 
 `using` is reserved grammar pending an ownership/cancellation design. This example describes the intended API only; it is not executable.
+
+### Executable scalar check
+
+The current finite-difference fixture evaluates the supplied function at two
+nearby points; it does not build a tape or perform reverse-mode backpropagation:
+
+```seloryn
+from autograd import gradcheck
+
+fn f(x: F32) -> F32:
+    return x * x + x
+
+fn main() -> F32:
+    return gradcheck(f, 4.0)
+```
+
+`seloryn run` returns `9.0` for this source. The implementation and test are
+in [`src/runtime.rs`](../../src/runtime.rs); tensor `backward` remains a
+narrow broadcast fixture and is not a general gradient engine.
 
 ### Required derivation tests
 

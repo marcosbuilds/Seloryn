@@ -96,6 +96,29 @@ fn build_and_exec_reproduce_a_project_bundle() {
 }
 
 #[test]
+fn runs_public_json_project_example_with_local_module() {
+    let checked = run_cli(&["check", "examples/projects/json-config"]);
+    assert!(checked.status.success());
+    assert!(checked.stderr.is_empty());
+
+    let output = run_cli(&["run", "examples/projects/json-config"]);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert_eq!(output.stdout, b"configured model: gpt-local\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn runs_public_linear_training_fixture_example() {
+    let output = run_cli(&["run", "examples/projects/linear-training"]);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert_eq!(
+        output.stdout,
+        b"{\"holdout_mae_max\":0.05,\"holdout_mae_observed\":0.01893684,\"loss_decreased\":true,\"seed\":7}\n"
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn unicode_unsupported_argument_has_structured_failure() {
     let output = run_cli(&["entrada-入口"]);
     assert_eq!(output.status.code(), Some(64));

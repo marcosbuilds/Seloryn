@@ -16,10 +16,11 @@ error[SEL-T102]: expected Bool, got Text
 
 A diagnostic has stable `code`, severity, category, source file, a primary
 source span (byte offsets and Unicode-aware display columns), help,
-machine-readable JSON form and reproducible ordering. Runtime JSON diagnostics
-also carry the deterministic function stack. Secondary labels, related
-diagnostics and module identities remain future fields; they are not claimed by
-the current CLI.
+machine-readable JSON form and reproducible ordering. The current checker can
+emit several independent semantic diagnostics from one source. Runtime JSON
+diagnostics also carry the deterministic function stack. Secondary labels,
+related diagnostics, parser recovery across all malformed regions and module
+identity fields remain future work; they are not claimed by the current CLI.
 
 | Family | Codes | Example |
 |---|---|---|

@@ -10,7 +10,11 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-const MAX_CALL_DEPTH: usize = 128;
+// Keep the logical recursion guard below the smallest stack budget used by
+// supported test runners. The interpreter is recursive today, so a limit
+// that is safe on a large Windows thread stack can still abort before the
+// guard on macOS runners with smaller test-thread stacks.
+const MAX_CALL_DEPTH: usize = 32;
 const MAX_LOOP_ITERATIONS: usize = 1_000_000;
 const MAX_LIST_ELEMENTS: usize = 1_000_000;
 const MAX_RENDER_VALUES: usize = 4096;
@@ -1009,7 +1013,45 @@ impl<'a> Interpreter<'a> {
                     value: Box::new(Value::Text("fixture response".to_owned())),
                 })
             }
-            "gradcheck" => Ok(Value::F64(7.0)),
+            "gradcheck" => {
+                let Some(Value::Function(function_name)) = values.first().cloned() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "gradcheck requires a callable function",
+                        span,
+                    )));
+                };
+                let Some(Value::F64(point)) = values.get(1) else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "gradcheck requires an F64 point",
+                        span,
+                    )));
+                };
+                let epsilon = 1.0e-4;
+                let plus =
+                    self.call_named(&function_name, vec![Value::F64(*point + epsilon)], span)?;
+                let minus =
+                    self.call_named(&function_name, vec![Value::F64(*point - epsilon)], span)?;
+                let (Value::F64(plus), Value::F64(minus)) = (plus, minus) else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "gradcheck function must return F32",
+                        span,
+                    )));
+                };
+                let derivative = (plus - minus) / (2.0 * epsilon);
+                // The public scalar fixture is rendered as a stable decimal;
+                // this removes platform noise from the finite-difference
+                // quotient without pretending to provide reverse autodiff.
+                let derivative = (derivative * 1_000_000.0).round() / 1_000_000.0;
+                finite_f64(
+                    derivative,
+                    "gradcheck produced a non-finite derivative",
+                    span,
+                    self,
+                )
+            }
             "backward" => {
                 let Some(Value::Tensor(tensor)) = values.get(1) else {
                     return Err(Control::Runtime(self.runtime(
@@ -2175,6 +2217,18 @@ mod tests {
         )
         .expect_err("call depth must fail");
         assert_eq!(depth.code, "SEL-R132");
+    }
+
+    #[test]
+    fn gradcheck_evaluates_the_supplied_function() {
+        let value = run(
+            "from autograd import gradcheck\nfn f(x: F32) -> F32:\n    return x * x + x\nfn main() -> F32:\n    return gradcheck(f, 4.0)\n",
+        )
+        .expect("gradcheck must execute");
+        let Value::F64(value) = value else {
+            panic!("gradcheck must return a floating-point derivative");
+        };
+        assert!((value - 9.0).abs() < 0.01, "observed derivative {value}");
     }
 
     #[test]

@@ -35,7 +35,7 @@ instead of gaining features by default.
 | Deterministic core IR and execution boundary | Experimental implemented | `src/ir.rs`, runtime parity tests; bounded subset only |
 | Local modules and project manifests | Experimental implemented | F3 project fixtures; no registry or external package resolver |
 | JSON read/parse/encode/get and bounded file capability | Experimental implemented | F4 fixtures; paths remain root-confined |
-| Model contract, scalar/broadcast gradient and linear-training fixtures | Experimental implemented, narrow | F5/N3/N4/CKPT fixtures; no general provider or MLP claim |
+| Model contract, finite-difference gradient check, linear-training and checkpoint-validation fixtures | Experimental implemented, narrow | Runtime fixtures and public linear example; no reverse-mode tape, general provider or MLP claim |
 | `build`/`exec` `.selyapp` bundle path | Experimental B1 | Deterministic bundle and clean terminal fixtures; not an installer |
 | HTTP, packages, GPU and distributed execution | Not implemented or verified | No supported release artifact exists |
 | Local installer scripts | Experimental B2; Windows x64 lifecycle verified here | No public download, signing or cross-OS binary support |
@@ -57,7 +57,7 @@ fn accuracy(predicted: Tensor[I64], expected: Tensor[I64]) -> Result[I64, Text]:
     return Ok(tensor_elements(predicted))
 ```
 
-The function above is intentionally illustrative beyond the current callable API. The verified runnable tensor examples are [`examples/tensor-matmul.sely`](examples/tensor-matmul.sely) and [`examples/tensor-numeric.sely`](examples/tensor-numeric.sely); they return real CPU results through `seloryn run`.
+The function above is intentionally illustrative beyond the current callable API. The verified runnable tensor examples are [`examples/tensors/tensor-matmul.sely`](examples/tensors/tensor-matmul.sely) and [`examples/tensors/tensor-numeric.sely`](examples/tensors/tensor-numeric.sely); they return real CPU results through `seloryn run`. Project examples for local modules, JSON and the narrow linear-training fixture live under [`examples/projects`](examples/projects/README.md).
 
 ## Read next
 
