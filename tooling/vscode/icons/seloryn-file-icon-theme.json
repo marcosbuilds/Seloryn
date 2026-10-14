@@ -1,0 +1,18 @@
+{
+  "$schema": "vscode://schemas/icon-theme",
+  "name": "seloryn-file-icons",
+  "include": [],
+  "iconDefinitions": {
+    "_seloryn": {
+      "iconPath": "../assets/seloryn-file-icon.svg"
+    }
+  },
+  "file": "_file",
+  "folder": "_folder",
+  "fileExtensions": {
+    "sely": "_seloryn"
+  },
+  "languageIds": {
+    "seloryn": "_seloryn"
+  }
+}

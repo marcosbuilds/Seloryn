@@ -51,6 +51,10 @@ jobs:
         run: python tests/n3_probe.py
       - name: Public projects and bundle probe
         run: python tests/release_probe.py
+      - name: Install VS Code packaging dependencies
+        run: npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
+      - name: Build deterministic VSIX preview
+        run: npm run package --prefix tooling/vscode
       - name: VS Code extension metadata and API-double tests
         run: npm test --prefix tooling/vscode
       - name: PowerShell 5.1 CLI smoke

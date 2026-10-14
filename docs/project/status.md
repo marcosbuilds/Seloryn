@@ -16,7 +16,7 @@
 | N2 CPU numeric closure | Experimental implemented and tested | [`src/tensor/ops.rs`](../../src/tensor/ops.rs), [`n2_probe.py`](../../tests/n2_probe.py), [`tensor-numeric.sely`](../../examples/tensors/tensor-numeric.sely) |
 | Deterministic core IR boundary | Experimental implemented and tested | [`src/ir.rs`](../../src/ir.rs), runtime and lowering tests |
 | Local project modules and `seloryn.toml` | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`json-config`](../../examples/projects/json-config/README.md) |
-| VS Code `.sely` highlighting, native completion and opt-in AI ghost text | Experimental implemented and tested outside the host | [`tooling/vscode`](../../tooling/vscode), Node API-double tests and extension fixture; no full LSP or live provider claim |
+| VS Code `.sely` highlighting, native completion, optional file icons and opt-in AI ghost text | Verified preview, tested headlessly and packaged as a reproducible local VSIX | [`tooling/vscode`](../../tooling/vscode), Node API-double/package tests and VSIX archive; no full LSP, Explorer rendering or live provider claim |
 | JSON read/parse/encode/get with root and size limits | Experimental implemented and tested | [`src/json.rs`](../../src/json.rs), [`json-config`](../../examples/projects/json-config/README.md) |
 | Multi-file project execution with typed business decisions and bundle parity | Experimental implemented and tested | [`evaluation-pipeline`](../../examples/projects/evaluation-pipeline/README.md), [`release_probe.py`](../../tests/release_probe.py) |
 | Model contract, scalar reverse-mode tape, finite-difference check, linear training and checkpoint-schema fixtures | Experimental implemented, narrow | [`autograd`](../../examples/autograd/README.md), [`linear-training`](../../examples/projects/linear-training/README.md) and [`checkpoint-validation`](../../examples/projects/checkpoint-validation/README.md); no tensor tape or general trainer |
@@ -33,7 +33,7 @@
 | HTTP, processes and unrestricted file effects | **Not implemented** | only bounded root-confined JSON reads are available |
 | General tensor autograd, optimizers, MLPs and model serving | **Not implemented** | The implemented scalar reverse-mode fixture and narrow broadcast/linear fixtures do not imply a general ML stack |
 | GPU, distributed execution and serving | **Not implemented** | no accelerator or production service exists |
-| Formatter, full LSP, public installer and release artifacts | **Not implemented or verified** | the VS Code extension supplies syntax/completion/opt-in ghost text only; no supported release path exists |
+| Formatter, full LSP, public runtime installer and runtime release artifacts | **Not implemented or verified** | the VS Code editor preview has a local VSIX path, but no public marketplace/release artifact or supported runtime distribution exists |
 
 ## E3 gate fulfillment
 

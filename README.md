@@ -35,7 +35,7 @@ instead of gaining features by default.
 | Typed tensor reads and lossless dtype conversion | Experimental N1 implementation | `tensor_get_f32` / `tensor_get_i64`, `tensor_to_f32` / `tensor_to_i64`, bounds and dtype regressions in [`tests/tensor_cpu.rs`](tests/tensor_cpu.rs) |
 | Deterministic core IR and execution boundary | Experimental implemented | `src/ir.rs`, runtime parity tests; bounded subset only |
 | Local modules and project manifests | Experimental implemented | Public project fixtures; no registry or external package resolver |
-| VS Code syntax highlighting and native completion | Experimental implemented | [`tooling/vscode`](tooling/vscode); headless API tests plus a real `.sely` fixture; live host validation remains environment-dependent |
+| VS Code syntax highlighting, native completion and optional `.sely` file icons | Verified editor preview | [`tooling/vscode`](tooling/vscode); headless tests, reproducible local VSIX and CLI installation inspection; Explorer rendering remains environment-dependent |
 | JSON read/parse/encode/get and bounded file capability | Experimental implemented | JSON project fixtures; paths remain root-confined |
 | Scalar reverse-mode tape, finite-difference gradient check, linear-training and checkpoint-validation fixtures | Experimental implemented, narrow | [`examples/autograd`](examples/autograd), runtime tests and public linear example; no tensor autograd, general provider or MLP claim |
 | Opt-in sampled training events | Experimental implemented, narrow | `seloryn run ... --log=human|json`; stderr-only lifecycle for `training.train_linear`, not general telemetry |
@@ -64,7 +64,7 @@ The function above is intentionally illustrative beyond the current callable API
 
 ## Read next
 
-[Getting started](docs/guide/start.md) · [Editor support](docs/guide/editor.md) · [Architecture](docs/project/architecture.md) · [Grammar](docs/reference/grammar.md) · [Types](docs/reference/types.md) · [Errors](docs/reference/errors.md) · [Tensors](docs/compute/tensors.md) · [Training](docs/compute/training.md) · [LLM path](docs/compute/llms.md) · [Servers](docs/systems/http.md) · [Platform support](docs/guide/platforms.md) · [Releases](docs/project/versions.md) · [License](docs/project/licensing.md)
+[Getting started](docs/guide/start.md) · [Editor support](docs/guide/editor.md) · [Next executable gates](docs/project/next-gates.md) · [Architecture](docs/project/architecture.md) · [Grammar](docs/reference/grammar.md) · [Types](docs/reference/types.md) · [Errors](docs/reference/errors.md) · [Tensors](docs/compute/tensors.md) · [Training](docs/compute/training.md) · [LLM path](docs/compute/llms.md) · [Servers](docs/systems/http.md) · [Platform support](docs/guide/platforms.md) · [Releases](docs/project/versions.md) · [License](docs/project/licensing.md)
 
 ## References and visuals
 

@@ -1,9 +1,15 @@
 {
   "name": "seloryn-language",
   "displayName": "Seloryn Language",
-  "description": "Experimental syntax highlighting, native completions and opt-in AI ghost text for Seloryn.",
+  "description": "Seloryn .sely editing preview with syntax highlighting, native completions and opt-in AI ghost text.",
   "version": "0.0.1",
   "publisher": "seloryn",
+  "icon": "./assets/seloryn-icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/marcosbuilds/Seloryn.git",
+    "directory": "tooling/vscode"
+  },
   "license": "MIT",
   "engines": {
     "vscode": ">=1.95.0"
@@ -43,6 +49,13 @@
         "path": "./syntaxes/seloryn.tmLanguage.json"
       }
     ],
+    "iconThemes": [
+      {
+        "id": "seloryn-file-icons",
+        "label": "Seloryn File Icons",
+        "path": "./icons/seloryn-file-icon-theme.json"
+      }
+    ],
     "commands": [
       {
         "command": "seloryn.toggleAiGhostText",
@@ -68,7 +81,13 @@
     }
   },
   "scripts": {
-    "test": "node test/extension.test.js",
-    "check": "node test/extension.test.js"
+    "test": "node test/extension.test.js && node test/package.test.js",
+    "check": "npm test",
+    "package": "npm run check && vsce package --no-dependencies && node scripts/normalize-vsix.js"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "3.7.1",
+    "yauzl": "2.10.0",
+    "yazl": "2.5.1"
   }
 }

@@ -15,6 +15,6 @@ fixture contract and accelerator engines do not exist yet.**
 | **Language** | [Philosophy](reference/language.md) | [Grammar](reference/grammar.md), [Types](reference/types.md), [Patterns](reference/patterns.md), [Errors](reference/errors.md), [Modules](reference/modules.md) |
 | **Compute** | [Tensors](compute/tensors.md) | [Autograd](compute/autograd.md), [Training](compute/training.md), [LLMs](compute/llms.md), [Inference](compute/inference.md) |
 | **Systems** | [HTTP services](systems/http.md) | [Automation](systems/automation.md), [Security](systems/security.md) |
-| **Project** | [Architecture](project/architecture.md) | [Versioning](project/versions.md), [Status](project/status.md), [Licensing](project/licensing.md) |
+| **Project** | [Architecture](project/architecture.md) | [Next executable gates](project/next-gates.md), [Versioning](project/versions.md), [Status](project/status.md), [Licensing](project/licensing.md) |
 
 The checked runnable examples are grouped under [`examples/`](../examples/README.md), including standalone CPU tensors and project examples for local modules, JSON and the narrow linear-training fixture. Other forward-looking system and model examples remain design documentation.

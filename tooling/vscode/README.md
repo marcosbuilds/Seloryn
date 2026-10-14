@@ -8,6 +8,8 @@ It currently provides:
 
 - `.sely` file association, comments, brackets, indentation and TextMate
   syntax highlighting;
+- a Seloryn extension mark and an optional `Seloryn File Icons` theme that
+  maps both the `seloryn` language id and `.sely` files to the Seloryn mark;
 - native VS Code completion items for local declarations, parameters, types,
   implemented builtins, keywords and reserved syntax;
 - opt-in inline ghost text through the VS Code Language Model API when a
@@ -36,6 +38,27 @@ development binary it can also be checked with:
 ```text
 seloryn check tooling/vscode/examples/extension-evidence.sely
 ```
+
+## Local VSIX
+
+From this directory, install the pinned development dependency and build the
+package with:
+
+```text
+npm ci
+npm run package
+```
+
+The result is a local `seloryn-language-0.0.1.vsix`. The package contains the
+extension runtime, grammar, language configuration, README, logo and file-icon
+theme; tests, fixtures and the lockfile stay out of the VSIX.
+The packaging step fixes ZIP entry ordering and timestamps, so repeated builds
+from the same locked dependency tree produce the same local artifact.
+
+The extension manifest icon identifies the extension itself. To show the
+Seloryn mark beside `.sely` files in the Explorer, select `Seloryn File Icons`
+from `Preferences: File Icon Theme`. The extension does not change the user's
+global icon-theme setting automatically.
 
 For an interactive VS Code check, open the repository as an extension
 development host with `tooling/vscode` as the extension directory. A real
