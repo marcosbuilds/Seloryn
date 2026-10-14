@@ -43,7 +43,11 @@ files and explicitly declared `[capabilities].read` directories into a
 deterministic experimental `.selyapp` bundle and writes JSON build metadata.
 The runtime performs the same deterministic lowering at `exec` time; this B1
 bundle is not native code or a public release. `exec` validates and materializes
-that bundle in a temporary directory before running the same project contract.
+that bundle in a temporary directory before running the same project contract,
+but diagnostics retain the stable bundle path rather than exposing the
+materialization directory. A top-level `Err(E)` also points to the first
+applicable control-flow source span in the entry function. Repeated execution
+of the same failing bundle therefore produces the same diagnostic identity.
 Only relative manifest, source and declared-read paths are permitted; this is
 B1 evidence, not an installer or supported release.
 

@@ -44,7 +44,7 @@ Percentages below are engineering estimates of the design gate, not test coverag
 | E3.2 — types and inference | 65% | [`type_of_expr`](../../src/semantic.rs#L652), [`type_from_expr`](../../src/semantic.rs#L1005) | No user generics or symbolic shape constraints |
 | E3.3 — records, enums and fallibility | 75% | [`check_require`](../../src/semantic.rs#L371), [`type_of_call`](../../src/semantic.rs#L845), Result/Option tests | General error conversion and runtime resource behavior remain outside E3/E4 |
 | E3.4 — exhaustive `match` | 70% | [`check_match`](../../src/semantic.rs#L409), [`required_coverage`](../../src/semantic.rs#L632), match tests | Structural/named-field patterns and ranges remain outside; the validated constructor subset executes |
-| E3.5 — semantic CLI proof | 70% | [`check_path`](../../src/main.rs#L83), structured diagnostics and CLI integration tests | Property/fuzz campaign, golden corpus and Linux/macOS execution evidence remain absent |
+| E3.5 — semantic CLI proof | 70% | [`check_path`](../../src/main.rs#L83), structured diagnostics and CLI integration tests | Property/fuzz campaign and golden corpus remain absent; CI execution evidence is not a supported release |
 
 ## E4 execution evidence
 

@@ -24,10 +24,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Rust toolchain
-        run: |
-          rustup update stable
-          rustup default stable
-          rustup component add rustfmt clippy
+        run: rustup show active-toolchain
       - name: Toolchain details
         run: |
           rustc --version
@@ -66,3 +63,23 @@ jobs:
         if: runner.os == 'Windows'
         shell: cmd
         run: target\release\seloryn.exe run examples\tensors\tensor-matmul.sely
+      - name: PowerShell 5.1 failure exit smoke
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          & .\target\release\seloryn.exe run tests\result-error.sely
+          if ($LASTEXITCODE -ne 65) { throw "expected Seloryn failure exit code 65, got $LASTEXITCODE" }
+          exit 0
+      - name: PowerShell 7 failure exit smoke
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & .\target\release\seloryn.exe run tests\result-error.sely
+          if ($LASTEXITCODE -ne 65) { throw "expected Seloryn failure exit code 65, got $LASTEXITCODE" }
+          exit 0
+      - name: CMD failure exit smoke
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          target\release\seloryn.exe run tests\result-error.sely
+          if not "%ERRORLEVEL%"=="65" exit /b 1

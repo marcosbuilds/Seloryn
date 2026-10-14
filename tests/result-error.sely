@@ -1,0 +1,2 @@
+fn main() -> Result[Unit, Text]:
+    return Err("policy disabled")

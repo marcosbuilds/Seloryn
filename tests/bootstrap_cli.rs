@@ -433,11 +433,54 @@ fn run_returns_nonzero_for_a_typed_result_error() {
     let stderr = String::from_utf8(output.stderr).expect("diagnostics must be UTF-8");
     assert!(stderr.contains("SEL-R127"));
     assert!(stderr.contains("program returned Err(\"policy disabled\")"));
+    assert!(stderr.contains(":2:5: SEL-R127"));
     assert_eq!(json_output.status.code(), Some(65));
     assert!(json_output.stdout.is_empty());
     let json_stderr = String::from_utf8(json_output.stderr).expect("JSON must be UTF-8");
     assert!(json_stderr.starts_with("{\"diagnostics\":["));
     assert!(json_stderr.contains("\"code\":\"SEL-R127\""));
+}
+
+#[test]
+fn exec_reports_stable_artifact_diagnostics_for_repeated_result_failures() {
+    let root = std::env::temp_dir().join(format!("seloryn-bundle-error-{}", std::process::id()));
+    let source_root = root.join("src");
+    let output_root = root.join("build");
+    std::fs::create_dir_all(&source_root).expect("project source root");
+    std::fs::write(
+        root.join("seloryn.toml"),
+        "[package]\nname = \"bundle-error-fixture\"\nlanguage = \"0.00\"\nsource_root = \"src\"\nentry = \"main.sely\"\n",
+    )
+    .expect("project manifest");
+    std::fs::write(
+        source_root.join("main.sely"),
+        "fn main() -> Result[Unit, Text]:\n    return Err(\"policy disabled\")\n",
+    )
+    .expect("failing project source");
+
+    let build = run_cli_owned(&[
+        "build".into(),
+        root.clone().into_os_string(),
+        "--profile".into(),
+        "release".into(),
+        "--output".into(),
+        output_root.clone().into_os_string(),
+    ]);
+    assert!(build.status.success(), "build stderr: {:?}", build.stderr);
+    let artifact = output_root.join("seloryn.selyapp");
+    let first = run_cli_owned(&["exec".into(), artifact.clone().into_os_string()]);
+    let second = run_cli_owned(&["exec".into(), artifact.clone().into_os_string()]);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(first.status.code(), Some(65));
+    assert_eq!(second.status.code(), Some(65));
+    assert_eq!(first.stdout, second.stdout);
+    assert_eq!(first.stderr, second.stderr);
+    let stderr = String::from_utf8(first.stderr).expect("diagnostics must be UTF-8");
+    assert!(stderr.contains("SEL-R127"));
+    assert!(stderr.contains(":2:5: SEL-R127"));
+    assert!(stderr.contains(artifact.to_string_lossy().as_ref()));
+    assert!(!stderr.contains("seloryn-exec-"));
 }
 
 #[test]

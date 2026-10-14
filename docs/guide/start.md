@@ -44,7 +44,8 @@ The current capability limits are recorded in the [status page](../project/statu
 
 From a built development binary, the current evidence path is:
 
-1. Install a Rust toolchain and clone the development repository.
+1. Clone the development repository; its `rust-toolchain.toml` pins the
+   development Rust toolchain and the required `rustfmt`/`clippy` components.
 2. Run `cargo test --all-targets --locked` from the checkout.
 3. Save a UTF-8 `.sely` source file and use `cargo run -- check`, followed by `cargo run -- run`.
 4. Use only the documented CPU tensor subset until a separately verified backend exists.

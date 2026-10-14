@@ -468,13 +468,26 @@ fn check_project_path(path: &std::path::Path, options: Options) -> u8 {
 }
 
 fn run_project_path(path: &std::path::Path, options: Options) -> u8 {
+    run_project_path_with_diagnostic_path(path, path, options)
+}
+
+fn run_project_path_with_diagnostic_path(
+    path: &std::path::Path,
+    diagnostic_path: &std::path::Path,
+    options: Options,
+) -> u8 {
     let loaded = match project::load(path) {
         Ok(loaded) => loaded,
-        Err(diagnostic) => return write_diagnostics(path, "", &[diagnostic], options),
+        Err(diagnostic) => return write_diagnostics(diagnostic_path, "", &[diagnostic], options),
     };
     let semantic_diagnostics = semantic::check(&loaded.program);
     if !semantic_diagnostics.is_empty() {
-        return write_diagnostics(path, &loaded.source, &semantic_diagnostics, options);
+        return write_diagnostics(
+            diagnostic_path,
+            &loaded.source,
+            &semantic_diagnostics,
+            options,
+        );
     }
     match runtime::execute_with_context(
         &loaded.program,
@@ -482,23 +495,27 @@ fn run_project_path(path: &std::path::Path, options: Options) -> u8 {
         loaded.json_max_bytes,
         loaded.json_max_depth,
     ) {
-        Ok(output) => {
-            write_execution_output(path, &loaded.source, &loaded.program, output, options)
-        }
+        Ok(output) => write_execution_output(
+            diagnostic_path,
+            &loaded.source,
+            &loaded.program,
+            output,
+            options,
+        ),
         Err(error) => {
             let diagnostic = error.diagnostic();
             if options.format == OutputFormat::Human {
-                let mut rendered = diagnostic::render(path, &loaded.source, &diagnostic);
+                let mut rendered = diagnostic::render(diagnostic_path, &loaded.source, &diagnostic);
                 if !error.stack.is_empty() {
                     rendered.push_str(&format!(
                         "{}: stack {}\n",
-                        path.display(),
+                        diagnostic_path.display(),
                         error.stack.join(" -> ")
                     ));
                 }
                 write_data_stderr(&rendered)
             } else {
-                write_diagnostics(path, &loaded.source, &[diagnostic], options)
+                write_diagnostics(diagnostic_path, &loaded.source, &[diagnostic], options)
             }
         }
     }
@@ -522,7 +539,7 @@ fn write_execution_output(
         let diagnostic = diagnostic::Diagnostic::new(
             "SEL-R127",
             format!("program returned {}", value.render()),
-            diagnostic::Span::new(0, 0),
+            result_failure_span(program),
         );
         return write_diagnostics(path, source, &[diagnostic], options);
     }
@@ -536,6 +553,49 @@ fn write_execution_output(
     } else {
         write_stdout(&rendered)
     }
+}
+
+fn result_failure_span(program: &parser::Program) -> diagnostic::Span {
+    program
+        .items
+        .iter()
+        .find_map(|item| match item {
+            parser::Item::Function(function) if function.name == "main" => {
+                first_control_flow_span(&function.body).or(Some(function.span))
+            }
+            _ => None,
+        })
+        .unwrap_or(program.span)
+}
+
+fn first_control_flow_span(statements: &[parser::Statement]) -> Option<diagnostic::Span> {
+    for statement in statements {
+        let span = match statement {
+            parser::Statement::Return {
+                value: Some(_),
+                span,
+            }
+            | parser::Statement::Require { span, .. } => Some(*span),
+            parser::Statement::If {
+                branches,
+                otherwise,
+                ..
+            } => branches
+                .iter()
+                .find_map(|branch| first_control_flow_span(&branch.body))
+                .or_else(|| otherwise.as_deref().and_then(first_control_flow_span)),
+            parser::Statement::Match(statement) => statement
+                .cases
+                .iter()
+                .find_map(|case| first_control_flow_span(&case.body)),
+            parser::Statement::For { body, .. } => first_control_flow_span(body),
+            _ => None,
+        };
+        if span.is_some() {
+            return span;
+        }
+    }
+    None
 }
 
 fn build_path(path: PathBuf, profile: String, output: PathBuf) -> u8 {
@@ -618,7 +678,7 @@ fn exec_path(path: PathBuf) -> u8 {
         }
     };
     let result = match materialize_bundle(&temporary, &bundle) {
-        Ok(()) => run_project_path(&temporary, Options::default()),
+        Ok(()) => run_project_path_with_diagnostic_path(&temporary, &artifact, Options::default()),
         Err(diagnostic) => write_diagnostics(&artifact, "", &[diagnostic], Options::default()),
     };
     let _ = fs::remove_dir_all(&temporary);

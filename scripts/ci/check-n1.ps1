@@ -26,7 +26,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Linear forward example failed' }
     & .\target\release\seloryn.exe run examples\tensors\tensor-reduce.sely
     if ($LASTEXITCODE -ne 0) { throw 'Tensor reduction example failed' }
+    & .\target\release\seloryn.exe run tests\result-error.sely
+    if ($LASTEXITCODE -ne 65) { throw "Expected result-error fixture to exit 65, got $LASTEXITCODE" }
     Write-Output 'Seloryn public checks completed successfully'
+    exit 0
 } finally {
     Pop-Location
 }
