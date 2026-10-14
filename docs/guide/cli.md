@@ -7,7 +7,7 @@ experimental E4 interpreter and the narrow project/bundle gates. It is not an in
 seloryn --help
 seloryn --version
 seloryn check <file.sely> [--format=human|json] [--quiet]
-seloryn run <file.sely> [--format=human|json]
+seloryn run <file.sely> [--format=human|json] [--log=off|human|json]
 seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
 ```
@@ -30,7 +30,11 @@ top-level result failures write stable `SEL-*` diagnostics to stderr; no runtime
 evaluation starts after a lexical, parse or semantic diagnostic. `--format=json` emits one
 JSON document containing the diagnostics, source byte spans, Unicode-aware
 locations, help and runtime stack. `--quiet` suppresses the successful `check`
-line. A standalone source run performs no file, network, process or GPU
+line. `--log=human` or `--log=json` is opt-in and streams only the narrow
+`training.train_linear` lifecycle to stderr; it never changes program stdout.
+Human logs are concise, while JSON logs are one deterministic JSON object per
+line. Events report dataset paths, sample counts, metadata-only seed, sampled
+steps and measured losses. `--log=off` is the default. A standalone source run performs no file, network, process or GPU
 effects; a project run may perform only its explicitly bounded JSON reads. The
 behavior is covered by the CLI tests in
 [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs) and
@@ -41,7 +45,7 @@ examples are grouped under [`examples/projects`](../../examples/projects/README.
 `build` validates a local `seloryn.toml` project, packages its validated source
 files and explicitly declared `[capabilities].read` directories into a
 deterministic experimental `.selyapp` bundle and writes JSON build metadata.
-The runtime performs the same deterministic lowering at `exec` time; this B1
+The runtime performs the same deterministic lowering at `exec` time; this
 bundle is not native code or a public release. `exec` validates and materializes
 that bundle in a temporary directory before running the same project contract,
 but diagnostics retain the stable bundle path rather than exposing the
@@ -49,7 +53,7 @@ materialization directory. A top-level `Err(E)` also points to the first
 applicable control-flow source span in the entry function. Repeated execution
 of the same failing bundle therefore produces the same diagnostic identity.
 Only relative manifest, source and declared-read paths are permitted; this is
-B1 evidence, not an installer or supported release.
+experimental bundle evidence, not an installer or supported release.
 
 ## Future commands
 

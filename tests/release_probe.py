@@ -50,6 +50,9 @@ def main() -> int:
     training = run("run", "examples/projects/linear-training")
     assert '"loss_decreased":true' in training.stdout
 
+    checkpoint = run("run", "examples/projects/checkpoint-validation")
+    assert '"fixture":"schema-valid"' in checkpoint.stdout
+
     indexed = run("run", "examples/tensors/tensor-index.sely")
     assert indexed.stdout == "3.0\n"
 

@@ -27,7 +27,7 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar and N1/N2 CPU tensor subset.\n`build` creates a deterministic experimental `.selyapp` bundle; `exec` runs one.\nNo installer or supported release is available yet.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar and N1/N2 CPU tensor subset.\n`--log` is off by default; when enabled, narrow training progress is streamed to stderr.\n`build` creates a deterministic experimental `.selyapp` bundle; `exec` runs one.\nNo installer or supported release is available yet.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -43,9 +43,17 @@ enum ColorMode {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LogFormat {
+    Off,
+    Human,
+    Json,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Options {
     format: OutputFormat,
     color: ColorMode,
+    log: LogFormat,
     quiet: bool,
 }
 
@@ -54,6 +62,7 @@ impl Default for Options {
         Self {
             format: OutputFormat::Human,
             color: ColorMode::Auto,
+            log: LogFormat::Off,
             quiet: false,
         }
     }
@@ -193,7 +202,7 @@ fn parse_command(command: &str, args: &[OsString]) -> Action {
         let argument = &args[index];
         if argument == "--quiet" {
             options.quiet = true;
-        } else if argument == "--format" || argument == "--color" {
+        } else if argument == "--format" || argument == "--color" || argument == "--log" {
             let Some(value) = args.get(index + 1) else {
                 return unsupported_arguments(args);
             };
@@ -202,11 +211,16 @@ fn parse_command(command: &str, args: &[OsString]) -> Action {
                     return unsupported_arguments(args);
                 };
                 options.format = format;
-            } else {
+            } else if argument == "--color" {
                 let Some(color) = parse_color(value) else {
                     return unsupported_arguments(args);
                 };
                 options.color = color;
+            } else {
+                let Some(log) = parse_log(value) else {
+                    return unsupported_arguments(args);
+                };
+                options.log = log;
             }
             index += 1;
         } else if let Some(value) = argument
@@ -225,6 +239,14 @@ fn parse_command(command: &str, args: &[OsString]) -> Action {
                 return unsupported_arguments(args);
             };
             options.color = color;
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--log="))
+        {
+            let Some(log) = parse_log_text(value) else {
+                return unsupported_arguments(args);
+            };
+            options.log = log;
         } else if argument
             .to_str()
             .is_some_and(|value| value.starts_with('-'))
@@ -276,6 +298,207 @@ fn parse_color_text(value: &str) -> Option<ColorMode> {
         "never" => Some(ColorMode::Never),
         _ => None,
     }
+}
+
+fn parse_log(argument: &OsString) -> Option<LogFormat> {
+    parse_log_text(argument.to_str()?)
+}
+
+fn parse_log_text(value: &str) -> Option<LogFormat> {
+    match value {
+        "off" => Some(LogFormat::Off),
+        "human" => Some(LogFormat::Human),
+        "json" => Some(LogFormat::Json),
+        _ => None,
+    }
+}
+
+struct CliEventSink {
+    format: LogFormat,
+    failure: Option<io::Error>,
+}
+
+impl CliEventSink {
+    fn new(format: LogFormat) -> Self {
+        Self {
+            format,
+            failure: None,
+        }
+    }
+
+    fn take_failure(&mut self) -> Option<io::Error> {
+        self.failure.take()
+    }
+
+    fn write_line(&mut self, line: String) {
+        if self.failure.is_some() || self.format == LogFormat::Off {
+            return;
+        }
+        if let Err(error) = io::stderr().write_all(format!("{line}\n").as_bytes()) {
+            self.failure = Some(error);
+        }
+    }
+}
+
+impl runtime::EventSink for CliEventSink {
+    fn emit(&mut self, event: runtime::RuntimeEvent) {
+        let line = match self.format {
+            LogFormat::Off => return,
+            LogFormat::Human => render_runtime_event_human(&event),
+            LogFormat::Json => render_runtime_event_json(&event),
+        };
+        self.write_line(line);
+    }
+}
+
+fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
+    match event {
+        runtime::RuntimeEvent::Started {
+            model,
+            train_path,
+            test_path,
+            train_samples,
+            test_samples,
+            steps,
+            seed,
+        } => format!(
+            "seloryn training.start model={} train={} test={} train_samples={} test_samples={} steps={} seed_metadata={}",
+            model,
+            json::encode(&json::JsonValue::String(train_path.clone())),
+            json::encode(&json::JsonValue::String(test_path.clone())),
+            train_samples,
+            test_samples,
+            steps,
+            seed,
+        ),
+        runtime::RuntimeEvent::Step {
+            model,
+            step,
+            steps,
+            loss,
+        } => format!(
+            "seloryn training.step model={} step={}/{} loss={loss:.8}",
+            model, step, steps
+        ),
+        runtime::RuntimeEvent::Completed {
+            model,
+            steps,
+            seed,
+            initial_loss,
+            final_loss,
+            holdout_mae_max,
+        } => format!(
+            "seloryn training.complete model={} steps={} initial_loss={initial_loss:.8} final_loss={final_loss:.8} holdout_mae_max={holdout_mae_max:.8} seed_metadata={}",
+            model, steps, seed
+        ),
+    }
+}
+
+fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
+    let mut object = BTreeMap::new();
+    match event {
+        runtime::RuntimeEvent::Started {
+            model,
+            train_path,
+            test_path,
+            train_samples,
+            test_samples,
+            steps,
+            seed,
+        } => {
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("training.start".to_owned()),
+            );
+            object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert(
+                "train_path".to_owned(),
+                json::JsonValue::String(train_path.clone()),
+            );
+            object.insert(
+                "test_path".to_owned(),
+                json::JsonValue::String(test_path.clone()),
+            );
+            object.insert(
+                "train_samples".to_owned(),
+                json::JsonValue::Number(train_samples.to_string()),
+            );
+            object.insert(
+                "test_samples".to_owned(),
+                json::JsonValue::Number(test_samples.to_string()),
+            );
+            object.insert(
+                "steps".to_owned(),
+                json::JsonValue::Number(steps.to_string()),
+            );
+            object.insert("seed".to_owned(), json::JsonValue::Number(seed.to_string()));
+            object.insert(
+                "seed_semantics".to_owned(),
+                json::JsonValue::String("metadata_only".to_owned()),
+            );
+            object.insert(
+                "step_sampling".to_owned(),
+                json::JsonValue::String("first,10_percent,final".to_owned()),
+            );
+        }
+        runtime::RuntimeEvent::Step {
+            model,
+            step,
+            steps,
+            loss,
+        } => {
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("training.step".to_owned()),
+            );
+            object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert("step".to_owned(), json::JsonValue::Number(step.to_string()));
+            object.insert(
+                "steps".to_owned(),
+                json::JsonValue::Number(steps.to_string()),
+            );
+            object.insert(
+                "loss".to_owned(),
+                json::JsonValue::Number(format!("{loss:.8}")),
+            );
+        }
+        runtime::RuntimeEvent::Completed {
+            model,
+            steps,
+            seed,
+            initial_loss,
+            final_loss,
+            holdout_mae_max,
+        } => {
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("training.complete".to_owned()),
+            );
+            object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert(
+                "steps".to_owned(),
+                json::JsonValue::Number(steps.to_string()),
+            );
+            object.insert("seed".to_owned(), json::JsonValue::Number(seed.to_string()));
+            object.insert(
+                "seed_semantics".to_owned(),
+                json::JsonValue::String("metadata_only".to_owned()),
+            );
+            object.insert(
+                "initial_loss".to_owned(),
+                json::JsonValue::Number(format!("{initial_loss:.8}")),
+            );
+            object.insert(
+                "final_loss".to_owned(),
+                json::JsonValue::Number(format!("{final_loss:.8}")),
+            );
+            object.insert(
+                "holdout_mae_max".to_owned(),
+                json::JsonValue::Number(format!("{holdout_mae_max:.8}")),
+            );
+        }
+    }
+    json::encode(&json::JsonValue::Object(object))
 }
 
 fn display_argument(argument: &OsStr) -> String {
@@ -392,7 +615,13 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
     }
 
     let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
-    match runtime::execute_with_context(&program, base_dir, 128, 4) {
+    let mut event_sink = CliEventSink::new(options.log);
+    let execution =
+        runtime::execute_with_context_and_events(&program, base_dir, 128, 4, &mut event_sink);
+    if let Some(error) = event_sink.take_failure() {
+        return write_io_error("event log", error);
+    }
+    match execution {
         Ok(output) => write_execution_output(&path, &source, &program, output, options),
         Err(error) => {
             let diagnostic = error.diagnostic();
@@ -489,12 +718,19 @@ fn run_project_path_with_diagnostic_path(
             options,
         );
     }
-    match runtime::execute_with_context(
+    let mut event_sink = CliEventSink::new(options.log);
+    let execution = runtime::execute_with_capabilities_and_events(
         &loaded.program,
         &loaded.base_dir,
         loaded.json_max_bytes,
         loaded.json_max_depth,
-    ) {
+        &loaded.read_roots,
+        &mut event_sink,
+    );
+    if let Some(error) = event_sink.take_failure() {
+        return write_io_error("event log", error);
+    }
+    match execution {
         Ok(output) => write_execution_output(
             diagnostic_path,
             &loaded.source,

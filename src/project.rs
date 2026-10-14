@@ -16,6 +16,7 @@ pub struct LoadedProgram {
     pub source: String,
     pub label: String,
     pub base_dir: PathBuf,
+    pub read_roots: Vec<PathBuf>,
     pub json_max_bytes: usize,
     pub json_max_depth: usize,
 }
@@ -41,7 +42,14 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
             Span::new(0, 0),
         ));
     }
-    let manifest = path.join("seloryn.toml");
+    let project_root = fs::canonicalize(path).map_err(|_| {
+        Diagnostic::new(
+            "SEL-C003",
+            "project path could not be canonicalized",
+            Span::new(0, 0),
+        )
+    })?;
+    let manifest = project_root.join("seloryn.toml");
     let manifest_text = fs::read_to_string(&manifest).map_err(|_| {
         Diagnostic::new(
             "SEL-M002",
@@ -50,6 +58,7 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
         )
     })?;
     let source_root = value_for(&manifest_text, "source_root").unwrap_or_else(|| "src".to_owned());
+    let source_root = manifest_relative_path(&source_root, "source_root")?;
     let entry = value_for(&manifest_text, "entry")
         .or_else(|| value_for(&manifest_text, "entrypoint"))
         .unwrap_or_else(|| "main.sely".to_owned());
@@ -58,7 +67,8 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
     } else {
         entry
     };
-    let source_root = path.join(source_root);
+    let entry = manifest_relative_path(&entry, "entry")?;
+    let source_root = project_root.join(source_root);
     let json_max_bytes = value_for(&manifest_text, "json_max_bytes")
         .and_then(|value| value.parse().ok())
         .unwrap_or(128);
@@ -73,6 +83,30 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
             Span::new(0, 0),
         ));
     }
+
+    let mut read_roots = declared_read_roots(&manifest_text)
+        .into_iter()
+        .map(|root| {
+            let relative = manifest_relative_path(&root, "capabilities.read")?;
+            let directory = project_root.join(relative);
+            if !directory.is_dir() {
+                return Err(Diagnostic::new(
+                    "SEL-S004",
+                    format!("declared read capability {root} is missing or not a directory"),
+                    Span::new(0, 0),
+                ));
+            }
+            fs::canonicalize(&directory).map_err(|_| {
+                Diagnostic::new(
+                    "SEL-S004",
+                    format!("declared read capability {root} could not be canonicalized"),
+                    Span::new(0, 0),
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    read_roots.sort();
+    read_roots.dedup();
 
     let mut loader = Loader {
         source_root,
@@ -112,7 +146,8 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
         },
         source: entry_source,
         label: format!("project {}", path.display()),
-        base_dir: path.to_path_buf(),
+        base_dir: project_root,
+        read_roots,
         json_max_bytes,
         json_max_depth,
     })
@@ -585,6 +620,23 @@ fn value_for(manifest: &str, key: &str) -> Option<String> {
         let (name, value) = line.split_once('=')?;
         (name.trim() == key).then(|| value.trim().trim_matches('"').to_owned())
     })
+}
+
+fn manifest_relative_path(value: &str, field: &str) -> Result<PathBuf, Diagnostic> {
+    let path = Path::new(value);
+    if value.is_empty()
+        || path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir | Component::Prefix(_)))
+    {
+        return Err(Diagnostic::new(
+            "SEL-S004",
+            format!("manifest field {field} must be a relative contained path"),
+            Span::new(0, 0),
+        ));
+    }
+    Ok(path.to_path_buf())
 }
 
 fn declared_read_roots(manifest: &str) -> Vec<String> {

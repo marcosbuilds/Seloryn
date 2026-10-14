@@ -1529,12 +1529,8 @@ impl<'a> Checker<'a> {
                     }
                 }
             }
-            "train_linear" | "resume_and_compare" => {
-                if name == "train_linear" {
-                    self.check_standard_arity(name, arguments, 4, span);
-                } else {
-                    self.check_standard_arity(name, arguments, 2, span);
-                }
+            "train_linear" => {
+                self.check_standard_arity(name, arguments, 4, span);
                 Type::Json
             }
             "load_checkpoint" => {
@@ -1925,7 +1921,7 @@ fn is_supported_standard_directive(text: &str) -> bool {
         ]
         .as_slice(),
         "autograd" => ["backward", "gradcheck"].as_slice(),
-        "training" => ["train_linear", "resume_and_compare", "load_checkpoint"].as_slice(),
+        "training" => ["train_linear", "load_checkpoint"].as_slice(),
         _ => return false,
     };
     symbols.iter().all(|symbol| allowed.contains(symbol))

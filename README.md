@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current status: 0.00, experimental E3–F4 checker/runtime, N1/N2 CPU tensors, narrow N3a/N3/N4/CKPT fixtures and B1 bundles.** Seloryn can validate and execute a bounded `.sely` subset through `check`, `run` and local project commands. There is no package registry, general effects runtime, supported release or public installer; local B2 scripts only install an existing binary. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and [tensor reference](docs/compute/tensors.md).
+> **Current status: 0.00, experimental checker/runtime, bounded N1/N2 CPU tensors, narrow scalar-autograd, linear-training and checkpoint-schema fixtures, and deterministic bundles.** Seloryn can validate and execute a bounded `.sely` subset through `check`, `run` and local project commands. There is no package registry, general effects runtime, supported release or public installer; local development scripts only install an existing binary. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and [tensor reference](docs/compute/tensors.md).
 
 > **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** This repository records only what is implemented and verified.
 
@@ -34,12 +34,13 @@ instead of gaining features by default.
 | CPU `Tensor[F32]` / `Tensor[I64]` buffers and N1/N2 operations | Experimental N1/N2 implementation | [`src/tensor`](src/tensor), tensor unit and CLI tests; CPU only |
 | Typed tensor reads and lossless dtype conversion | Experimental N1 implementation | `tensor_get_f32` / `tensor_get_i64`, `tensor_to_f32` / `tensor_to_i64`, bounds and dtype regressions in [`tests/tensor_cpu.rs`](tests/tensor_cpu.rs) |
 | Deterministic core IR and execution boundary | Experimental implemented | `src/ir.rs`, runtime parity tests; bounded subset only |
-| Local modules and project manifests | Experimental implemented | F3 project fixtures; no registry or external package resolver |
-| JSON read/parse/encode/get and bounded file capability | Experimental implemented | F4 fixtures; paths remain root-confined |
+| Local modules and project manifests | Experimental implemented | Public project fixtures; no registry or external package resolver |
+| JSON read/parse/encode/get and bounded file capability | Experimental implemented | JSON project fixtures; paths remain root-confined |
 | Scalar reverse-mode tape, finite-difference gradient check, linear-training and checkpoint-validation fixtures | Experimental implemented, narrow | [`examples/autograd`](examples/autograd), runtime tests and public linear example; no tensor autograd, general provider or MLP claim |
-| `build`/`exec` `.selyapp` bundle path | Experimental B1 | Deterministic bundle and clean terminal fixtures; not an installer |
+| Opt-in sampled training events | Experimental implemented, narrow | `seloryn run ... --log=human|json`; stderr-only lifecycle for `training.train_linear`, not general telemetry |
+| `build`/`exec` `.selyapp` bundle path | Experimental | Deterministic bundle and clean terminal fixtures; not an installer |
 | HTTP, packages, GPU and distributed execution | Not implemented or verified | No supported release artifact exists |
-| Local installer scripts | Experimental B2; Windows x64 lifecycle verified here | No public download, signing or cross-OS binary support |
+| Local installer scripts | Development-only; Windows x64 lifecycle verified here | No public download, signing or cross-OS binary support |
 
 | AI development | AI integration | AI serving | Evidence |
 |:--|:--|:--|:--|

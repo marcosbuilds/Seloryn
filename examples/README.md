@@ -8,10 +8,11 @@ examples/
   autograd/                   narrow scalar reverse-mode examples
   tensors/                     standalone CPU tensor programs
   projects/json-config/        local module + native json + external JSON
+  projects/checkpoint-validation/ bounded checkpoint schema validation
   projects/linear-training/    narrow fixture-driven linear training contract
 ```
 
-Run a standalone tensor example with the release binary:
+Run a standalone tensor example with a locally built release binary:
 
 ```text
 seloryn run examples/tensors/tensor-matmul.sely
@@ -30,6 +31,12 @@ Run the scalar reverse-mode example:
 ```text
 seloryn run examples/autograd/scalar-gradient.sely
 seloryn run examples/autograd/scalar-gradcheck.sely
+```
+
+Run the checkpoint schema fixture:
+
+```text
+seloryn run examples/projects/checkpoint-validation
 ```
 
 The project examples are deliberately small integration fixtures. They do not

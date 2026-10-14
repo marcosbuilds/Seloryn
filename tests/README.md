@@ -8,8 +8,7 @@
 - `n3_probe.py` independently computes scalar derivatives with finite
   differences and compares them with the real scalar reverse-mode CLI gate.
 - `release_probe.py` executes a typed tensor-index example, public projects and
-  a bundle with declared JSON data on the release binary.
+  a bundle with declared JSON data on the locally built release binary.
 
-The larger private development corpus is kept outside this public tree. Only
-sanitized public fixtures that are executable against this checkout belong
+Only sanitized public fixtures that are executable against this checkout belong
 here.

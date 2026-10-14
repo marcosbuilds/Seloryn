@@ -9,6 +9,7 @@ use crate::parser as source_parser;
 use crate::tensor::{Tensor, TensorError};
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 // Keep the logical recursion guard below the smallest stack budget used by
@@ -19,6 +20,10 @@ const MAX_CALL_DEPTH: usize = 32;
 const MAX_LOOP_ITERATIONS: usize = 1_000_000;
 const MAX_LIST_ELEMENTS: usize = 1_000_000;
 const MAX_RENDER_VALUES: usize = 4096;
+const MAX_TRAINING_STEPS: i64 = 1_000_000;
+const MAX_TRAINING_DATASET_BYTES: usize = 1_048_576;
+const MAX_TRAINING_SAMPLES: usize = 100_000;
+const MAX_CHECKPOINT_BYTES: usize = 1_048_576;
 
 /// Values that can be produced by the pure E4 interpreter.
 #[derive(Clone, Debug, PartialEq)]
@@ -184,6 +189,48 @@ pub struct ExecutionOutput {
     pub stdout: String,
 }
 
+/// Observable progress emitted by an explicitly enabled runtime event sink.
+///
+/// Events are deliberately limited to the implemented linear-training
+/// fixture. They are not a general trainer or telemetry contract.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RuntimeEvent {
+    Started {
+        model: String,
+        train_path: String,
+        test_path: String,
+        train_samples: usize,
+        test_samples: usize,
+        steps: i64,
+        seed: i64,
+    },
+    Step {
+        model: String,
+        step: i64,
+        steps: i64,
+        loss: f64,
+    },
+    Completed {
+        model: String,
+        steps: i64,
+        seed: i64,
+        initial_loss: f64,
+        final_loss: f64,
+        holdout_mae_max: f64,
+    },
+}
+
+/// Receives runtime events while execution is in progress.
+pub trait EventSink {
+    fn emit(&mut self, event: RuntimeEvent);
+}
+
+struct NullEventSink;
+
+impl EventSink for NullEventSink {
+    fn emit(&mut self, _event: RuntimeEvent) {}
+}
+
 /// Execute a semantically valid program and return explicit program output separately
 /// from the final value.
 #[allow(dead_code)]
@@ -199,17 +246,92 @@ pub fn execute_with_context(
     json_max_bytes: usize,
     json_max_depth: usize,
 ) -> Result<ExecutionOutput, RuntimeError> {
-    let lowered = crate::ir::lower(program);
-    execute_ir_with_context(&lowered, base_dir, json_max_bytes, json_max_depth)
+    let mut sink = NullEventSink;
+    execute_with_context_and_events(program, base_dir, json_max_bytes, json_max_depth, &mut sink)
 }
 
+pub fn execute_with_context_and_events(
+    program: &source_parser::Program,
+    base_dir: &Path,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+    event_sink: &mut dyn EventSink,
+) -> Result<ExecutionOutput, RuntimeError> {
+    let lowered = crate::ir::lower(program);
+    execute_ir_with_capabilities_and_events(
+        &lowered,
+        base_dir,
+        json_max_bytes,
+        json_max_depth,
+        &[],
+        event_sink,
+    )
+}
+
+pub fn execute_with_capabilities_and_events(
+    program: &source_parser::Program,
+    base_dir: &Path,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+    read_roots: &[PathBuf],
+    event_sink: &mut dyn EventSink,
+) -> Result<ExecutionOutput, RuntimeError> {
+    let lowered = crate::ir::lower(program);
+    execute_ir_with_capabilities_and_events(
+        &lowered,
+        base_dir,
+        json_max_bytes,
+        json_max_depth,
+        read_roots,
+        event_sink,
+    )
+}
+
+#[allow(dead_code)]
 pub fn execute_ir_with_context(
     program: &Program,
     base_dir: &Path,
     json_max_bytes: usize,
     json_max_depth: usize,
 ) -> Result<ExecutionOutput, RuntimeError> {
-    Interpreter::new(program, base_dir, json_max_bytes, json_max_depth).execute()
+    let mut sink = NullEventSink;
+    execute_ir_with_context_and_events(program, base_dir, json_max_bytes, json_max_depth, &mut sink)
+}
+
+pub fn execute_ir_with_context_and_events(
+    program: &Program,
+    base_dir: &Path,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+    event_sink: &mut dyn EventSink,
+) -> Result<ExecutionOutput, RuntimeError> {
+    execute_ir_with_capabilities_and_events(
+        program,
+        base_dir,
+        json_max_bytes,
+        json_max_depth,
+        &[],
+        event_sink,
+    )
+}
+
+pub fn execute_ir_with_capabilities_and_events(
+    program: &Program,
+    base_dir: &Path,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+    read_roots: &[PathBuf],
+    event_sink: &mut dyn EventSink,
+) -> Result<ExecutionOutput, RuntimeError> {
+    Interpreter::new(
+        program,
+        base_dir,
+        json_max_bytes,
+        json_max_depth,
+        read_roots,
+        event_sink,
+    )
+    .execute()
 }
 
 #[derive(Clone, Debug)]
@@ -220,7 +342,7 @@ enum Control {
 
 type Eval<T> = Result<T, Control>;
 
-struct Interpreter<'a> {
+struct Interpreter<'a, 'event> {
     program: &'a Program,
     functions: HashMap<String, Function>,
     records: HashMap<String, Record>,
@@ -232,16 +354,20 @@ struct Interpreter<'a> {
     stdlib_imports: Vec<String>,
     output: String,
     base_dir: PathBuf,
+    read_roots: Vec<PathBuf>,
     json_max_bytes: usize,
     json_max_depth: usize,
+    event_sink: &'event mut dyn EventSink,
 }
 
-impl<'a> Interpreter<'a> {
+impl<'a, 'event> Interpreter<'a, 'event> {
     fn new(
         program: &'a Program,
         base_dir: &Path,
         json_max_bytes: usize,
         json_max_depth: usize,
+        read_roots: &[PathBuf],
+        event_sink: &'event mut dyn EventSink,
     ) -> Self {
         let mut functions = HashMap::new();
         let mut records = HashMap::new();
@@ -299,8 +425,10 @@ impl<'a> Interpreter<'a> {
             stdlib_imports,
             output: String::new(),
             base_dir: base_dir.to_path_buf(),
+            read_roots: read_roots.to_vec(),
             json_max_bytes,
             json_max_depth,
+            event_sink,
         }
     }
 
@@ -947,7 +1075,7 @@ impl<'a> Interpreter<'a> {
                     )));
                 };
                 let path = self.resolve_read_path(&relative, span)?;
-                match std::fs::read_to_string(path) {
+                match read_bounded_utf8(&path, self.json_max_bytes, "JSON input") {
                     Ok(source) => {
                         match json::parse(&source, self.json_max_bytes, self.json_max_depth) {
                             Ok(value) => Ok(Value::Result {
@@ -1194,41 +1322,20 @@ impl<'a> Interpreter<'a> {
                     Value::I64(value) => Some(*value),
                     _ => None,
                 });
+                let train_file = self.resolve_read_path(train, span)?;
+                let test_file = self.resolve_read_path(test, span)?;
                 let result = train_linear_json(
-                    &self.base_dir,
+                    &train_file,
+                    &test_file,
                     train,
                     test,
                     seed.unwrap_or(0),
                     steps.unwrap_or(100),
+                    &mut *self.event_sink,
                 )
                 .map(Value::Json)
                 .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
                 Ok(result)
-            }
-            "resume_and_compare" => {
-                let Some(Value::Text(checkpoint)) = values.first() else {
-                    return Err(Control::Runtime(self.runtime(
-                        "SEL-K001",
-                        "checkpoint path must be Text",
-                        span,
-                    )));
-                };
-                let path = self.resolve_read_path(checkpoint, span)?;
-                let source = std::fs::read_to_string(path).map_err(|error| {
-                    Control::Runtime(self.runtime(
-                        "SEL-K001",
-                        format!("checkpoint read failed: {error}"),
-                        span,
-                    ))
-                })?;
-                validate_checkpoint(&source)
-                    .map(|_| {
-                        Value::Json(JsonValue::Object(std::collections::BTreeMap::from([(
-                            "resume_matches_uninterrupted".to_owned(),
-                            JsonValue::Bool(true),
-                        )])))
-                    })
-                    .map_err(|message| Control::Runtime(self.runtime("SEL-K001", message, span)))
             }
             "load_checkpoint" => {
                 let Some(Value::Text(checkpoint)) = values.first() else {
@@ -1239,20 +1346,13 @@ impl<'a> Interpreter<'a> {
                     )));
                 };
                 let path = self.resolve_read_path(checkpoint, span)?;
-                let source = std::fs::read_to_string(path).map_err(|error| {
-                    Control::Runtime(self.runtime(
-                        "SEL-K001",
-                        format!("checkpoint read failed: {error}"),
-                        span,
-                    ))
-                })?;
-                validate_checkpoint(&source)
-                    .map(|_| Value::Result {
+                let max_bytes = self.json_max_bytes.min(MAX_CHECKPOINT_BYTES);
+                let source = read_bounded_utf8(&path, max_bytes, "checkpoint")
+                    .map_err(|error| Control::Runtime(self.runtime("SEL-K001", error, span)))?;
+                validate_checkpoint(&source, max_bytes, self.json_max_depth)
+                    .map(|value| Value::Result {
                         ok: true,
-                        value: Box::new(Value::Json(
-                            json::parse(&source, self.json_max_bytes, self.json_max_depth)
-                                .expect("validated checkpoint JSON"),
-                        )),
+                        value: Box::new(Value::Json(value)),
                     })
                     .map_err(|message| Control::Runtime(self.runtime("SEL-K001", message, span)))
             }
@@ -1273,11 +1373,38 @@ impl<'a> Interpreter<'a> {
         {
             return Err(Control::Runtime(self.runtime(
                 "SEL-S004",
-                "JSON path is outside the granted read root",
+                "path is outside the granted read root",
                 span,
             )));
         }
-        Ok(self.base_dir.join(path))
+        let candidate = self.base_dir.join(path);
+        if !self
+            .read_roots
+            .iter()
+            .any(|root| candidate.starts_with(root))
+        {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-S004",
+                "path is not inside a declared read capability",
+                span,
+            )));
+        }
+        match std::fs::canonicalize(&candidate) {
+            Ok(canonical)
+                if self
+                    .read_roots
+                    .iter()
+                    .any(|root| canonical.starts_with(root)) =>
+            {
+                Ok(canonical)
+            }
+            Ok(_) => Err(Control::Runtime(self.runtime(
+                "SEL-S004",
+                "path escapes a declared read capability through a symbolic link",
+                span,
+            ))),
+            Err(_) => Ok(candidate),
+        }
     }
 
     fn eval_builtin(&mut self, builtin: Builtin, arguments: &[Expr], span: Span) -> Eval<Value> {
@@ -1991,7 +2118,12 @@ impl<'a> Interpreter<'a> {
     }
 }
 
-fn finite_f64(value: f64, message: &str, span: Span, interpreter: &Interpreter<'_>) -> Eval<Value> {
+fn finite_f64(
+    value: f64,
+    message: &str,
+    span: Span,
+    interpreter: &Interpreter<'_, '_>,
+) -> Eval<Value> {
     if value.is_finite() {
         Ok(Value::F64(value))
     } else {
@@ -2004,7 +2136,7 @@ fn finite_f64(value: f64, message: &str, span: Span, interpreter: &Interpreter<'
 fn list_values<'a>(
     value: &'a Value,
     span: Span,
-    interpreter: &Interpreter<'_>,
+    interpreter: &Interpreter<'_, '_>,
 ) -> Eval<&'a [Value]> {
     match value {
         Value::List(values) => Ok(values),
@@ -2019,7 +2151,7 @@ fn list_values<'a>(
     }
 }
 
-fn shape_values(value: &Value, span: Span, interpreter: &Interpreter<'_>) -> Eval<Vec<i64>> {
+fn shape_values(value: &Value, span: Span, interpreter: &Interpreter<'_, '_>) -> Eval<Vec<i64>> {
     list_values(value, span, interpreter)?
         .iter()
         .map(|value| match value {
@@ -2039,7 +2171,7 @@ fn shape_values(value: &Value, span: Span, interpreter: &Interpreter<'_>) -> Eva
 fn tensor_value<'a>(
     value: &'a Value,
     span: Span,
-    interpreter: &Interpreter<'_>,
+    interpreter: &Interpreter<'_, '_>,
 ) -> Eval<&'a Tensor> {
     match value {
         Value::Tensor(tensor) => Ok(tensor),
@@ -2086,18 +2218,41 @@ fn is_named_error_constructor(name: &str) -> bool {
 }
 
 fn train_linear_json(
-    base_dir: &Path,
+    train_file: &Path,
+    test_file: &Path,
     train_path: &str,
     test_path: &str,
     seed: i64,
     steps: i64,
+    event_sink: &mut dyn EventSink,
 ) -> Result<JsonValue, String> {
-    let train = read_xy_dataset(base_dir, train_path)?;
-    let test = read_xy_dataset(base_dir, test_path)?;
+    let train = read_xy_dataset(train_file, train_path)?;
+    let test = read_xy_dataset(test_file, test_path)?;
+    if steps < 0 {
+        return Err("training steps must be non-negative".to_owned());
+    }
+    if steps > MAX_TRAINING_STEPS {
+        return Err(format!(
+            "training steps exceed maximum {MAX_TRAINING_STEPS}"
+        ));
+    }
     let mut weight = 0.0;
     let mut bias = 0.0;
     let initial_loss = mean_squared_error(&train, weight, bias);
-    for _ in 0..steps.max(0) {
+    if !initial_loss.is_finite() {
+        return Err("training produced a non-finite initial loss".to_owned());
+    }
+    event_sink.emit(RuntimeEvent::Started {
+        model: "linear".to_owned(),
+        train_path: train_path.to_owned(),
+        test_path: test_path.to_owned(),
+        train_samples: train.0.len(),
+        test_samples: test.0.len(),
+        steps,
+        seed,
+    });
+    let progress_interval = (steps / 10).max(1);
+    for step in 1..=steps {
         let count = train.0.len() as f64;
         let (weight_gradient, bias_gradient) = train.0.iter().zip(&train.1).fold(
             (0.0, 0.0),
@@ -2111,14 +2266,42 @@ fn train_linear_json(
         );
         weight -= 0.02 * weight_gradient;
         bias -= 0.02 * bias_gradient;
+        if step == 1 || step == steps || step % progress_interval == 0 {
+            let loss = mean_squared_error(&train, weight, bias);
+            if !loss.is_finite() {
+                return Err(format!(
+                    "training produced a non-finite loss at step {step}"
+                ));
+            }
+            event_sink.emit(RuntimeEvent::Step {
+                model: "linear".to_owned(),
+                step,
+                steps,
+                loss,
+            });
+        }
     }
     let final_loss = mean_squared_error(&train, weight, bias);
+    if !final_loss.is_finite() {
+        return Err("training produced a non-finite final loss".to_owned());
+    }
     let holdout_mae_max = test
         .0
         .iter()
         .zip(&test.1)
         .map(|(x, y)| (weight * x + bias - y).abs())
         .fold(0.0, f64::max);
+    if !holdout_mae_max.is_finite() {
+        return Err("training produced a non-finite holdout error".to_owned());
+    }
+    event_sink.emit(RuntimeEvent::Completed {
+        model: "linear".to_owned(),
+        steps,
+        seed,
+        initial_loss,
+        final_loss,
+        holdout_mae_max,
+    });
     Ok(JsonValue::Object(std::collections::BTreeMap::from([
         (
             "loss_decreased".to_owned(),
@@ -2136,10 +2319,14 @@ fn train_linear_json(
     ])))
 }
 
-fn read_xy_dataset(base_dir: &Path, relative: &str) -> Result<(Vec<f64>, Vec<f64>), String> {
-    let path = base_dir.join(relative);
-    let source = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
-    let value = json::parse(&source, 4096, 16).map_err(|error| error.message)?;
+fn read_xy_dataset(path: &Path, label: &str) -> Result<(Vec<f64>, Vec<f64>), String> {
+    let source = read_bounded_utf8(
+        path,
+        MAX_TRAINING_DATASET_BYTES,
+        &format!("training dataset `{label}`"),
+    )?;
+    let value =
+        json::parse(&source, MAX_TRAINING_DATASET_BYTES, 16).map_err(|error| error.message)?;
     let JsonValue::Object(values) = value else {
         return Err("dataset must be a JSON object".to_owned());
     };
@@ -2159,10 +2346,39 @@ fn read_xy_dataset(base_dir: &Path, relative: &str) -> Result<(Vec<f64>, Vec<f64
         .map(json_number)
         .collect::<Option<Vec<_>>>()
         .ok_or_else(|| "dataset y contains a non-number".to_owned())?;
+    if x.iter().chain(&y).any(|value| !value.is_finite()) {
+        return Err("dataset contains a non-finite number".to_owned());
+    }
+    if x.len() > MAX_TRAINING_SAMPLES || y.len() > MAX_TRAINING_SAMPLES {
+        return Err(format!(
+            "dataset exceeds maximum {MAX_TRAINING_SAMPLES} samples"
+        ));
+    }
     if x.is_empty() || x.len() != y.len() {
         return Err("dataset x/y lengths are invalid".to_owned());
     }
     Ok((x, y))
+}
+
+fn read_bounded_utf8(path: &Path, max_bytes: usize, label: &str) -> Result<String, String> {
+    let file =
+        std::fs::File::open(path).map_err(|error| format!("{label} read failed: {error}"))?;
+    if file
+        .metadata()
+        .map_err(|error| format!("{label} metadata read failed: {error}"))?
+        .len()
+        > max_bytes as u64
+    {
+        return Err(format!("{label} exceeds maximum {max_bytes} bytes"));
+    }
+    let mut bytes = Vec::new();
+    file.take(max_bytes.saturating_add(1) as u64)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("{label} read failed: {error}"))?;
+    if bytes.len() > max_bytes {
+        return Err(format!("{label} exceeds maximum {max_bytes} bytes"));
+    }
+    String::from_utf8(bytes).map_err(|_| format!("{label} is not valid UTF-8"))
 }
 
 fn json_number(value: &JsonValue) -> Option<f64> {
@@ -2182,9 +2398,13 @@ fn mean_squared_error(dataset: &(Vec<f64>, Vec<f64>), weight: f64, bias: f64) ->
         / dataset.0.len() as f64
 }
 
-fn validate_checkpoint(source: &str) -> Result<(), String> {
-    let value = json::parse(source, 4096, 16).map_err(|error| error.message)?;
-    let JsonValue::Object(values) = value else {
+fn validate_checkpoint(
+    source: &str,
+    max_bytes: usize,
+    max_depth: usize,
+) -> Result<JsonValue, String> {
+    let value = json::parse(source, max_bytes, max_depth).map_err(|error| error.message)?;
+    let JsonValue::Object(ref values) = value else {
         return Err("checkpoint root must be an object".to_owned());
     };
     let valid_schema = matches!(
@@ -2195,14 +2415,14 @@ fn validate_checkpoint(source: &str) -> Result<(), String> {
         matches!(values.get("step"), Some(JsonValue::Number(step)) if step.parse::<i64>().is_ok());
     let valid_weights = matches!(values.get("weights"), Some(JsonValue::Object(_)));
     let valid_optimizer = matches!(values.get("optimizer"), Some(JsonValue::Object(_)));
-    let valid_checksum = matches!(
-        values.get("checksum"),
-        Some(JsonValue::String(checksum)) if checksum == "fixture-good"
+    let valid_fixture = matches!(
+        values.get("fixture"),
+        Some(JsonValue::String(fixture)) if fixture == "schema-valid"
     );
-    if valid_schema && valid_step && valid_weights && valid_optimizer && valid_checksum {
-        Ok(())
+    if valid_schema && valid_step && valid_weights && valid_optimizer && valid_fixture {
+        Ok(value)
     } else {
-        Err("checkpoint failed schema, type, or checksum validation".to_owned())
+        Err("checkpoint failed schema or type validation".to_owned())
     }
 }
 

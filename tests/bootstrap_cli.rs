@@ -31,6 +31,7 @@ fn help_is_utf8_and_documents_only_available_commands() {
     assert!(stdout.contains("seloryn --help"));
     assert!(stdout.contains("seloryn check <file.sely>"));
     assert!(stdout.contains("seloryn run <file.sely>"));
+    assert!(stdout.contains("--log=off|human|json"));
     assert!(stdout.contains("No installer or supported release is available yet"));
 }
 
@@ -157,6 +158,148 @@ fn runs_public_linear_training_fixture_example() {
         b"{\"holdout_mae_max\":0.05,\"holdout_mae_observed\":0.01893684,\"loss_decreased\":true,\"seed\":7}\n"
     );
     assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn training_events_are_opt_in_streamed_and_separate_from_stdout() {
+    let human = run_cli(&["run", "examples/projects/linear-training", "--log=human"]);
+    assert!(human.status.success(), "stderr: {:?}", human.stderr);
+    assert_eq!(
+        human.stdout,
+        b"{\"holdout_mae_max\":0.05,\"holdout_mae_observed\":0.01893684,\"loss_decreased\":true,\"seed\":7}\n"
+    );
+    let human_stderr = String::from_utf8(human.stderr).expect("human events must be UTF-8");
+    let human_lines = human_stderr.lines().collect::<Vec<_>>();
+    assert_eq!(human_lines.len(), 13);
+    assert!(human_lines[0].contains("training.start model=linear"));
+    assert!(human_lines[1].contains("training.step model=linear step=1/100"));
+    assert!(human_lines[11].contains("training.step model=linear step=100/100"));
+    assert!(human_lines[12].contains("training.complete model=linear"));
+
+    let json = run_cli(&["run", "examples/projects/linear-training", "--log=json"]);
+    assert!(json.status.success(), "stderr: {:?}", json.stderr);
+    assert_eq!(json.stdout, human.stdout);
+    let json_stderr = String::from_utf8(json.stderr).expect("JSON events must be UTF-8");
+    let json_lines = json_stderr.lines().collect::<Vec<_>>();
+    assert_eq!(json_lines.len(), 13);
+    assert!(json_lines[0].contains("\"event\":\"training.start\""));
+    assert!(json_lines[1].contains("\"event\":\"training.step\""));
+    assert!(json_lines[12].contains("\"event\":\"training.complete\""));
+    assert!(json_lines[0].contains("\"seed_semantics\":\"metadata_only\""));
+}
+
+#[test]
+fn training_rejects_path_escape_and_excessive_steps() {
+    let root = std::env::temp_dir().join(format!("seloryn-training-guard-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("src")).expect("training source directory");
+    std::fs::create_dir_all(root.join("data")).expect("training data directory");
+    std::fs::write(
+        root.join("seloryn.toml"),
+        "[package]\nname = \"training-guard\"\nlanguage = \"0.00\"\nsource_root = \"src\"\nentry = \"main.sely\"\n\n[capabilities]\nread = [\"data\"]\n",
+    )
+    .expect("training manifest");
+    std::fs::write(root.join("data/train.json"), "{\"x\":[0,1],\"y\":[0,1]}\n")
+        .expect("training data");
+    std::fs::write(root.join("data/test.json"), "{\"x\":[0],\"y\":[0]}\n").expect("holdout data");
+
+    std::fs::write(
+        root.join("src/main.sely"),
+        "from training import train_linear\n\nfn main() -> Json:\n    return train_linear(\"../outside.json\", \"data/test.json\", seed=7, steps=1)\n",
+    )
+    .expect("escape source");
+    let escaped = run_cli_owned(&["run".into(), root.clone().into_os_string()]);
+    assert_eq!(escaped.status.code(), Some(65));
+    let escaped_stderr = String::from_utf8(escaped.stderr).expect("escape diagnostic");
+    assert!(escaped_stderr.contains("SEL-S004"));
+    assert!(escaped_stderr.contains("outside the granted read root"));
+
+    std::fs::write(
+        root.join("src/main.sely"),
+        "from training import train_linear\n\nfn main() -> Json:\n    return train_linear(\"data/train.json\", \"data/test.json\", seed=7, steps=1000001)\n",
+    )
+    .expect("excessive source");
+    let excessive = run_cli_owned(&["run".into(), root.clone().into_os_string()]);
+    assert_eq!(excessive.status.code(), Some(65));
+    let excessive_stderr = String::from_utf8(excessive.stderr).expect("step diagnostic");
+    assert!(excessive_stderr.contains("SEL-R203"));
+    assert!(excessive_stderr.contains("training steps exceed maximum 1000000"));
+    assert!(!excessive_stderr.contains("training.start"));
+
+    std::fs::write(root.join("data/large.json"), "x".repeat(1_048_577))
+        .expect("oversized training data");
+    std::fs::write(
+        root.join("src/main.sely"),
+        "from training import train_linear\n\nfn main() -> Json:\n    return train_linear(\"data/large.json\", \"data/test.json\", seed=7, steps=1)\n",
+    )
+    .expect("oversized source");
+    let oversized = run_cli_owned(&["run".into(), root.clone().into_os_string()]);
+    assert_eq!(oversized.status.code(), Some(65));
+    let oversized_stderr = String::from_utf8(oversized.stderr).expect("size diagnostic");
+    assert!(oversized_stderr.contains("SEL-R203"));
+    assert!(oversized_stderr.contains("training dataset"));
+    assert!(oversized_stderr.contains("1048576 bytes"));
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn project_without_declared_read_capability_cannot_read_data() {
+    let root = std::env::temp_dir().join(format!("seloryn-no-capability-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("src")).expect("project source directory");
+    std::fs::create_dir_all(root.join("data")).expect("project data directory");
+    std::fs::write(
+        root.join("seloryn.toml"),
+        "[package]\nname = \"no-capability\"\nlanguage = \"0.00\"\nsource_root = \"src\"\nentry = \"main.sely\"\n",
+    )
+    .expect("project manifest");
+    std::fs::write(root.join("data/config.json"), "{\"ok\":true}\n").expect("project data");
+    std::fs::write(
+        root.join("src/main.sely"),
+        "from json import read_file\n\nfn main() -> Result[Json, JsonIoError]:\n    return read_file(\"data/config.json\")\n",
+    )
+    .expect("project source");
+
+    let output = run_cli_owned(&["run".into(), root.clone().into_os_string()]);
+    assert_eq!(output.status.code(), Some(65));
+    let stderr = String::from_utf8(output.stderr).expect("capability diagnostic");
+    assert!(stderr.contains("SEL-S004"));
+    assert!(stderr.contains("not inside a declared read capability"));
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn checkpoint_validation_is_bounded_and_does_not_claim_resume() {
+    let valid = run_cli(&["run", "examples/projects/checkpoint-validation"]);
+    assert!(valid.status.success(), "stderr: {:?}", valid.stderr);
+    assert!(
+        String::from_utf8(valid.stdout)
+            .expect("checkpoint output")
+            .contains("schema-valid")
+    );
+
+    let root =
+        std::env::temp_dir().join(format!("seloryn-checkpoint-guard-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("src")).expect("checkpoint source directory");
+    std::fs::create_dir_all(root.join("data")).expect("checkpoint data directory");
+    std::fs::write(
+        root.join("seloryn.toml"),
+        "[package]\nname = \"checkpoint-guard\"\nlanguage = \"0.00\"\nsource_root = \"src\"\nentry = \"main.sely\"\n\n[capabilities]\nread = [\"data\"]\n\n[limits]\njson_max_bytes = 128\njson_max_depth = 16\n",
+    )
+    .expect("checkpoint manifest");
+    std::fs::write(root.join("data/checkpoint.json"), "x".repeat(129))
+        .expect("oversized checkpoint");
+    std::fs::write(
+        root.join("src/main.sely"),
+        "from training import load_checkpoint\n\nfn main() -> Result[Json, CheckpointError]:\n    return load_checkpoint(\"data/checkpoint.json\")\n",
+    )
+    .expect("checkpoint source");
+
+    let output = run_cli_owned(&["run".into(), root.clone().into_os_string()]);
+    assert_eq!(output.status.code(), Some(65));
+    let stderr = String::from_utf8(output.stderr).expect("checkpoint diagnostic");
+    assert!(stderr.contains("SEL-K001"));
+    assert!(stderr.contains("128 bytes"));
+    assert!(!stderr.contains("panicked at"));
+    let _ = std::fs::remove_dir_all(root);
 }
 
 #[test]

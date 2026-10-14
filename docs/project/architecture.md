@@ -22,10 +22,10 @@ flowchart LR
         L[Model training]
     end
     G --> H
-    H -. future N3 .-> I
+    H -. future tensor autograd .-> I
     H -. future A1 .-> J
     G -. future E6 .-> K
-    I -. future N4 .-> L
+    I -. future general training .-> L
     J -. future A2/A3 .-> L
 ```
 

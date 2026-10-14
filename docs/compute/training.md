@@ -7,9 +7,10 @@ contract with real CPU parameter updates, MSE/SGD, deterministic inputs,
 holdout evaluation and bounded checkpoint-schema validation. Its output reports
 `holdout_mae_max` as the accepted cap (`0.05`) and
 `holdout_mae_observed` as the measured value; the `seed` is recorded metadata,
-not a shuffle/RNG implementation. `resume_and_compare` validates the fixture
-checkpoint contract; it does not yet restore optimizer/RNG state and resume a
-real training loop. This does not imply a general ML framework. Seloryn's AI
+not a shuffle/RNG implementation. The separate `training.load_checkpoint`
+fixture validates a bounded JSON schema and returns the parsed document; it
+does not restore optimizer/RNG state, verify cryptographic integrity or resume
+a real training loop. This does not imply a general ML framework. Seloryn's AI
 mission is to eventually train actual networks end-to-end, not just call
 external inference endpoints.
 
@@ -56,6 +57,34 @@ The observed output is:
 
 This is evidence for one bounded linear problem only; it is not evidence for
 MLP training, a general optimizer, checkpoint restoration or model serving.
+
+### Executable checkpoint-schema fixture
+
+```text
+seloryn run examples/projects/checkpoint-validation
+```
+
+This fixture checks required schema and JSON value types under the project's
+read and byte limits. It is not a checkpoint interchange format, integrity
+mechanism or resume implementation.
+
+### Opt-in training events
+
+The same fixture can expose a bounded execution stream without contaminating
+the program result:
+
+```text
+seloryn run examples/projects/linear-training --log=human
+seloryn run examples/projects/linear-training --log=json
+```
+
+Events go to `stderr`; the final JSON result remains on `stdout`. The stream
+contains `training.start`, sampled `training.step` events (first step, each
+10% and final step), and `training.complete`. It identifies the linear model,
+training/holdout paths and sample counts, reports measured losses and labels
+the current `seed` as `metadata_only`, because this fixture does not implement
+shuffle or RNG semantics. Logging is off by default and this is not a general
+telemetry, profiler or trainer API.
 
 ### Minimum viable REAL training evidence
 

@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.00 currently provides an experimental syntax and semantic checker, deterministic core IR, pure interpreter, local project modules, bounded JSON capability, narrow training fixtures and an experimental `.selyapp` bundle path in the development repository. There is no verified release, package registry, hosted API or supported installation command; local installer scripts are only B2 development tooling.
+**Availability:** Seloryn 0.00 currently provides an experimental syntax and semantic checker, deterministic core IR, pure interpreter, local project modules, bounded JSON capability, narrow training fixtures and an experimental `.selyapp` bundle path in the development repository. There is no verified release, package registry, hosted API or supported installation command; local installer scripts are development tooling only.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 
@@ -36,7 +36,7 @@ stdout.
 - No GPU, distributed or symbolic-shape execution; N1/N2 support only bounded CPU tensors.
 - No HTTP, process or unrestricted file/package runtime; only root-confined JSON reads are available in projects.
 - No general model loading, optimizer, MLP training or production model serving; only the narrow fixture contracts are implemented.
-- No GPU, distributed backend, supported installer or supported release target; local B2 installer scripts are not a release.
+- No GPU, distributed backend, supported installer or supported release target; local installer scripts are not a release.
 
 The current capability limits are recorded in the [status page](../project/status.md) and the [tensor reference](../compute/tensors.md).
 

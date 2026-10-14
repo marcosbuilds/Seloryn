@@ -1,0 +1,4 @@
+from training import load_checkpoint
+
+fn main() -> Result[Json, CheckpointError]:
+    return load_checkpoint("data/checkpoint.json")

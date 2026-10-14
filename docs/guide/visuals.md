@@ -5,8 +5,8 @@
 | Asset | Purpose | Origin |
 |---|---|---|
 | `seloryn-symbol.svg` | Language identity, future terminal/editor icon | Original project asset, canonical vector |
-| `architecture-flow.png` | Design pipeline from source to future runtime/backends; only the front-end checker path exists today | Original project raster diagram |
-| `training-flow.png` | Design-only forward pass, gradient and optimizer flow; no training implementation exists | Original project raster diagram |
+| `architecture-flow.png` | Design pipeline from source to future runtime/backends; the bounded checker, interpreter and CPU tensor path exist today | Original project raster diagram |
+| `training-flow.png` | Design-only forward pass, gradient and optimizer flow; only narrow scalar/autograd and linear fixtures exist today | Original project raster diagram |
 | `theSVG` links | Distinguish outside vendors/services visually | External brand assets; not bundled |
 
 ### External SVG sourcing rule
