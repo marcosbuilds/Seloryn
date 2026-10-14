@@ -86,3 +86,4 @@ jobs:
           rem Use post-execution ERRORLEVEL tests so the smoke checks the real exit code.
           if errorlevel 66 exit /b 1
           if not errorlevel 65 exit /b 1
+          exit /b 0
