@@ -1288,6 +1288,8 @@ impl<'a> Interpreter<'a> {
             | Builtin::TensorRank
             | Builtin::TensorElements
             | Builtin::TensorDtype
+            | Builtin::TensorToF32
+            | Builtin::TensorToI64
             | Builtin::TensorItemF32 => 1,
             Builtin::TensorGetF32 | Builtin::TensorGetI64 => 2,
             Builtin::Sum | Builtin::Mean => 0,
@@ -1406,6 +1408,14 @@ impl<'a> Interpreter<'a> {
                 let tensor = tensor_value(&values[0], span, self)?;
                 Ok(Value::Text(tensor.dtype().name().to_owned()))
             }
+            Builtin::TensorToF32 => tensor_value(&values[0], span, self)?
+                .to_f32()
+                .map(Value::Tensor)
+                .map_err(|error| Control::Runtime(self.tensor_error(error, span))),
+            Builtin::TensorToI64 => tensor_value(&values[0], span, self)?
+                .to_i64()
+                .map(Value::Tensor)
+                .map_err(|error| Control::Runtime(self.tensor_error(error, span))),
             Builtin::TensorItemF32 => {
                 let tensor = tensor_value(&values[0], span, self)?;
                 tensor

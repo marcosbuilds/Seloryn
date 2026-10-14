@@ -12,7 +12,7 @@
 | Records, enums and field/constructor checks | Partial E3 checker | [`type_of_call`](../../src/semantic.rs#L845), semantic tests |
 | `Result`, `Option`, `require`, postfix `?` and `match` coverage | Experimental partial checker | [`check_require`](../../src/semantic.rs#L371), [`check_match`](../../src/semantic.rs#L409) |
 | Pure E4 interpreter for scalar/list values, list indexing and iteration, mutable `var` assignment, records, enums, `Result`, `Option`, calls, control flow and pipelines | Experimental implemented and tested | [`execute`](../../src/runtime.rs#L121), runtime and CLI tests |
-| N1 CPU tensors (`Tensor[F32]`/`Tensor[I64]`) with typed read-only element access | Experimental implemented and tested | [`src/tensor`](../../src/tensor), [`tensor_cpu.rs`](../../tests/tensor_cpu.rs) |
+| N1 CPU tensors (`Tensor[F32]`/`Tensor[I64]`) with typed reads and explicit lossless dtype conversion | Experimental implemented and tested | [`src/tensor`](../../src/tensor), [`tensor_cpu.rs`](../../tests/tensor_cpu.rs) |
 | N2 CPU numeric closure | Experimental implemented and tested | [`src/tensor/ops.rs`](../../src/tensor/ops.rs), [`n2_probe.py`](../../tests/n2_probe.py), [`tensor-numeric.sely`](../../examples/tensors/tensor-numeric.sely) |
 | Deterministic core IR boundary | Experimental implemented and tested | [`src/ir.rs`](../../src/ir.rs), runtime and lowering tests |
 | Local project modules and `seloryn.toml` | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`json-config`](../../examples/projects/json-config/README.md) |
@@ -70,7 +70,8 @@ API. The IR is structural and deterministic; optimization, effects and broader r
 ## N1 CPU tensor evidence
 
 N1 is experimentally implemented for owned contiguous F32/I64 CPU tensors with
-checked typed element reads. The
+checked typed element reads and explicit lossless `tensor_to_f32`/
+`tensor_to_i64` conversions. The
 runtime checks rank (maximum 32), nonnegative dimensions, checked element and
 byte products, a 64 MiB per-tensor and process-wide resident-buffer budget
 (not a total-process-memory limit), row-major strides, reshape counts, same-dtype

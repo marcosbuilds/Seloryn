@@ -255,6 +255,52 @@ fn runs_typed_tensor_indexing_and_rejects_invalid_coordinates() {
 }
 
 #[test]
+fn runs_explicit_lossless_tensor_conversions() {
+    let output = run_source(
+        "dtype-conversion",
+        "fn main() -> Tensor[F32]:\n    let values: Tensor[I64] = tensor_i64([1, 2, 3, 4, 5, 6], [2, 3])\n    return tensor_to_f32(transpose(values))\n",
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"Tensor[F32, shape=[3, 2], values=[1.0, 4.0, 2.0, 5.0, 3.0, 6.0]]\n"
+    );
+
+    let output = run_source(
+        "dtype-conversion-reverse",
+        "fn main() -> Tensor[I64]:\n    let values: Tensor[F32] = tensor_f32([1.0, -2.0, 3.0], [3])\n    return tensor_to_i64(values)\n",
+    );
+    assert!(output.status.success());
+    assert_eq!(
+        output.stdout,
+        b"Tensor[I64, shape=[3], values=[1, -2, 3]]\n"
+    );
+}
+
+#[test]
+fn rejects_lossy_tensor_conversions_with_a_structured_error() {
+    let integer_loss = run_source(
+        "dtype-conversion-loss",
+        "fn main() -> Tensor[F32]:\n    return tensor_to_f32(tensor_i64([16777217], [1]))\n",
+    );
+    assert_eq!(integer_loss.status.code(), Some(65));
+    assert!(integer_loss.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&integer_loss.stderr).contains("SEL-R212"));
+
+    let fractional = run_source(
+        "dtype-conversion-fraction",
+        "fn main() -> Tensor[I64]:\n    return tensor_to_i64(tensor_f32([1.5], [1]))\n",
+    );
+    assert_eq!(fractional.status.code(), Some(65));
+    assert!(fractional.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&fractional.stderr).contains("SEL-R212"));
+}
+
+#[test]
 fn rejects_static_dtype_mismatch_before_execution() {
     let source = "fn main() -> Tensor[F32]:\n    let left: Tensor[I64] = tensor_i64([1], [1])\n    let right: Tensor[F32] = tensor_f32([2.0], [1])\n    return left + right\n";
     let output = run_source("static-dtype", source);

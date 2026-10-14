@@ -36,11 +36,14 @@ jobs:
       - name: Format
         run: cargo fmt --all -- --check
       - name: Rust tests (all targets)
-        run: cargo test --all-targets --locked
+        # Tensor allocation-budget tests share a process-wide accounting
+        # counter. Run tests serially so their result cannot depend on the
+        # Rust harness scheduling unrelated allocations concurrently.
+        run: cargo test --all-targets --locked -- --test-threads=1
       - name: Clippy (warnings fail)
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Release tests
-        run: cargo test --release --all-targets --locked
+        run: cargo test --release --all-targets --locked -- --test-threads=1
       - name: Release build
         run: cargo build --release --locked
       - name: Independent N1 CLI comparison

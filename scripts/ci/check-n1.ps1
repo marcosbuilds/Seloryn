@@ -5,9 +5,9 @@ Push-Location $root
 try {
     $commands = @(
         @('fmt', '--all', '--', '--check'),
-        @('test', '--all-targets', '--locked'),
+        @('test', '--all-targets', '--locked', '--', '--test-threads=1'),
         @('clippy', '--all-targets', '--locked', '--', '-D', 'warnings'),
-        @('test', '--release', '--all-targets', '--locked'),
+        @('test', '--release', '--all-targets', '--locked', '--', '--test-threads=1'),
         @('build', '--release', '--locked')
     )
     foreach ($argsForCargo in $commands) {

@@ -2,9 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 cargo fmt --all -- --check
-cargo test --all-targets --locked
+cargo test --all-targets --locked -- --test-threads=1
 cargo clippy --all-targets --locked -- -D warnings
-cargo test --release --all-targets --locked
+cargo test --release --all-targets --locked -- --test-threads=1
 cargo build --release --locked
 python3 tests/n1_probe.py
 python3 tests/n2_probe.py

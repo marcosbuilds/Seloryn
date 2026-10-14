@@ -15,3 +15,8 @@ That gate includes formatting, all-target Rust tests, Clippy with warnings as
 errors, release checks, independent numeric probes, and the exact public
 project/bundle business-result probe. CI repeats the same classes of checks on
 Ubuntu, macOS and Windows.
+
+The Rust test commands intentionally pass `--test-threads=1`. Tensor tests
+exercise a process-wide resident-buffer budget; serial scheduling keeps the
+limit assertion independent of unrelated test allocations and prevents the
+platform-specific ordering failures that previously made CI intermittent.

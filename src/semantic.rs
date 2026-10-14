@@ -1210,6 +1210,8 @@ impl<'a> Checker<'a> {
             | Builtin::TensorRank
             | Builtin::TensorElements
             | Builtin::TensorDtype
+            | Builtin::TensorToF32
+            | Builtin::TensorToI64
             | Builtin::TensorItemF32 => 1,
             Builtin::TensorGetF32 | Builtin::TensorGetI64 => 2,
             Builtin::Sum | Builtin::Mean => 0,
@@ -1296,6 +1298,22 @@ impl<'a> Checker<'a> {
             Builtin::TensorDtype => {
                 self.ensure_tensor_argument(&arguments[0], name);
                 Type::Text
+            }
+            Builtin::TensorToF32 => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::Tensor(TensorDtype::I64),
+                    "tensor_to_f32 tensor",
+                );
+                Type::Tensor(TensorDtype::F32)
+            }
+            Builtin::TensorToI64 => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::Tensor(TensorDtype::F32),
+                    "tensor_to_i64 tensor",
+                );
+                Type::Tensor(TensorDtype::I64)
             }
             Builtin::TensorItemF32 => {
                 self.ensure_expr_assignable(
@@ -1978,6 +1996,8 @@ fn builtin_name(builtin: Builtin) -> &'static str {
         Builtin::TensorRank => "tensor_rank",
         Builtin::TensorElements => "tensor_elements",
         Builtin::TensorDtype => "tensor_dtype",
+        Builtin::TensorToF32 => "tensor_to_f32",
+        Builtin::TensorToI64 => "tensor_to_i64",
         Builtin::TensorItemF32 => "tensor_item_f32",
         Builtin::TensorGetF32 => "tensor_get_f32",
         Builtin::TensorGetI64 => "tensor_get_i64",

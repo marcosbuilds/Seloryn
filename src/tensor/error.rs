@@ -28,6 +28,10 @@ pub enum TensorError {
         expected: &'static str,
         actual: &'static str,
     },
+    DtypeConversion {
+        from: &'static str,
+        to: &'static str,
+    },
     BroadcastMismatch {
         left: Vec<usize>,
         right: Vec<usize>,
@@ -95,6 +99,7 @@ impl TensorError {
             Self::UnsupportedOperator { .. } => "SEL-R208",
             Self::DomainError { .. } => "SEL-R210",
             Self::EmptyReduction { .. } => "SEL-R211",
+            Self::DtypeConversion { .. } => "SEL-R212",
         }
     }
 }
@@ -133,6 +138,10 @@ impl fmt::Display for TensorError {
                     "tensor dtype mismatch: expected {expected}, got {actual}"
                 )
             }
+            Self::DtypeConversion { from, to } => write!(
+                formatter,
+                "lossless tensor conversion from {from} to {to} is not possible"
+            ),
             Self::BroadcastMismatch { left, right } => write!(
                 formatter,
                 "tensor shapes cannot broadcast: {:?} and {:?}",

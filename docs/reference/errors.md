@@ -28,7 +28,7 @@ identity fields remain future work; they are not claimed by the current CLI.
 | Parsing | `SEL-P***` | missing colon, invalid pattern |
 | Typing | `SEL-T***` | incompatible units, non-Bool condition |
 | Module | `SEL-M***` | missing module, cyclic initialization |
-| Tensor runtime | `SEL-R201`–`SEL-R211` | invalid shape, budget, dtype, broadcast, domain, empty reduction or numeric failure |
+| Tensor runtime | `SEL-R201`–`SEL-R212` | invalid shape, budget, dtype, broadcast, domain, empty reduction, numeric failure or lossy conversion |
 | Result/control flow | `SEL-R***` | invalid `require`, non-exhaustive `match`, bad `?` flow |
 | Runtime | `SEL-R***` | overflow, division by zero, invalid call, collection limit or impossible match |
 | Security | `SEL-S***` | denied network destination |

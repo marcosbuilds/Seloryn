@@ -20,6 +20,8 @@ is performed.
 | `tensor_shape(tensor)` | Returns dimensions as `List[I64]` |
 | `tensor_rank(tensor)` / `tensor_elements(tensor)` | Returns rank or element count as `I64` |
 | `tensor_dtype(tensor)` | Returns `"F32"` or `"I64"` |
+| `tensor_to_f32(i64_tensor)` | Materializes `Tensor[F32]` only when every I64 value is exactly representable; otherwise fails |
+| `tensor_to_i64(f32_tensor)` | Materializes `Tensor[I64]` only for finite integral F32 values in range; otherwise fails |
 | `tensor_item_f32(tensor)` | Extracts one rank-0 `Tensor[F32]` as an `F32`; other shapes or dtypes fail |
 | `tensor_get_f32(tensor, indices)` / `tensor_get_i64(tensor, indices)` | Reads one element with a full `List[I64]` coordinate; dtype, rank and bounds are checked |
 | `tensor_sum(tensor[, axis])` | Reduces all elements or one nonnegative `I64` axis; I64 overflow is checked |
@@ -81,7 +83,7 @@ N2 keeps that representation and adds stable reference kernels; it does not add
 an execution graph or gradient metadata. The runtime rejects negative or
 overflowing shapes, wrong data lengths, dtype mismatches, invalid axes, empty
 means/reductions, invalid domains, division by zero and non-finite F32 values
-with structured runtime diagnostics (`SEL-R201` through `SEL-R211`). A lexical,
+with structured runtime diagnostics (`SEL-R201` through `SEL-R212`). A lexical,
 syntactic or semantic diagnostic still stops execution before any tensor is
 created. The CLI renders at most 4096 tensor values and appends a deterministic
 `... (N more)` marker for larger results; this limits presentation memory and

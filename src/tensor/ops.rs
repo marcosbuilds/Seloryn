@@ -223,6 +223,56 @@ impl Tensor {
         self.dtype
     }
 
+    /// Convert an I64 tensor to F32 only when every value is exactly representable.
+    pub fn to_f32(&self) -> Result<Self, TensorError> {
+        if self.dtype != TensorDtype::I64 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "I64",
+                actual: self.dtype.name(),
+            });
+        }
+        let mut values = Vec::with_capacity(self.element_count());
+        for index in 0..self.element_count() {
+            let value = self.i64_at_flat(index);
+            if !is_exact_f32_integer(value) {
+                return Err(TensorError::DtypeConversion {
+                    from: "I64",
+                    to: "F32",
+                });
+            }
+            values.push(value as f32);
+        }
+        let shape = shape_from_usize(&self.shape)?;
+        Self::from_f32(values, &shape)
+    }
+
+    /// Convert an F32 tensor to I64 only when every value is finite and integral.
+    pub fn to_i64(&self) -> Result<Self, TensorError> {
+        if self.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: self.dtype.name(),
+            });
+        }
+        let mut values = Vec::with_capacity(self.element_count());
+        for index in 0..self.element_count() {
+            let value = self.f32_at_flat(index);
+            if !value.is_finite()
+                || value.fract() != 0.0
+                || value < i64::MIN as f32
+                || value >= 9_223_372_036_854_775_808.0_f32
+            {
+                return Err(TensorError::DtypeConversion {
+                    from: "F32",
+                    to: "I64",
+                });
+            }
+            values.push(value as i64);
+        }
+        let shape = shape_from_usize(&self.shape)?;
+        Self::from_i64(values, &shape)
+    }
+
     pub fn shape(&self) -> &[usize] {
         &self.shape
     }
@@ -1077,6 +1127,13 @@ fn format_f32(value: f32) -> String {
     }
 }
 
+fn is_exact_f32_integer(value: i64) -> bool {
+    let magnitude = value.unsigned_abs();
+    let significant_bits = 64 - magnitude.leading_zeros();
+    let required_zero_bits = significant_bits.saturating_sub(24);
+    required_zero_bits == 0 || (magnitude & ((1u64 << required_zero_bits) - 1)) == 0
+}
+
 impl fmt::Display for TensorDtype {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(self.name())
@@ -1327,6 +1384,66 @@ mod tests {
             Err(TensorError::DtypeMismatch {
                 expected: "F32",
                 actual: "I64"
+            })
+        ));
+    }
+
+    #[test]
+    fn converts_dtypes_losslessly_and_preserves_transpose_order() {
+        let integers = Tensor::from_i64(vec![1, 2, 3, 4, 5, 6], &[2, 3])
+            .expect("integer matrix")
+            .transpose()
+            .expect("transpose");
+        assert_eq!(
+            integers
+                .to_f32()
+                .expect("exact integer conversion")
+                .render(),
+            "Tensor[F32, shape=[3, 2], values=[1.0, 4.0, 2.0, 5.0, 3.0, 6.0]]"
+        );
+
+        let floats = Tensor::from_f32(vec![1.0, -2.0, 16_777_216.0], &[3]).expect("floats");
+        assert_eq!(
+            floats.to_i64().expect("exact float conversion").render(),
+            "Tensor[I64, shape=[3], values=[1, -2, 16777216]]"
+        );
+        let exact_large = Tensor::from_i64(vec![1_i64 << 40, i64::MIN], &[2])
+            .expect("exact powers of two")
+            .to_f32()
+            .expect("exact large integer conversion");
+        assert_eq!(
+            exact_large.get_f32(&[0]).expect("first exact value"),
+            (1_i64 << 40) as f32
+        );
+        assert_eq!(
+            exact_large.get_f32(&[1]).expect("minimum exact value"),
+            i64::MIN as f32
+        );
+        assert!(matches!(
+            Tensor::from_i64(vec![16_777_217], &[1])
+                .expect("integer outside exact F32 range")
+                .to_f32(),
+            Err(TensorError::DtypeConversion {
+                from: "I64",
+                to: "F32"
+            })
+        ));
+        assert!(matches!(
+            Tensor::from_f32(vec![1.5], &[1])
+                .expect("fractional float")
+                .to_i64(),
+            Err(TensorError::DtypeConversion {
+                from: "F32",
+                to: "I64"
+            })
+        ));
+        assert!(matches!(
+            Tensor::from_f32(vec![1.0], &[1])
+                .expect("float tensor")
+                .to_f32(),
+            Err(TensorError::DtypeMismatch {
+                expected: "I64",
+                actual: "F32"
             })
         ));
     }
