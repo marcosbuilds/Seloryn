@@ -22,6 +22,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'N3a independent CLI verification failed' }
     & python tests/release_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Public project and bundle verification failed' }
+    & npm test --prefix tooling/vscode
+    if ($LASTEXITCODE -ne 0) { throw 'VS Code extension validation failed' }
     & .\target\release\seloryn.exe run examples\tensors\linear-forward.sely
     if ($LASTEXITCODE -ne 0) { throw 'Linear forward example failed' }
     & .\target\release\seloryn.exe run examples\tensors\tensor-reduce.sely

@@ -27,7 +27,7 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar and N1/N2 CPU tensor subset.\n`--log` is off by default; when enabled, narrow training progress is streamed to stderr.\n`build` creates a deterministic experimental `.selyapp` bundle; `exec` runs one.\nNo installer or supported release is available yet.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar and N1/N2 CPU tensor subset.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; when enabled, narrow training progress is streamed to stderr.\n`build` creates a deterministic experimental `.selyapp` bundle; `exec` runs one.\nNo installer or supported release is available yet.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -896,6 +896,14 @@ fn write_execution_output(
             result_failure_span(program),
         );
         return write_diagnostics(path, source, &[diagnostic], options);
+    }
+
+    if options.format == OutputFormat::Json {
+        let result = json::JsonValue::Object(BTreeMap::from([
+            ("stdout".to_owned(), json::JsonValue::String(stdout)),
+            ("value".to_owned(), runtime::value_to_json(&value)),
+        ]));
+        return write_stdout(&format!("{}\n", json::encode(&result)));
     }
 
     let mut rendered = stdout;

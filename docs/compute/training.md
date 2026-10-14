@@ -5,9 +5,11 @@ general trainer, dataset API, optimizer or model execution runtime. The
 repository does contain a narrow, fixture-driven `training.train_linear`
 contract with real CPU parameter updates, MSE/SGD, deterministic inputs,
 holdout evaluation and bounded checkpoint-schema validation. Its output reports
-`holdout_mae_max` as the accepted cap (`0.05`) and
-`holdout_mae_observed` as the measured value; the `seed` is recorded metadata,
-not a shuffle/RNG implementation. The separate `training.load_checkpoint`
+`holdout_mae_max` as the enforced cap (`0.05`) and
+`holdout_mae_observed` as the measured value. A holdout value above the cap is
+a runtime failure and cannot be returned as a successful training result; the
+fixture emits no `training.complete` event for that failed run. The `seed` is
+recorded metadata, not a shuffle/RNG implementation. The separate `training.load_checkpoint`
 fixture validates a bounded JSON schema and returns the parsed document; it
 does not restore optimizer/RNG state, verify cryptographic integrity or resume
 a real training loop. This does not imply a general ML framework. Seloryn's AI
@@ -85,7 +87,7 @@ training/holdout paths and sample counts, reports measured losses and labels
 the current `seed` as `metadata_only`, because this fixture does not implement
 shuffle or RNG semantics. The completion event calls the measured holdout
 value `holdout_mae_observed`; the program result separately reports the
-accepted cap as `holdout_mae_max`. The fixture also caps total parameter
+enforced cap as `holdout_mae_max`. The fixture also caps total parameter
 updates, in addition to dataset bytes, samples and requested steps. Logging is
 off by default and this is not a general telemetry, profiler or trainer API.
 

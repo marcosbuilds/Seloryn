@@ -1,0 +1,74 @@
+{
+  "name": "seloryn-language",
+  "displayName": "Seloryn Language",
+  "description": "Experimental syntax highlighting, native completions and opt-in AI ghost text for Seloryn.",
+  "version": "0.0.1",
+  "publisher": "seloryn",
+  "license": "MIT",
+  "engines": {
+    "vscode": ">=1.95.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "seloryn",
+    "artificial intelligence",
+    "machine learning"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:seloryn",
+    "onCommand:seloryn.toggleAiGhostText"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "seloryn",
+        "aliases": [
+          "Seloryn",
+          "sely"
+        ],
+        "extensions": [
+          ".sely"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "seloryn",
+        "scopeName": "source.seloryn",
+        "path": "./syntaxes/seloryn.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "seloryn.toggleAiGhostText",
+        "title": "Seloryn: Toggle AI Ghost Text"
+      }
+    ],
+    "configuration": {
+      "title": "Seloryn",
+      "properties": {
+        "seloryn.aiGhostText.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable opt-in ghost text backed by the VS Code Language Model API. The active document context may be sent to the configured provider."
+        },
+        "seloryn.aiGhostText.maxCharacters": {
+          "type": "number",
+          "default": 240,
+          "minimum": 20,
+          "maximum": 1000,
+          "description": "Maximum number of generated ghost-text characters accepted for one suggestion."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node test/extension.test.js",
+    "check": "node test/extension.test.js"
+  }
+}

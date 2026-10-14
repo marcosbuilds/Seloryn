@@ -1,6 +1,8 @@
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
+use std::process::Stdio;
 
 fn run_cli(arguments: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_seloryn"))
@@ -14,6 +16,23 @@ fn run_cli_owned(arguments: &[std::ffi::OsString]) -> std::process::Output {
         .args(arguments)
         .output()
         .expect("the Seloryn CLI binary should start")
+}
+
+fn run_cli_with_stdin(arguments: &[&str], input: &[u8]) -> std::process::Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_seloryn"))
+        .args(arguments)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("the Seloryn CLI binary should start");
+    child
+        .stdin
+        .take()
+        .expect("child stdin")
+        .write_all(input)
+        .expect("write child stdin");
+    child.wait_with_output().expect("wait for Seloryn CLI")
 }
 
 fn temporary_source(name: &str) -> PathBuf {
@@ -284,6 +303,39 @@ fn training_rejects_path_escape_and_excessive_steps() {
 }
 
 #[test]
+fn training_rejects_holdout_above_enforced_cap() {
+    let root = std::env::temp_dir().join(format!(
+        "seloryn-training-holdout-cap-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("src")).expect("training source directory");
+    std::fs::create_dir_all(root.join("data")).expect("training data directory");
+    std::fs::write(
+        root.join("seloryn.toml"),
+        "[package]\nname = \"training-holdout-cap\"\nlanguage = \"0.00\"\nsource_root = \"src\"\nentry = \"main.sely\"\n\n[capabilities]\nread = [\"data\"]\n",
+    )
+    .expect("training manifest");
+    std::fs::write(root.join("data/train.json"), "{\"x\":[0,1],\"y\":[0,1]}\n")
+        .expect("training data");
+    std::fs::write(root.join("data/test.json"), "{\"x\":[10],\"y\":[0]}\n").expect("holdout data");
+    std::fs::write(
+        root.join("src/main.sely"),
+        "from training import train_linear\n\nfn main() -> Json:\n    return train_linear(\"data/train.json\", \"data/test.json\", seed=17, steps=100)\n",
+    )
+    .expect("training source");
+
+    let output = run_cli_owned(&["run".into(), root.clone().into_os_string()]);
+    let stderr = String::from_utf8(output.stderr).expect("diagnostic must be UTF-8");
+    assert_eq!(output.status.code(), Some(65));
+    assert!(output.stdout.is_empty());
+    assert!(stderr.contains("SEL-R203"));
+    assert!(stderr.contains("holdout MAE"));
+    assert!(stderr.contains("exceeds maximum 0.05"));
+    assert!(!stderr.contains("training.complete"));
+    let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
 fn project_without_declared_read_capability_cannot_read_data() {
     let root = std::env::temp_dir().join(format!("seloryn-no-capability-{}", std::process::id()));
     std::fs::create_dir_all(root.join("src")).expect("project source directory");
@@ -546,6 +598,91 @@ fn io_print_is_explicit_and_does_not_duplicate_unit() {
     assert!(output.status.success());
     assert_eq!(output.stdout, b"hello\n");
     assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn json_stdin_is_bounded_and_typed() {
+    let path = temporary_source("json-stdin");
+    fs::write(
+        &path,
+        "from json import read_stdin, get, as_text\n\nfn main() -> Result[Text, JsonIoError]:\n    let document: Json = read_stdin()?\n    let value: Json = get(document, [\"name\"])?\n    let name: Text = as_text(value)?\n    return Ok(name)\n",
+    )
+    .expect("write stdin source");
+
+    let output = run_cli_with_stdin(
+        &["run", path.to_str().expect("temporary path is UTF-8")],
+        br#"{"name":"Seloryn"}"#,
+    );
+    let _ = fs::remove_file(&path);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert_eq!(output.stdout, b"Seloryn\n");
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn json_run_output_is_a_stable_result_envelope() {
+    let path = temporary_source("json-output");
+    fs::write(
+        &path,
+        "from io import print\n\nfn main() -> Text:\n    print(\"trace\")\n    return \"value\"\n",
+    )
+    .expect("write JSON output source");
+
+    let output = run_cli(&[
+        "run",
+        path.to_str().expect("temporary path is UTF-8"),
+        "--format=json",
+    ]);
+    let _ = fs::remove_file(&path);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert_eq!(
+        output.stdout,
+        b"{\"stdout\":\"trace\\n\",\"value\":\"value\"}\n"
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn json_run_tensor_value_uses_bounded_metadata() {
+    let path = temporary_source("json-tensor-output");
+    fs::write(
+        &path,
+        "fn main() -> Tensor[F32]:\n    return tensor_f32([1.0, 2.0], [2, 1])\n",
+    )
+    .expect("write tensor JSON output source");
+
+    let output = run_cli(&[
+        "run",
+        path.to_str().expect("temporary path is UTF-8"),
+        "--format=json",
+    ]);
+    let _ = fs::remove_file(&path);
+    assert!(output.status.success(), "stderr: {:?}", output.stderr);
+    assert_eq!(
+        output.stdout,
+        b"{\"stdout\":\"\",\"value\":{\"dtype\":\"F32\",\"elements\":2,\"shape\":[2,1],\"type\":\"tensor\"}}\n"
+    );
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
+fn json_stdin_rejects_input_above_the_source_limit() {
+    let path = temporary_source("json-stdin-limit");
+    fs::write(
+        &path,
+        "from json import read_stdin\n\nfn main() -> Result[Json, JsonIoError]:\n    return read_stdin()\n",
+    )
+    .expect("write stdin limit source");
+
+    let output = run_cli_with_stdin(
+        &["run", path.to_str().expect("temporary path is UTF-8")],
+        &[b' '; 129],
+    );
+    let _ = fs::remove_file(&path);
+    assert_eq!(output.status.code(), Some(65));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("diagnostic must be UTF-8");
+    assert!(stderr.contains("JSON stdin input exceeds the byte limit"));
 }
 
 #[test]

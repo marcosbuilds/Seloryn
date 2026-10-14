@@ -51,6 +51,8 @@ jobs:
         run: python tests/n3_probe.py
       - name: Public projects and bundle probe
         run: python tests/release_probe.py
+      - name: VS Code extension metadata and API-double tests
+        run: npm test --prefix tooling/vscode
       - name: PowerShell 5.1 CLI smoke
         if: runner.os == 'Windows'
         shell: powershell

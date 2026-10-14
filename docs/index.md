@@ -11,7 +11,7 @@ fixture contract and accelerator engines do not exist yet.**
 
 | Area | Start with | Continue |
 |---|---|---|
-| **Guide** | [Getting started](guide/start.md) | [Install](guide/install.md), [CLI](guide/cli.md), [Platforms](guide/platforms.md), [Visuals](guide/visuals.md) |
+| **Guide** | [Getting started](guide/start.md) | [Install](guide/install.md), [CLI](guide/cli.md), [Editor support](guide/editor.md), [Platforms](guide/platforms.md), [Visuals](guide/visuals.md) |
 | **Language** | [Philosophy](reference/language.md) | [Grammar](reference/grammar.md), [Types](reference/types.md), [Patterns](reference/patterns.md), [Errors](reference/errors.md), [Modules](reference/modules.md) |
 | **Compute** | [Tensors](compute/tensors.md) | [Autograd](compute/autograd.md), [Training](compute/training.md), [LLMs](compute/llms.md), [Inference](compute/inference.md) |
 | **Systems** | [HTTP services](systems/http.md) | [Automation](systems/automation.md), [Security](systems/security.md) |

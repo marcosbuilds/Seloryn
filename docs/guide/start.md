@@ -23,8 +23,11 @@ seloryn exec artifact-directory
 
 `run` executes the same bounded constructs after all front-end diagnostics
 pass. A standalone source run has no filesystem, network, process or
-accelerator effects; a project run may perform the explicitly bounded JSON
-reads granted by its project root. See the [JSON project example](../../examples/projects/json-config/README.md) for a complete multi-file invocation.
+accelerator effects; a program may explicitly consume one bounded JSON
+document from standard input, while a project run may additionally perform the
+explicitly bounded JSON reads granted by its project root. See the [JSON
+project example](../../examples/projects/json-config/README.md) for a complete
+multi-file invocation.
 The N1/N2 bridge can allocate bounded CPU tensors and run checked F32/I64
 kernels plus the tested N2 F32 numeric primitives.
 A valid program starts at `fn main()`, and its returned value is rendered to
@@ -34,7 +37,7 @@ stdout.
 
 - No package registry, external dependency resolver or broad standard library runtime.
 - No GPU, distributed or symbolic-shape execution; N1/N2 support only bounded CPU tensors.
-- No HTTP, process or unrestricted file/package runtime; only root-confined JSON reads are available in projects.
+- No HTTP, process or unrestricted file/package runtime; only bounded standard-input JSON and root-confined project JSON reads are available.
 - No general model loading, optimizer, MLP training or production model serving; only the narrow fixture contracts are implemented.
 - No GPU, distributed backend, supported installer or supported release target; local installer scripts are not a release.
 

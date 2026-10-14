@@ -380,6 +380,7 @@ struct Interpreter<'a, 'event> {
     read_roots: Vec<PathBuf>,
     json_max_bytes: usize,
     json_max_depth: usize,
+    stdin_json: Option<Result<JsonValue, String>>,
     event_sink: &'event mut dyn EventSink,
 }
 
@@ -451,6 +452,7 @@ impl<'a, 'event> Interpreter<'a, 'event> {
             read_roots: read_roots.to_vec(),
             json_max_bytes,
             json_max_depth,
+            stdin_json: None,
             event_sink,
         }
     }
@@ -1089,6 +1091,20 @@ impl<'a, 'event> Interpreter<'a, 'event> {
             .map(|argument| self.eval_expr(argument))
             .collect::<Result<Vec<_>, _>>()?;
         match name {
+            "read_stdin" => {
+                if self.stdin_json.is_none() {
+                    self.stdin_json =
+                        Some(read_stdin_json(self.json_max_bytes, self.json_max_depth));
+                }
+                match self.stdin_json.as_ref() {
+                    Some(Ok(value)) => Ok(Value::Result {
+                        ok: true,
+                        value: Box::new(Value::Json(value.clone())),
+                    }),
+                    Some(Err(message)) => Ok(json_error_result(message.clone())),
+                    None => unreachable!("stdin result is initialized before reading"),
+                }
+            }
             "read_file" => {
                 let Value::Text(relative) = values.first().cloned().unwrap_or(Value::Unit) else {
                     return Err(Control::Runtime(self.runtime(
@@ -2237,6 +2253,122 @@ fn json_error_result(message: impl Into<String>) -> Value {
     }
 }
 
+fn read_stdin_json(max_bytes: usize, max_depth: usize) -> Result<JsonValue, String> {
+    let mut bytes = Vec::new();
+    let limit = max_bytes.saturating_add(1) as u64;
+    std::io::stdin()
+        .take(limit)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("failed to read JSON from stdin: {error}"))?;
+    if bytes.len() > max_bytes {
+        return Err(format!(
+            "JSON stdin input exceeds the byte limit of {max_bytes} bytes"
+        ));
+    }
+    let source =
+        String::from_utf8(bytes).map_err(|_| "JSON stdin input is not valid UTF-8".to_owned())?;
+    json::parse(&source, max_bytes, max_depth)
+        .map_err(|error| format!("invalid JSON stdin input: {}", error.message))
+}
+
+pub fn value_to_json(value: &Value) -> JsonValue {
+    match value {
+        Value::Unit => JsonValue::Null,
+        Value::Bool(value) => JsonValue::Bool(*value),
+        Value::I64(value) => JsonValue::Number(value.to_string()),
+        Value::F64(value) => JsonValue::Number(format_f64(*value)),
+        Value::Text(value) => JsonValue::String(value.clone()),
+        Value::Json(value) => value.clone(),
+        Value::ModelRequest {
+            model,
+            prompt,
+            max_output_tokens,
+            seed,
+        } => JsonValue::Object(std::collections::BTreeMap::from([
+            (
+                "type".to_owned(),
+                JsonValue::String("model_request".to_owned()),
+            ),
+            ("model".to_owned(), JsonValue::String(model.clone())),
+            ("prompt".to_owned(), JsonValue::String(prompt.clone())),
+            (
+                "max_output_tokens".to_owned(),
+                JsonValue::Number(max_output_tokens.to_string()),
+            ),
+            ("seed".to_owned(), JsonValue::Number(seed.to_string())),
+        ])),
+        Value::ModelResponse { status, text } => {
+            JsonValue::Object(std::collections::BTreeMap::from([
+                (
+                    "type".to_owned(),
+                    JsonValue::String("model_response".to_owned()),
+                ),
+                ("status".to_owned(), JsonValue::String(status.clone())),
+                ("text".to_owned(), JsonValue::String(text.clone())),
+            ]))
+        }
+        Value::List(values) => {
+            JsonValue::Array(values.iter().map(value_to_json).collect::<Vec<_>>())
+        }
+        Value::Tensor(tensor) => JsonValue::Object(std::collections::BTreeMap::from([
+            ("type".to_owned(), JsonValue::String("tensor".to_owned())),
+            (
+                "dtype".to_owned(),
+                JsonValue::String(tensor.dtype().name().to_owned()),
+            ),
+            (
+                "shape".to_owned(),
+                JsonValue::Array(
+                    tensor
+                        .shape()
+                        .iter()
+                        .map(|value| JsonValue::Number(value.to_string()))
+                        .collect(),
+                ),
+            ),
+            (
+                "elements".to_owned(),
+                JsonValue::Number(tensor.element_count().to_string()),
+            ),
+        ])),
+        Value::Record { name, fields } => JsonValue::Object(std::collections::BTreeMap::from([
+            ("type".to_owned(), JsonValue::String("record".to_owned())),
+            ("name".to_owned(), JsonValue::String(name.clone())),
+            (
+                "fields".to_owned(),
+                JsonValue::Object(
+                    fields
+                        .iter()
+                        .map(|(field, value)| (field.clone(), value_to_json(value)))
+                        .collect(),
+                ),
+            ),
+        ])),
+        Value::Enum {
+            name,
+            variant,
+            fields,
+        } => JsonValue::Object(std::collections::BTreeMap::from([
+            ("type".to_owned(), JsonValue::String("enum".to_owned())),
+            ("name".to_owned(), JsonValue::String(name.clone())),
+            ("variant".to_owned(), JsonValue::String(variant.clone())),
+            (
+                "fields".to_owned(),
+                JsonValue::Array(fields.iter().map(value_to_json).collect()),
+            ),
+        ])),
+        Value::Option(value) => value
+            .as_deref()
+            .map(value_to_json)
+            .unwrap_or(JsonValue::Null),
+        Value::Result { ok, value } => JsonValue::Object(std::collections::BTreeMap::from([
+            ("ok".to_owned(), JsonValue::Bool(*ok)),
+            ("value".to_owned(), value_to_json(value)),
+        ])),
+        Value::Function(name) => JsonValue::String(name.clone()),
+    }
+}
+
 fn is_named_error_constructor(name: &str) -> bool {
     matches!(
         name,
@@ -2338,6 +2470,12 @@ fn train_linear_json(
     if !holdout_mae_observed.is_finite() {
         return Err("training produced a non-finite holdout error".to_owned());
     }
+    const HOLDOUT_MAE_MAX: f64 = 0.05;
+    if holdout_mae_observed > HOLDOUT_MAE_MAX {
+        return Err(format!(
+            "holdout MAE {holdout_mae_observed:.8} exceeds maximum {HOLDOUT_MAE_MAX:.2}"
+        ));
+    }
     event_sink.emit(RuntimeEvent::Completed {
         model: "linear".to_owned(),
         steps,
@@ -2363,7 +2501,7 @@ fn train_linear_json(
         ),
         (
             "holdout_mae_max".to_owned(),
-            JsonValue::Number("0.05".to_owned()),
+            JsonValue::Number(format!("{HOLDOUT_MAE_MAX:.2}")),
         ),
         (
             "holdout_mae_observed".to_owned(),

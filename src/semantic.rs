@@ -1413,6 +1413,10 @@ impl<'a> Checker<'a> {
     fn type_of_standard_call(&mut self, name: &str, arguments: &[Expr], span: Span) -> Type {
         let result = |value: Type| Type::Result(Box::new(value), Box::new(Type::JsonIoError));
         match name {
+            "read_stdin" => {
+                self.check_standard_arity(name, arguments, 0, span);
+                result(Type::Json)
+            }
             "read_file" => {
                 self.check_standard_arity(name, arguments, 1, span);
                 if let Some(path) = arguments.first() {
@@ -1903,6 +1907,7 @@ fn is_supported_standard_directive(text: &str) -> bool {
         "io" => ["print"].as_slice(),
         "json" => [
             "parse",
+            "read_stdin",
             "read_file",
             "encode",
             "get",

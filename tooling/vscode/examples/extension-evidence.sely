@@ -1,0 +1,3 @@
+fn main() -> Text:
+    let status: Text = "VS Code extension evidence"
+    return status

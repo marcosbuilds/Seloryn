@@ -27,15 +27,22 @@ rendered final value to stdout. A typed `Err(E)` returned by `main` is promoted
 to `SEL-R127` at the CLI boundary and returns exit code 65, so a failed result
 cannot look like a successful process to automation. Source, runtime and
 top-level result failures write stable `SEL-*` diagnostics to stderr; no runtime
-evaluation starts after a lexical, parse or semantic diagnostic. `--format=json` emits one
-JSON document containing the diagnostics, source byte spans, Unicode-aware
-locations, help and runtime stack. `--quiet` suppresses the successful `check`
+evaluation starts after a lexical, parse or semantic diagnostic. For a
+successful run, --format=json emits one JSON document on stdout with the
+stable {stdout,value} envelope. stdout contains explicit io.print output and
+value is the JSON representation of the final Seloryn value; tensor values
+expose dtype, shape and element count rather than an unbounded render. For
+failures, the same flag keeps one JSON diagnostic document on stderr, with
+source byte spans, Unicode-aware locations, help and runtime stack.
+`--quiet` suppresses the successful `check`
 line. `--log=human` or `--log=json` is opt-in and streams only the narrow
 `training.train_linear` lifecycle to stderr; it never changes program stdout.
 Human logs are concise, while JSON logs are one deterministic JSON object per
 line. Events report dataset paths, sample counts, metadata-only seed, sampled
 steps and measured losses. `--log=off` is the default. A standalone source run performs no file, network, process or GPU
-effects; a project run may perform only its explicitly bounded JSON reads. The
+effects. A program may explicitly import read_stdin from json to consume one
+bounded UTF-8 JSON document from standard input; it does not grant filesystem
+or network access. A project run may perform only its explicitly bounded JSON reads. The
 behavior is covered by the CLI tests in
 [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs) and
 [`tests/tensor_cpu.rs`](../../tests/tensor_cpu.rs), with independent N2 numeric

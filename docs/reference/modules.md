@@ -34,6 +34,20 @@ fn main() -> Result[Text, JsonIoError]:
 the manifest's JSON byte/depth limits; this is not unrestricted filesystem
 access or an external package resolver.
 
+For process integration, `from json import read_stdin` reads one bounded
+UTF-8 JSON document from standard input without granting filesystem access:
+
+```seloryn
+from json import read_stdin
+
+fn main() -> Result[Json, JsonIoError]:
+    return read_stdin()
+```
+
+The default standalone input limit is 128 bytes; project manifests can raise
+the explicit JSON byte limit for their own run. Malformed, non-UTF-8 or
+oversized input returns a `JsonIoError`.
+
 The [`evaluation-pipeline`](../../examples/projects/evaluation-pipeline/README.md)
 example extends this boundary across several local modules and a declared
 `data` read directory. Its bundle can reproduce the same JSON input because
