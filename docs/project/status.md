@@ -6,12 +6,12 @@
 
 | Area | State | Evidence |
 |---|---|---|
-| UTF-8 lexer, layout and parser subset | Experimental implemented and tested | [`parse`](../../src/parser.rs#L224), parser tests |
-| Name resolution and local scopes | Partial E3 checker | [`collect_declarations`](../../src/semantic.rs#L101), [`lookup`](../../src/semantic.rs#L1039) |
-| Scalar types and local inference | Partial E3 checker | [`type_of_expr`](../../src/semantic.rs#L652), semantic tests |
-| Records, enums and field/constructor checks | Partial E3 checker | [`type_of_call`](../../src/semantic.rs#L845), semantic tests |
-| `Result`, `Option`, `require`, postfix `?` and `match` coverage | Experimental partial checker | [`check_require`](../../src/semantic.rs#L371), [`check_match`](../../src/semantic.rs#L409) |
-| Pure E4 interpreter for scalar/list values, list indexing and iteration, mutable `var` assignment, records, enums, `Result`, `Option`, calls, control flow and pipelines | Experimental implemented and tested | [`execute`](../../src/runtime.rs#L121), runtime and CLI tests |
+| UTF-8 lexer, layout and parser subset | Experimental implemented and tested | [`src/parser.rs`](../../src/parser.rs), parser tests |
+| Name resolution and local scopes | Partial E3 checker | [`src/semantic.rs`](../../src/semantic.rs), semantic tests |
+| Scalar types and local inference | Partial E3 checker | [`src/semantic.rs`](../../src/semantic.rs), semantic tests |
+| Records, enums and field/constructor checks | Partial E3 checker | [`src/semantic.rs`](../../src/semantic.rs), semantic tests |
+| `Result`, `Option`, `require`, postfix `?` and `match` coverage | Experimental partial checker | [`src/semantic.rs`](../../src/semantic.rs), semantic tests |
+| Pure E4 interpreter for scalar/list values, list indexing and iteration, mutable `var` assignment, records, enums, `Result`, `Option`, calls, control flow and pipelines | Experimental implemented and tested | [`src/runtime.rs`](../../src/runtime.rs), runtime and CLI tests |
 | N1 CPU tensors (`Tensor[F32]`/`Tensor[I64]`) with typed reads and explicit lossless dtype conversion | Experimental implemented and tested | [`src/tensor`](../../src/tensor), [`tensor_cpu.rs`](../../tests/tensor_cpu.rs) |
 | N2 CPU numeric closure | Experimental implemented and tested | [`src/tensor/ops.rs`](../../src/tensor/ops.rs), [`n2_probe.py`](../../tests/n2_probe.py), [`tensor-numeric.sely`](../../examples/tensors/tensor-numeric.sely) |
 | Deterministic core IR boundary | Experimental implemented and tested | [`src/ir.rs`](../../src/ir.rs), runtime and lowering tests |
@@ -40,12 +40,12 @@ Percentages below are engineering estimates of the design gate, not test coverag
 
 | Gate | Estimate | Evidence | Remaining boundary |
 |---|---:|---|---|
-| E3.0 — grammar and AST preflight | 80% | [`parser.rs`](../../src/parser.rs#L224), precedence and reserved-syntax tests | Full grammar, closures, generic shape syntax and runtime meaning remain outside the subset |
-| E3.1 — names and scopes | 70% | [`collect_declarations`](../../src/semantic.rs#L101), [`lookup`](../../src/semantic.rs#L1039) | Module visibility/import resolution is unavailable; `pub` is metadata plus signature validation, not a package export system |
-| E3.2 — types and inference | 65% | [`type_of_expr`](../../src/semantic.rs#L652), [`type_from_expr`](../../src/semantic.rs#L1005) | No user generics or symbolic shape constraints |
-| E3.3 — records, enums and fallibility | 75% | [`check_require`](../../src/semantic.rs#L371), [`type_of_call`](../../src/semantic.rs#L845), Result/Option tests | General error conversion and runtime resource behavior remain outside E3/E4 |
-| E3.4 — exhaustive `match` | 70% | [`check_match`](../../src/semantic.rs#L409), [`required_coverage`](../../src/semantic.rs#L632), match tests | Structural/named-field patterns and ranges remain outside; the validated constructor subset executes |
-| E3.5 — semantic CLI proof | 70% | [`check_path`](../../src/main.rs#L83), structured diagnostics and CLI integration tests | Property/fuzz campaign and golden corpus remain absent; CI execution evidence is not a supported release |
+| E3.0 — grammar and AST preflight | 80% | [`src/parser.rs`](../../src/parser.rs), precedence and reserved-syntax tests | Full grammar, closures, generic shape syntax and runtime meaning remain outside the subset |
+| E3.1 — names and scopes | 70% | [`src/semantic.rs`](../../src/semantic.rs), semantic tests | Module visibility/import resolution is unavailable; `pub` is metadata plus signature validation, not a package export system |
+| E3.2 — types and inference | 65% | [`src/semantic.rs`](../../src/semantic.rs), semantic tests | No user generics or symbolic shape constraints |
+| E3.3 — records, enums and fallibility | 75% | [`src/semantic.rs`](../../src/semantic.rs), Result/Option tests | General error conversion and runtime resource behavior remain outside E3/E4 |
+| E3.4 — exhaustive `match` | 70% | [`src/semantic.rs`](../../src/semantic.rs), match tests | Structural/named-field patterns and ranges remain outside; the validated constructor subset executes |
+| E3.5 — semantic CLI proof | 70% | [`src/main.rs`](../../src/main.rs), structured diagnostics and CLI integration tests | Property/fuzz campaign and golden corpus remain absent; CI execution evidence is not a supported release |
 
 ## E4 execution evidence
 

@@ -334,7 +334,11 @@ impl CliEventSink {
         if self.failure.is_some() || self.format == LogFormat::Off {
             return;
         }
-        if let Err(error) = io::stderr().write_all(format!("{line}\n").as_bytes()) {
+        let mut stderr = io::stderr();
+        if let Err(error) = stderr
+            .write_all(format!("{line}\n").as_bytes())
+            .and_then(|()| stderr.flush())
+        {
             self.failure = Some(error);
         }
     }
@@ -361,9 +365,18 @@ fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
             test_samples,
             steps,
             seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            parameter_count,
         } => format!(
-            "seloryn training.start model={} train={} test={} train_samples={} test_samples={} steps={} seed_metadata={}",
+            "seloryn training.start schema=1 operation=train_linear model={} device={} dtype={} optimizer={} learning_rate={learning_rate:.8} parameter_count={} train={} test={} train_samples={} test_samples={} steps={} seed_metadata={}",
             model,
+            device,
+            dtype,
+            optimizer,
+            parameter_count,
             json::encode(&json::JsonValue::String(train_path.clone())),
             json::encode(&json::JsonValue::String(test_path.clone())),
             train_samples,
@@ -375,21 +388,33 @@ fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
             model,
             step,
             steps,
+            updates,
             loss,
+            loss_delta,
         } => format!(
-            "seloryn training.step model={} step={}/{} loss={loss:.8}",
-            model, step, steps
+            "seloryn training.step schema=1 model={} step={}/{} updates={} loss={loss:.8} loss_delta={loss_delta:.8}",
+            model, step, steps, updates
         ),
         runtime::RuntimeEvent::Completed {
             model,
             steps,
+            updates,
             seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            parameter_count,
             initial_loss,
             final_loss,
+            loss_delta,
+            loss_decreased,
             holdout_mae_observed,
+            weight,
+            bias,
         } => format!(
-            "seloryn training.complete model={} steps={} initial_loss={initial_loss:.8} final_loss={final_loss:.8} holdout_mae_observed={holdout_mae_observed:.8} seed_metadata={}",
-            model, steps, seed
+            "seloryn training.complete schema=1 operation=train_linear model={} device={} dtype={} optimizer={} learning_rate={learning_rate:.8} parameter_count={} updates={} steps={} initial_loss={initial_loss:.8} final_loss={final_loss:.8} loss_delta={loss_delta:.8} loss_decreased={} holdout_mae_observed={holdout_mae_observed:.8} weight={weight:.8} bias={bias:.8} seed_metadata={}",
+            model, device, dtype, optimizer, parameter_count, updates, steps, loss_decreased, seed
         ),
     }
 }
@@ -405,12 +430,39 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
             test_samples,
             steps,
             seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            parameter_count,
         } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
             object.insert(
                 "event".to_owned(),
                 json::JsonValue::String("training.start".to_owned()),
             );
+            object.insert(
+                "operation".to_owned(),
+                json::JsonValue::String("train_linear".to_owned()),
+            );
             object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert("device".to_owned(), json::JsonValue::String(device.clone()));
+            object.insert("dtype".to_owned(), json::JsonValue::String(dtype.clone()));
+            object.insert(
+                "optimizer".to_owned(),
+                json::JsonValue::String(optimizer.clone()),
+            );
+            object.insert(
+                "learning_rate".to_owned(),
+                json::JsonValue::Number(format!("{learning_rate:.8}")),
+            );
+            object.insert(
+                "parameter_count".to_owned(),
+                json::JsonValue::Number(parameter_count.to_string()),
+            );
             object.insert(
                 "train_path".to_owned(),
                 json::JsonValue::String(train_path.clone()),
@@ -445,8 +497,14 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
             model,
             step,
             steps,
+            updates,
             loss,
+            loss_delta,
         } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
             object.insert(
                 "event".to_owned(),
                 json::JsonValue::String("training.step".to_owned()),
@@ -458,26 +516,70 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
                 json::JsonValue::Number(steps.to_string()),
             );
             object.insert(
+                "updates".to_owned(),
+                json::JsonValue::Number(updates.to_string()),
+            );
+            object.insert(
                 "loss".to_owned(),
                 json::JsonValue::Number(format!("{loss:.8}")),
+            );
+            object.insert(
+                "loss_delta".to_owned(),
+                json::JsonValue::Number(format!("{loss_delta:.8}")),
             );
         }
         runtime::RuntimeEvent::Completed {
             model,
             steps,
+            updates,
             seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            parameter_count,
             initial_loss,
             final_loss,
+            loss_delta,
+            loss_decreased,
             holdout_mae_observed,
+            weight,
+            bias,
         } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
             object.insert(
                 "event".to_owned(),
                 json::JsonValue::String("training.complete".to_owned()),
             );
+            object.insert(
+                "operation".to_owned(),
+                json::JsonValue::String("train_linear".to_owned()),
+            );
             object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert("device".to_owned(), json::JsonValue::String(device.clone()));
+            object.insert("dtype".to_owned(), json::JsonValue::String(dtype.clone()));
+            object.insert(
+                "optimizer".to_owned(),
+                json::JsonValue::String(optimizer.clone()),
+            );
+            object.insert(
+                "learning_rate".to_owned(),
+                json::JsonValue::Number(format!("{learning_rate:.8}")),
+            );
+            object.insert(
+                "parameter_count".to_owned(),
+                json::JsonValue::Number(parameter_count.to_string()),
+            );
             object.insert(
                 "steps".to_owned(),
                 json::JsonValue::Number(steps.to_string()),
+            );
+            object.insert(
+                "updates".to_owned(),
+                json::JsonValue::Number(updates.to_string()),
             );
             object.insert("seed".to_owned(), json::JsonValue::Number(seed.to_string()));
             object.insert(
@@ -493,8 +595,24 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
                 json::JsonValue::Number(format!("{final_loss:.8}")),
             );
             object.insert(
+                "loss_delta".to_owned(),
+                json::JsonValue::Number(format!("{loss_delta:.8}")),
+            );
+            object.insert(
+                "loss_decreased".to_owned(),
+                json::JsonValue::Bool(*loss_decreased),
+            );
+            object.insert(
                 "holdout_mae_observed".to_owned(),
                 json::JsonValue::Number(format!("{holdout_mae_observed:.8}")),
+            );
+            object.insert(
+                "weight".to_owned(),
+                json::JsonValue::Number(format!("{weight:.8}")),
+            );
+            object.insert(
+                "bias".to_owned(),
+                json::JsonValue::Number(format!("{bias:.8}")),
             );
         }
     }

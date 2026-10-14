@@ -171,11 +171,20 @@ fn training_events_are_opt_in_streamed_and_separate_from_stdout() {
     let human_stderr = String::from_utf8(human.stderr).expect("human events must be UTF-8");
     let human_lines = human_stderr.lines().collect::<Vec<_>>();
     assert_eq!(human_lines.len(), 13);
-    assert!(human_lines[0].contains("training.start model=linear"));
-    assert!(human_lines[1].contains("training.step model=linear step=1/100"));
-    assert!(human_lines[11].contains("training.step model=linear step=100/100"));
-    assert!(human_lines[12].contains("training.complete model=linear"));
+    assert!(human_lines[0].contains("training.start schema=1 operation=train_linear model=linear"));
+    assert!(human_lines[0].contains("device=cpu dtype=f64 optimizer=sgd learning_rate=0.02000000"));
+    assert!(human_lines[0].contains("parameter_count=2"));
+    assert!(human_lines[1].contains("training.step schema=1 model=linear step=1/100"));
+    assert!(human_lines[1].contains("updates=6") && human_lines[1].contains("loss_delta="));
+    assert!(human_lines[11].contains("training.step schema=1 model=linear step=100/100"));
+    assert!(
+        human_lines[12].contains("training.complete schema=1 operation=train_linear model=linear")
+    );
     assert!(human_lines[12].contains("holdout_mae_observed=0.01893684"));
+    assert!(
+        human_lines[12].contains("updates=600") && human_lines[12].contains("loss_decreased=true")
+    );
+    assert!(human_lines[12].contains("weight=") && human_lines[12].contains("bias="));
     assert!(!human_lines[12].contains("holdout_mae_max="));
 
     let json = run_cli(&["run", "examples/projects/linear-training", "--log=json"]);
@@ -188,6 +197,14 @@ fn training_events_are_opt_in_streamed_and_separate_from_stdout() {
     assert!(json_lines[1].contains("\"event\":\"training.step\""));
     assert!(json_lines[12].contains("\"event\":\"training.complete\""));
     assert!(json_lines[12].contains("\"holdout_mae_observed\":0.01893684"));
+    assert!(json_lines[0].contains("\"schema_version\":1"));
+    assert!(json_lines[0].contains("\"operation\":\"train_linear\""));
+    assert!(json_lines[1].contains("\"updates\":6"));
+    assert!(json_lines[1].contains("\"loss_delta\":3.79070370"));
+    assert!(json_lines[12].contains("\"updates\":600"));
+    assert!(json_lines[12].contains("\"loss_decreased\":true"));
+    assert!(json_lines[12].contains("\"weight\":"));
+    assert!(json_lines[12].contains("\"bias\":"));
     assert!(!json_lines[12].contains("\"holdout_mae_max\""));
     assert!(json_lines[0].contains("\"seed_semantics\":\"metadata_only\""));
 }

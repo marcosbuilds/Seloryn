@@ -10,6 +10,7 @@ examples/
   projects/json-config/        local module + native json + external JSON
   projects/checkpoint-validation/ bounded checkpoint schema validation
   projects/linear-training/    narrow fixture-driven linear training contract
+  projects/evaluation-pipeline/ local modules + JSON validation + tensor metrics
 ```
 
 Run a standalone tensor example with a locally built release binary:
@@ -17,6 +18,9 @@ Run a standalone tensor example with a locally built release binary:
 ```text
 seloryn run examples/tensors/tensor-matmul.sely
 seloryn run examples/tensors/tensor-index.sely
+seloryn run examples/tensors/tensor-numeric.sely
+seloryn run examples/tensors/tensor-reduce.sely
+seloryn run examples/tensors/linear-forward.sely
 ```
 
 Run a project example by passing its project directory:
@@ -24,6 +28,8 @@ Run a project example by passing its project directory:
 ```text
 seloryn check examples/projects/json-config
 seloryn run examples/projects/json-config
+seloryn check examples/projects/evaluation-pipeline
+seloryn run examples/projects/evaluation-pipeline
 ```
 
 Run the scalar reverse-mode example:

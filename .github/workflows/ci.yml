@@ -82,4 +82,7 @@ jobs:
         shell: cmd
         run: |
           target\release\seloryn.exe run tests\result-error.sely
-          if not "%ERRORLEVEL%"=="65" exit /b 1
+          rem CMD expands %ERRORLEVEL% before the executable runs inside this block.
+          rem Use post-execution ERRORLEVEL tests so the smoke checks the real exit code.
+          if errorlevel 66 exit /b 1
+          if not errorlevel 65 exit /b 1

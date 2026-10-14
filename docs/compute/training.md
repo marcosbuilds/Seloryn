@@ -101,3 +101,13 @@ off by default and this is not a general telemetry, profiler or trainer API.
 ### Success criteria and scope
 
 A custom attention block and tokenizer are later stages. Training a large language model requires fast GEMM/attention kernels, reliable memory planning, high-bandwidth device execution, mixed precision, reproducibility, optimizer state sharding, distributed collectives and huge curated datasets. Neither language elegance nor its initial interpreter can substitute for these requirements.
+
+### Training event stream v1
+
+The bounded fixture flushes each opt-in event as it is emitted. JSON events use
+`schema_version: 1`. The start event identifies `train_linear`, the linear model,
+CPU device, `f64` dtype, SGD, learning rate, parameter count, dataset paths and
+sample counts. Step events report update count, loss and loss change; completion
+reports initial/final loss, whether loss decreased, observed holdout MAE, total
+updates and the learned weight and bias. This is a narrow execution stream,
+not a general telemetry, profiler or trainer API.

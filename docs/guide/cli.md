@@ -78,3 +78,13 @@ Unicode names and paths with spaces). Passing program arguments after `--`
 remains outside E4.
 
 Every command advertises itself only when its implementation and tests are accepted. `seloryn doctor` must report `unsupported` instead of silently pretending a GPU backend works.
+
+### Training event stream v1
+
+The narrow `training.train_linear` stream is flushed after every event. JSON
+records use `schema_version: 1`: `training.start` identifies the operation,
+model, CPU device, dtype, optimizer, learning rate, parameter count and dataset
+scope; sampled `training.step` records report completed updates, measured loss
+and change from the initial loss; `training.complete` reports the loss change,
+improvement flag, holdout MAE, total updates and learned linear parameters.
+This contract applies only to the bounded fixture, not to general telemetry.

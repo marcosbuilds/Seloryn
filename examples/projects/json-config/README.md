@@ -8,5 +8,5 @@ seloryn check examples/projects/json-config
 seloryn run examples/projects/json-config
 ```
 
-The observed result is `Ok("configured model: gpt-local")`. The example does
-not read arbitrary paths or contact a model provider.
+The observed result is `configured model: gpt-local`. The example does not
+read arbitrary paths or contact a model provider.

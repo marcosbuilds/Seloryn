@@ -25,6 +25,11 @@ const MAX_TRAINING_UPDATES: usize = 10_000_000;
 const MAX_TRAINING_DATASET_BYTES: usize = 1_048_576;
 const MAX_TRAINING_SAMPLES: usize = 100_000;
 const MAX_CHECKPOINT_BYTES: usize = 1_048_576;
+const LINEAR_DEVICE: &str = "cpu";
+const LINEAR_DTYPE: &str = "f64";
+const LINEAR_OPTIMIZER: &str = "sgd";
+const LINEAR_LEARNING_RATE: f64 = 0.02;
+const LINEAR_PARAMETER_COUNT: usize = 2;
 
 /// Values that can be produced by the pure E4 interpreter.
 #[derive(Clone, Debug, PartialEq)]
@@ -204,20 +209,37 @@ pub enum RuntimeEvent {
         test_samples: usize,
         steps: i64,
         seed: i64,
+        device: String,
+        dtype: String,
+        optimizer: String,
+        learning_rate: f64,
+        parameter_count: usize,
     },
     Step {
         model: String,
         step: i64,
         steps: i64,
+        updates: usize,
         loss: f64,
+        loss_delta: f64,
     },
     Completed {
         model: String,
         steps: i64,
+        updates: usize,
         seed: i64,
+        device: String,
+        dtype: String,
+        optimizer: String,
+        learning_rate: f64,
+        parameter_count: usize,
         initial_loss: f64,
         final_loss: f64,
+        loss_delta: f64,
+        loss_decreased: bool,
         holdout_mae_observed: f64,
+        weight: f64,
+        bias: f64,
     },
 }
 
@@ -2265,6 +2287,11 @@ fn train_linear_json(
         test_samples: test.0.len(),
         steps,
         seed,
+        device: LINEAR_DEVICE.to_owned(),
+        dtype: LINEAR_DTYPE.to_owned(),
+        optimizer: LINEAR_OPTIMIZER.to_owned(),
+        learning_rate: LINEAR_LEARNING_RATE,
+        parameter_count: LINEAR_PARAMETER_COUNT,
     });
     let progress_interval = (steps / 10).max(1);
     for step in 1..=steps {
@@ -2279,8 +2306,8 @@ fn train_linear_json(
                 )
             },
         );
-        weight -= 0.02 * weight_gradient;
-        bias -= 0.02 * bias_gradient;
+        weight -= LINEAR_LEARNING_RATE * weight_gradient;
+        bias -= LINEAR_LEARNING_RATE * bias_gradient;
         if step == 1 || step == steps || step % progress_interval == 0 {
             let loss = mean_squared_error(&train, weight, bias);
             if !loss.is_finite() {
@@ -2292,7 +2319,9 @@ fn train_linear_json(
                 model: "linear".to_owned(),
                 step,
                 steps,
+                updates: (step as usize) * train.0.len(),
                 loss,
+                loss_delta: initial_loss - loss,
             });
         }
     }
@@ -2312,10 +2341,20 @@ fn train_linear_json(
     event_sink.emit(RuntimeEvent::Completed {
         model: "linear".to_owned(),
         steps,
+        updates: total_updates,
         seed,
+        device: LINEAR_DEVICE.to_owned(),
+        dtype: LINEAR_DTYPE.to_owned(),
+        optimizer: LINEAR_OPTIMIZER.to_owned(),
+        learning_rate: LINEAR_LEARNING_RATE,
+        parameter_count: LINEAR_PARAMETER_COUNT,
         initial_loss,
         final_loss,
+        loss_delta: initial_loss - final_loss,
+        loss_decreased: final_loss < initial_loss,
         holdout_mae_observed,
+        weight,
+        bias,
     });
     Ok(JsonValue::Object(std::collections::BTreeMap::from([
         (

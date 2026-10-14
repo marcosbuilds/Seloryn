@@ -70,11 +70,11 @@ This EBNF summarizes accepted design intent; production-ready conformance gramma
 
 | Feature | Current status | Evidence and limit |
 |---|---|---|
-| `record` declarations | Implemented parser, nominal field checks and E4 construction/member access | [`parse_record`](../../src/parser.rs#L395), [`type_of_call`](../../src/semantic.rs#L845); named-field construction is not implemented |
-| `enum` declarations and variants | Implemented parser, constructor checks and E4 values/matching | [`parse_enum`](../../src/parser.rs#L436), [`check_constructor_name`](../../src/semantic.rs#L528); structural patterns remain outside |
-| `match` statements | Partial checker plus E4 execution | [`parse_match`](../../src/parser.rs#L650), [`check_match`](../../src/semantic.rs#L409), [`execute`](../../src/runtime.rs#L121); Bool/Option/Result/enum coverage and constructor cases execute, but structural patterns are absent |
-| `Result` and postfix `?` | Static checks plus E4 propagation | [`type_of_expr`](../../src/semantic.rs#L652), runtime tests; `?` returns a compatible `Err` from the current function |
-| `Option` and `??` | Static checks plus E4 values/fallback | [`type_of_binary`](../../src/semantic.rs#L760), runtime tests; nullable `T?` and `?.` remain reserved |
+| `record` declarations | Implemented parser, nominal field checks and E4 construction/member access | [`src/parser.rs`](../../src/parser.rs), [`src/semantic.rs`](../../src/semantic.rs); named-field construction is not implemented |
+| `enum` declarations and variants | Implemented parser, constructor checks and E4 values/matching | [`src/parser.rs`](../../src/parser.rs), [`src/semantic.rs`](../../src/semantic.rs); structural patterns remain outside |
+| `match` statements | Partial checker plus E4 execution | [`src/parser.rs`](../../src/parser.rs), [`src/semantic.rs`](../../src/semantic.rs), [`src/runtime.rs`](../../src/runtime.rs); Bool/Option/Result/enum coverage and constructor cases execute, but structural patterns are absent |
+| `Result` and postfix `?` | Static checks plus E4 propagation | [`src/semantic.rs`](../../src/semantic.rs), runtime tests; `?` returns a compatible `Err` from the current function |
+| `Option` and `??` | Static checks plus E4 values/fallback | [`src/semantic.rs`](../../src/semantic.rs), runtime tests; nullable `T?` and `?.` remain reserved |
 | Local modules and standard imports | Experimental local-project subset | `seloryn.toml` resolves local modules and the bounded `json`/other standard fixtures; external packages, registry and lockfiles remain unavailable |
 | `Tensor[F32]` and `Tensor[I64]` | N1/N2 experimental | Runtime shapes and CPU kernels are checked by [`src/tensor`](../../src/tensor) and CLI tests; symbolic shape parameters remain unavailable |
 | List indexing, tensor element reads, `for` iteration and `var` assignment | E4 experimental | `List[T]` indexing, typed read-only tensor coordinates, bounded iteration, mutable bindings and list concatenation execute; slicing and tensor mutation remain unavailable |
