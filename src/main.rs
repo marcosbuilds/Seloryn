@@ -386,9 +386,9 @@ fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
             seed,
             initial_loss,
             final_loss,
-            holdout_mae_max,
+            holdout_mae_observed,
         } => format!(
-            "seloryn training.complete model={} steps={} initial_loss={initial_loss:.8} final_loss={final_loss:.8} holdout_mae_max={holdout_mae_max:.8} seed_metadata={}",
+            "seloryn training.complete model={} steps={} initial_loss={initial_loss:.8} final_loss={final_loss:.8} holdout_mae_observed={holdout_mae_observed:.8} seed_metadata={}",
             model, steps, seed
         ),
     }
@@ -468,7 +468,7 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
             seed,
             initial_loss,
             final_loss,
-            holdout_mae_max,
+            holdout_mae_observed,
         } => {
             object.insert(
                 "event".to_owned(),
@@ -493,8 +493,8 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
                 json::JsonValue::Number(format!("{final_loss:.8}")),
             );
             object.insert(
-                "holdout_mae_max".to_owned(),
-                json::JsonValue::Number(format!("{holdout_mae_max:.8}")),
+                "holdout_mae_observed".to_owned(),
+                json::JsonValue::Number(format!("{holdout_mae_observed:.8}")),
             );
         }
     }

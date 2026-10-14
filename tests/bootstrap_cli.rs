@@ -175,6 +175,8 @@ fn training_events_are_opt_in_streamed_and_separate_from_stdout() {
     assert!(human_lines[1].contains("training.step model=linear step=1/100"));
     assert!(human_lines[11].contains("training.step model=linear step=100/100"));
     assert!(human_lines[12].contains("training.complete model=linear"));
+    assert!(human_lines[12].contains("holdout_mae_observed=0.01893684"));
+    assert!(!human_lines[12].contains("holdout_mae_max="));
 
     let json = run_cli(&["run", "examples/projects/linear-training", "--log=json"]);
     assert!(json.status.success(), "stderr: {:?}", json.stderr);
@@ -185,6 +187,8 @@ fn training_events_are_opt_in_streamed_and_separate_from_stdout() {
     assert!(json_lines[0].contains("\"event\":\"training.start\""));
     assert!(json_lines[1].contains("\"event\":\"training.step\""));
     assert!(json_lines[12].contains("\"event\":\"training.complete\""));
+    assert!(json_lines[12].contains("\"holdout_mae_observed\":0.01893684"));
+    assert!(!json_lines[12].contains("\"holdout_mae_max\""));
     assert!(json_lines[0].contains("\"seed_semantics\":\"metadata_only\""));
 }
 
@@ -238,6 +242,27 @@ fn training_rejects_path_escape_and_excessive_steps() {
     assert!(oversized_stderr.contains("SEL-R203"));
     assert!(oversized_stderr.contains("training dataset"));
     assert!(oversized_stderr.contains("1048576 bytes"));
+
+    let values = (0..20)
+        .map(|value| value.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    std::fs::write(
+        root.join("data/heavy.json"),
+        format!("{{\"x\":[{values}],\"y\":[{values}]}}\n"),
+    )
+    .expect("heavy training data");
+    std::fs::write(
+        root.join("src/main.sely"),
+        "from training import train_linear\n\nfn main() -> Json:\n    return train_linear(\"data/heavy.json\", \"data/test.json\", seed=7, steps=600000)\n",
+    )
+    .expect("heavy source");
+    let heavy = run_cli_owned(&["run".into(), root.clone().into_os_string()]);
+    assert_eq!(heavy.status.code(), Some(65));
+    let heavy_stderr = String::from_utf8(heavy.stderr).expect("work diagnostic");
+    assert!(heavy_stderr.contains("SEL-R203"));
+    assert!(heavy_stderr.contains("training updates exceed maximum 10000000"));
+    assert!(!heavy_stderr.contains("training.start"));
     let _ = std::fs::remove_dir_all(root);
 }
 

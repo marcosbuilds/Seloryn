@@ -52,8 +52,10 @@ but diagnostics retain the stable bundle path rather than exposing the
 materialization directory. A top-level `Err(E)` also points to the first
 applicable control-flow source span in the entry function. Repeated execution
 of the same failing bundle therefore produces the same diagnostic identity.
-Only relative manifest, source and declared-read paths are permitted; this is
-experimental bundle evidence, not an installer or supported release.
+Only relative manifest, source and declared-read paths are permitted; a read
+target must canonicalize successfully inside its declared root. These
+capability checks are policy checks, not an OS sandbox, and this is experimental
+bundle evidence rather than an installer or supported release.
 
 ## Future commands
 

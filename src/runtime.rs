@@ -21,6 +21,7 @@ const MAX_LOOP_ITERATIONS: usize = 1_000_000;
 const MAX_LIST_ELEMENTS: usize = 1_000_000;
 const MAX_RENDER_VALUES: usize = 4096;
 const MAX_TRAINING_STEPS: i64 = 1_000_000;
+const MAX_TRAINING_UPDATES: usize = 10_000_000;
 const MAX_TRAINING_DATASET_BYTES: usize = 1_048_576;
 const MAX_TRAINING_SAMPLES: usize = 100_000;
 const MAX_CHECKPOINT_BYTES: usize = 1_048_576;
@@ -216,7 +217,7 @@ pub enum RuntimeEvent {
         seed: i64,
         initial_loss: f64,
         final_loss: f64,
-        holdout_mae_max: f64,
+        holdout_mae_observed: f64,
     },
 }
 
@@ -1403,7 +1404,11 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 "path escapes a declared read capability through a symbolic link",
                 span,
             ))),
-            Err(_) => Ok(candidate),
+            Err(_) => Err(Control::Runtime(self.runtime(
+                "SEL-S004",
+                "path could not be canonicalized within a declared read capability",
+                span,
+            ))),
         }
     }
 
@@ -2236,6 +2241,16 @@ fn train_linear_json(
             "training steps exceed maximum {MAX_TRAINING_STEPS}"
         ));
     }
+    let total_updates = train
+        .0
+        .len()
+        .checked_mul(steps as usize)
+        .ok_or_else(|| "training update count overflowed".to_owned())?;
+    if total_updates > MAX_TRAINING_UPDATES {
+        return Err(format!(
+            "training updates exceed maximum {MAX_TRAINING_UPDATES}"
+        ));
+    }
     let mut weight = 0.0;
     let mut bias = 0.0;
     let initial_loss = mean_squared_error(&train, weight, bias);
@@ -2285,13 +2300,13 @@ fn train_linear_json(
     if !final_loss.is_finite() {
         return Err("training produced a non-finite final loss".to_owned());
     }
-    let holdout_mae_max = test
+    let holdout_mae_observed = test
         .0
         .iter()
         .zip(&test.1)
         .map(|(x, y)| (weight * x + bias - y).abs())
         .fold(0.0, f64::max);
-    if !holdout_mae_max.is_finite() {
+    if !holdout_mae_observed.is_finite() {
         return Err("training produced a non-finite holdout error".to_owned());
     }
     event_sink.emit(RuntimeEvent::Completed {
@@ -2300,7 +2315,7 @@ fn train_linear_json(
         seed,
         initial_loss,
         final_loss,
-        holdout_mae_max,
+        holdout_mae_observed,
     });
     Ok(JsonValue::Object(std::collections::BTreeMap::from([
         (
@@ -2313,7 +2328,7 @@ fn train_linear_json(
         ),
         (
             "holdout_mae_observed".to_owned(),
-            JsonValue::Number(format!("{holdout_mae_max:.8}")),
+            JsonValue::Number(format!("{holdout_mae_observed:.8}")),
         ),
         ("seed".to_owned(), JsonValue::Number(seed.to_string())),
     ])))

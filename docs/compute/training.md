@@ -83,8 +83,11 @@ contains `training.start`, sampled `training.step` events (first step, each
 10% and final step), and `training.complete`. It identifies the linear model,
 training/holdout paths and sample counts, reports measured losses and labels
 the current `seed` as `metadata_only`, because this fixture does not implement
-shuffle or RNG semantics. Logging is off by default and this is not a general
-telemetry, profiler or trainer API.
+shuffle or RNG semantics. The completion event calls the measured holdout
+value `holdout_mae_observed`; the program result separately reports the
+accepted cap as `holdout_mae_max`. The fixture also caps total parameter
+updates, in addition to dataset bytes, samples and requested steps. Logging is
+off by default and this is not a general telemetry, profiler or trainer API.
 
 ### Minimum viable REAL training evidence
 
