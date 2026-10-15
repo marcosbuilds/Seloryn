@@ -7,6 +7,7 @@ use crate::ir::{
 use crate::json::{self, JsonValue};
 use crate::parser as source_parser;
 use crate::tensor::{Tensor, TensorError};
+use crate::tensor_autograd;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::Read;
@@ -1327,21 +1328,22 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 let Some(Value::Tensor(tensor)) = values.get(1) else {
                     return Err(Control::Runtime(self.runtime(
                         "SEL-R203",
-                        "backward requires an F64 scalar point; tensor backward remains a fixture",
+                        "backward requires an F64 scalar point or Tensor[F32] input",
                         span,
                     )));
                 };
-                let shape = tensor.shape();
-                if shape == [1, 3] {
-                    return Tensor::from_f32(vec![2.0, 2.0, 2.0], &[1, 3])
-                        .map(Value::Tensor)
-                        .map_err(|error| Control::Runtime(self.tensor_error(error, span)));
-                }
-                Err(Control::Runtime(self.runtime(
-                    "SEL-R203",
-                    "broadcast backward fixture requires shape [1, 3]",
-                    span,
-                )))
+                let Some(Value::Function(function_name)) = values.first().cloned() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "backward requires a callable function",
+                        span,
+                    )));
+                };
+                tensor_autograd::differentiate_tensor(self.program, &function_name, tensor.clone())
+                    .map(Value::Tensor)
+                    .map_err(|error| {
+                        Control::Runtime(self.runtime("SEL-R203", error.message, span))
+                    })
             }
             "train_linear" => {
                 let (Some(Value::Text(train)), Some(Value::Text(test))) =
@@ -2820,11 +2822,11 @@ mod tests {
     }
 
     #[test]
-    fn preserves_the_legacy_tensor_backward_fixture_without_calling_it_autograd() {
+    fn backward_executes_the_tensor_reverse_tape() {
         let value = run(
-            "from autograd import backward\nfn main() -> Tensor[F32]:\n    let input: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0], [1, 3])\n    return backward(0.0, input)\n",
+            "from autograd import backward\nfn f(x: Tensor[F32]) -> Tensor[F32]:\n    return tensor_sum(x + x)\nfn main() -> Tensor[F32]:\n    let input: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0], [1, 3])\n    return backward(f, input)\n",
         )
-        .expect("legacy tensor fixture must remain executable");
+        .expect("tensor backward must execute");
         assert_eq!(
             value.render(),
             "Tensor[F32, shape=[1, 3], values=[2.0, 2.0, 2.0]]"

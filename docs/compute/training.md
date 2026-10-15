@@ -1,6 +1,6 @@
 # Model training
 
-**General training remains a design target:** Seloryn 0.00 does not have a
+**General training remains a design target:** Seloryn 0.01 does not have a
 general trainer, dataset API, optimizer or model execution runtime. The
 repository does contain a narrow, fixture-driven `training.train_linear`
 contract with real CPU parameter updates, MSE/SGD, deterministic inputs,

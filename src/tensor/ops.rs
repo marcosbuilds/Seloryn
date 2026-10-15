@@ -326,6 +326,47 @@ impl Tensor {
         Ok(self.i64_at_flat(flat))
     }
 
+    /// Return the logical F32 values in row-major order.
+    ///
+    /// This is intentionally a copying API. It keeps tensor storage owned by
+    /// `Tensor` while allowing bounded numerical oracles and graph engines to
+    /// inspect a value without exposing the backing `Arc<Vec<_>>`.
+    pub fn values_f32(&self) -> Result<Vec<f32>, TensorError> {
+        if self.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: self.dtype.name(),
+            });
+        }
+        Ok((0..self.element_count())
+            .map(|index| self.f32_at_flat(index))
+            .collect())
+    }
+
+    /// Materialize a F32 tensor in a broadcast-compatible target shape.
+    pub fn broadcast_to(&self, target_shape: &[i64]) -> Result<Self, TensorError> {
+        if self.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: self.dtype.name(),
+            });
+        }
+        let target_shape = checked_shape(target_shape)?;
+        let output_shape = broadcast_shape(&self.shape, &target_shape)?;
+        if output_shape != target_shape {
+            return Err(TensorError::BroadcastMismatch {
+                left: self.shape.clone(),
+                right: target_shape,
+            });
+        }
+        let elements = element_count(&target_shape)?;
+        let shape = shape_from_usize(&target_shape)?;
+        let values = (0..elements)
+            .map(|index| self.f32_at_flat(broadcast_index(index, &target_shape, &self.shape)))
+            .collect();
+        Self::from_f32(values, &shape)
+    }
+
     fn checked_flat_index(&self, indices: &[i64]) -> Result<usize, TensorError> {
         if indices.len() != self.rank() {
             return Err(TensorError::InvalidIndex {

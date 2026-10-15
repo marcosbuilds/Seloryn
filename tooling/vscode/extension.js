@@ -1,5 +1,10 @@
 'use strict';
 
+const childProcess = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { StringDecoder } = require('node:string_decoder');
+
 const KEYWORDS = Object.freeze([
   'let', 'var', 'const', 'fn', 'return', 'record', 'enum', 'match', 'case',
   'if', 'elif', 'else', 'for', 'while', 'loop', 'break', 'continue', 'in',
@@ -79,6 +84,16 @@ const STANDARD_FUNCTIONS = Object.freeze([
   ['slow_fixture_provider', 'slow_fixture_provider(request, timeout)', 'Call the bounded slow model fixture'],
   ['backward', 'backward(function, point)', 'Use the scalar reverse-mode fixture'],
   ['gradcheck', 'gradcheck(function, point)', 'Run the scalar finite-difference fixture']
+]);
+
+const SNIPPETS = Object.freeze([
+  ['fn', 'Function declaration', 'fn ${1:name}(${2:argument}: ${3:Type}) -> ${4:Unit}:\n    ${0}'],
+  ['record', 'Record declaration', 'record ${1:Name}:\n    ${2:field}: ${3:Type}\n    ${0}'],
+  ['enum', 'Enum declaration', 'enum ${1:Name}:\n    ${2:Variant}\n    ${0}'],
+  ['if', 'Conditional block', 'if ${1:condition}:\n    ${0}'],
+  ['for', 'List iteration', 'for ${1:item} in ${2:items}:\n    ${0}'],
+  ['match', 'Exhaustive match block', 'match ${1:value}:\n    case ${2:pattern}:\n        ${0}'],
+  ['tensor_objective', 'Tensor objective returning a scalar', 'fn ${1:objective}(input: Tensor[F32]) -> Tensor[F32]:\n    let weights: Tensor[F32] = tensor_f32([1.0], [1, 1])\n    let prediction: Tensor[F32] = matmul(input, weights)\n    return tensor_mean(prediction * prediction)${0}']
 ]);
 
 const IDENTIFIER = '[\\p{L}_][\\p{L}\\p{N}_]*';
@@ -180,6 +195,15 @@ function createCompletionProvider(vscode) {
       for (const [name, detail] of MODULES) {
         add(completionItem(vscode, name, vscode.CompletionItemKind.Module, detail));
       }
+      for (const [name, detail, insertText] of SNIPPETS) {
+        const kind = vscode.CompletionItemKind.Snippet || vscode.CompletionItemKind.Keyword;
+        const item = completionItem(vscode, name, kind, detail);
+        if (vscode.SnippetString) {
+          item.insertText = new vscode.SnippetString(insertText);
+          item.insertTextFormat = vscode.InsertTextFormat.Snippet;
+        }
+        add(item);
+      }
       for (const keyword of KEYWORDS) {
         add(completionItem(vscode, keyword, vscode.CompletionItemKind.Keyword, 'Seloryn keyword'));
       }
@@ -220,6 +244,367 @@ function sanitizeGhostText(value, maxCharacters) {
     return '';
   }
   return text.slice(0, maxCharacters).replace(/\s+$/u, '');
+}
+
+const DEFAULT_DIAGNOSTIC_TIMEOUT_MS = 2500;
+const DEFAULT_DIAGNOSTIC_MAX_OUTPUT_BYTES = 256 * 1024;
+
+function documentFilePath(document) {
+  return document?.uri?.fsPath || document?.uri?.path || '';
+}
+
+function findProjectRoot(filePath, workspaceRoot, fsModule = fs, pathModule = path) {
+  if (!filePath) {
+    return '';
+  }
+  const resolvedFile = pathModule.resolve(filePath);
+  const resolvedWorkspace = workspaceRoot ? pathModule.resolve(workspaceRoot) : '';
+  let current = pathModule.dirname(resolvedFile);
+  while (true) {
+    if (fsModule.existsSync(pathModule.join(current, 'seloryn.toml'))) {
+      return current;
+    }
+    if (resolvedWorkspace && current === resolvedWorkspace) {
+      break;
+    }
+    const parent = pathModule.dirname(current);
+    const relativeToWorkspace = resolvedWorkspace
+      ? pathModule.relative(resolvedWorkspace, parent)
+      : '';
+    if (parent === current || (resolvedWorkspace
+      && (relativeToWorkspace === '..'
+        || relativeToWorkspace.startsWith(`..${pathModule.sep}`)
+        || pathModule.isAbsolute(relativeToWorkspace)))) {
+      break;
+    }
+    current = parent;
+  }
+  return '';
+}
+
+function documentLineCount(document) {
+  if (Number.isInteger(document?.lineCount) && document.lineCount > 0) {
+    return document.lineCount;
+  }
+  const source = typeof document?.getText === 'function' ? document.getText() : '';
+  return Math.max(1, source.split(/\r?\n/u).length);
+}
+
+function positionFromDiagnostic(vscode, document, point) {
+  if (!point || !Number.isInteger(point.line) || !Number.isInteger(point.column)) {
+    throw new Error('diagnostic position is not an integer');
+  }
+  const lineCount = documentLineCount(document);
+  if (point.line < 1 || point.line > lineCount || point.column < 1) {
+    throw new Error('diagnostic position is outside the document');
+  }
+  const lineIndex = point.line - 1;
+  const lineText = typeof document.lineAt === 'function'
+    ? document.lineAt(lineIndex).text
+    : '';
+  const codePoints = Array.from(lineText);
+  if (point.column > codePoints.length + 1) {
+    throw new Error('diagnostic column is outside the document');
+  }
+  // The CLI reports Unicode scalar columns; VS Code positions use UTF-16
+  // offsets. Convert through code points so a diagnostic after an emoji lands
+  // on the same source character instead of splitting its surrogate pair.
+  const utf16Column = codePoints.slice(0, point.column - 1).join('').length;
+  return new vscode.Position(lineIndex, utf16Column);
+}
+
+function diagnosticSeverity(vscode, severity) {
+  const values = vscode.DiagnosticSeverity || {};
+  switch (severity) {
+    case 'warning':
+      return values.Warning ?? 1;
+    case 'information':
+    case 'info':
+      return values.Information ?? 2;
+    case 'hint':
+      return values.Hint ?? 3;
+    case 'error':
+      return values.Error ?? 0;
+    default:
+      throw new Error(`unsupported diagnostic severity: ${severity}`);
+  }
+}
+
+function parseDiagnosticJson(vscode, document, output) {
+  if (typeof output !== 'string' || !output.trim()) {
+    throw new Error('Seloryn CLI returned empty diagnostic output');
+  }
+  let payload;
+  try {
+    payload = JSON.parse(output);
+  } catch (error) {
+    throw new Error(`Seloryn CLI returned invalid JSON: ${error.message}`);
+  }
+  if (!payload || !Array.isArray(payload.diagnostics)) {
+    throw new Error('Seloryn diagnostic JSON has no diagnostics array');
+  }
+
+  return payload.diagnostics.map((entry, index) => {
+    if (!entry || typeof entry !== 'object'
+      || typeof entry.code !== 'string'
+      || typeof entry.message !== 'string'
+      || typeof entry.severity !== 'string'
+      || !entry.primary?.start
+      || !entry.primary?.end) {
+      throw new Error(`malformed Seloryn diagnostic at index ${index}`);
+    }
+    const start = positionFromDiagnostic(vscode, document, entry.primary.start);
+    const end = positionFromDiagnostic(vscode, document, entry.primary.end);
+    const range = new vscode.Range(start, end);
+    const help = typeof entry.help === 'string' && entry.help ? `\n\n${entry.help}` : '';
+    const diagnostic = new vscode.Diagnostic(
+      range,
+      `${entry.message}${help}`,
+      diagnosticSeverity(vscode, entry.severity)
+    );
+    diagnostic.code = entry.code;
+    diagnostic.source = 'Seloryn';
+    return diagnostic;
+  });
+}
+
+function integerSetting(config, key, fallback, minimum, maximum) {
+  const value = config?.get?.(key, fallback);
+  return Number.isInteger(value) && value >= minimum && value <= maximum ? value : fallback;
+}
+
+function createSelorynDiagnosticRunner(
+  vscode,
+  spawn = childProcess.spawn,
+  pathModule = path,
+  fsModule = fs
+) {
+  const active = new Map();
+
+  function cancelAll() {
+    for (const record of active.values()) {
+      record.cancel();
+    }
+    active.clear();
+  }
+
+  function cancel(document) {
+    const key = document?.uri?.toString?.() || documentFilePath(document);
+    active.get(key)?.cancel?.();
+  }
+
+  function check(document, token = {}) {
+    const filePath = documentFilePath(document);
+    if (!filePath || document?.uri?.scheme && document.uri.scheme !== 'file') {
+      return Promise.resolve({ status: 'ignored', diagnostics: [] });
+    }
+    if (token.isCancellationRequested) {
+      return Promise.resolve({ status: 'cancelled', diagnostics: [] });
+    }
+
+    const configuration = vscode.workspace?.getConfiguration?.('seloryn');
+    const cliPath = String(configuration?.get?.('cliPath', 'seloryn') || 'seloryn').trim();
+    const timeoutMs = integerSetting(
+      configuration,
+      'diagnostics.timeoutMs',
+      DEFAULT_DIAGNOSTIC_TIMEOUT_MS,
+      100,
+      10000
+    );
+    const maxOutputBytes = integerSetting(
+      configuration,
+      'diagnostics.maxOutputBytes',
+      DEFAULT_DIAGNOSTIC_MAX_OUTPUT_BYTES,
+      4096,
+      4 * 1024 * 1024
+    );
+    const workspaceFolder = vscode.workspace?.getWorkspaceFolder?.(document.uri);
+    const workspaceRoot = workspaceFolder?.uri?.fsPath || '';
+    const cwd = workspaceRoot || pathModule.dirname(filePath);
+    const projectRoot = findProjectRoot(filePath, workspaceRoot, fsModule, pathModule);
+    const checkTarget = projectRoot || filePath;
+    const key = document.uri?.toString?.() || filePath;
+    const previous = active.get(key);
+    if (previous) {
+      previous.cancel();
+    }
+
+    return new Promise((resolve) => {
+      let settled = false;
+      let child;
+      let timer;
+      let cancellationSubscription;
+      let stdout = '';
+      let stderr = '';
+      let outputBytes = 0;
+      const stdoutDecoder = new StringDecoder('utf8');
+      const stderrDecoder = new StringDecoder('utf8');
+
+      const finish = (result) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
+        cancellationSubscription?.dispose?.();
+        if (active.get(key)?.finish === finish) {
+          active.delete(key);
+        }
+        resolve(result);
+      };
+
+      const cancel = () => {
+        try {
+          child?.kill?.();
+        } finally {
+          finish({ status: 'cancelled', diagnostics: [] });
+        }
+      };
+
+      active.set(key, { cancel, finish });
+      if (typeof token.onCancellationRequested === 'function') {
+        cancellationSubscription = token.onCancellationRequested(cancel);
+      }
+
+      const append = (current, chunk, decoder) => {
+        const raw = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), 'utf8');
+        outputBytes += raw.length;
+        const value = decoder ? decoder.write(raw) : raw.toString('utf8');
+        if (outputBytes > maxOutputBytes) {
+          try {
+            child?.kill?.();
+          } finally {
+            finish({ status: 'output-limit', diagnostics: [] });
+          }
+          return current;
+        }
+        return current + value;
+      };
+
+      if (settled) {
+        return;
+      }
+      try {
+        // Keep the executable and each argument separate. The CLI path is one
+        // configured executable; shell syntax is never parsed or evaluated.
+        child = spawn(cliPath, [
+          'check',
+          checkTarget,
+          '--format=json',
+          '--color=never'
+        ], {
+          cwd,
+          shell: false,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+      } catch (error) {
+        finish({ status: 'unavailable', diagnostics: [], error });
+        return;
+      }
+
+      child.stdout?.on?.('data', (chunk) => {
+        stdout = append(stdout, chunk, stdoutDecoder);
+      });
+      child.stderr?.on?.('data', (chunk) => {
+        stderr = append(stderr, chunk, stderrDecoder);
+      });
+      child.on?.('error', (error) => {
+        finish({ status: 'unavailable', diagnostics: [], error });
+      });
+      child.on?.('close', (code, signal) => {
+        if (settled) {
+          return;
+        }
+        stdout += stdoutDecoder.end();
+        stderr += stderrDecoder.end();
+        if (code === 0) {
+          finish({ status: 'ok', diagnostics: [], stdout });
+          return;
+        }
+        const payload = stderr.trim() || stdout.trim();
+        try {
+          const diagnostics = parseDiagnosticJson(vscode, document, payload);
+          finish({ status: 'diagnostics', diagnostics, exitCode: code, signal });
+        } catch (error) {
+          finish({
+            status: 'failed',
+            diagnostics: [],
+            exitCode: code,
+            signal,
+            error
+          });
+        }
+      });
+      timer = setTimeout(() => {
+        try {
+          child.kill?.();
+        } finally {
+          finish({ status: 'timeout', diagnostics: [] });
+        }
+      }, timeoutMs);
+    });
+  }
+
+  return { cancel, cancelAll, check };
+}
+
+function createSelorynDiagnosticController(vscode, context, dependencies = {}) {
+  if (!vscode.languages?.createDiagnosticCollection) {
+    return { dispose() {} };
+  }
+  const collection = vscode.languages.createDiagnosticCollection('seloryn');
+  const runner = createSelorynDiagnosticRunner(
+    vscode,
+    dependencies.spawn,
+    dependencies.path,
+    dependencies.fs
+  );
+  const subscriptions = [];
+
+  const checkDocument = async (document) => {
+    if (document?.languageId && document.languageId !== 'seloryn') {
+      return;
+    }
+    const configuration = vscode.workspace?.getConfiguration?.('seloryn');
+    if (configuration?.get?.('diagnostics.enabled', true) === false) {
+      collection.delete(document.uri);
+      return;
+    }
+    const result = await runner.check(document);
+    if (result.status === 'diagnostics') {
+      collection.set(document.uri, result.diagnostics);
+    } else if (result.status === 'ok' || result.status === 'failed'
+      || result.status === 'unavailable' || result.status === 'timeout'
+      || result.status === 'output-limit') {
+      // Do not leave stale diagnostics after a saved file has been checked or
+      // after the configured CLI becomes unavailable.
+      collection.delete(document.uri);
+    }
+  };
+
+  if (typeof vscode.workspace?.onDidSaveTextDocument === 'function') {
+    subscriptions.push(vscode.workspace.onDidSaveTextDocument((document) => {
+      void checkDocument(document);
+    }));
+  }
+  if (typeof vscode.workspace?.onDidCloseTextDocument === 'function') {
+    subscriptions.push(vscode.workspace.onDidCloseTextDocument((document) => {
+      runner.cancel(document);
+      collection.delete(document.uri);
+    }));
+  }
+
+  return {
+    checkDocument,
+    dispose() {
+      runner.cancelAll();
+      for (const subscription of subscriptions) {
+        subscription?.dispose?.();
+      }
+      collection.dispose?.();
+    }
+  };
 }
 
 function createInlineCompletionProvider(vscode) {
@@ -289,6 +674,7 @@ function activate(context) {
   // eslint-disable-next-line global-require
   const vscode = require('vscode');
   const selector = { language: 'seloryn', scheme: 'file' };
+  context.subscriptions.push(createSelorynDiagnosticController(vscode, context));
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(selector, createCompletionProvider(vscode), '.', ':', '_'),
     vscode.languages.registerInlineCompletionItemProvider(selector, createInlineCompletionProvider(vscode)),
@@ -309,14 +695,19 @@ module.exports = {
   KEYWORDS,
   MODULES,
   RESERVED,
+  SNIPPETS,
   STANDARD_FUNCTIONS,
   TYPES,
   activate,
   buildPrompt,
   createCompletionProvider,
   createInlineCompletionProvider,
+  createSelorynDiagnosticController,
+  createSelorynDiagnosticRunner,
   deactivate,
   extractLocalSymbols,
+  findProjectRoot,
+  parseDiagnosticJson,
   sanitizeGhostText,
   wordPrefix
 };

@@ -4,7 +4,7 @@
   "include": [],
   "iconDefinitions": {
     "_seloryn": {
-      "iconPath": "../assets/seloryn-file-icon.svg"
+      "iconPath": "../assets/seloryn-icon-source.svg"
     }
   },
   "file": "_file",

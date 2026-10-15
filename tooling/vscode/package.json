@@ -1,8 +1,8 @@
 {
   "name": "seloryn-language",
   "displayName": "Seloryn Language",
-  "description": "Seloryn .sely editing preview with syntax highlighting, native completions and opt-in AI ghost text.",
-  "version": "0.0.1",
+  "description": "Experimental Seloryn .sely tooling with syntax highlighting, native completions and saved-file diagnostics.",
+  "version": "0.1.0",
   "publisher": "seloryn",
   "icon": "./assets/seloryn-icon.png",
   "repository": {
@@ -76,12 +76,37 @@
           "minimum": 20,
           "maximum": 1000,
           "description": "Maximum number of generated ghost-text characters accepted for one suggestion."
+        },
+        "seloryn.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the configured Seloryn CLI on saved .sely files and publish only its structured diagnostics."
+        },
+        "seloryn.cliPath": {
+          "type": "string",
+          "default": "seloryn",
+          "description": "One executable path or command name for the Seloryn CLI. Arguments are supplied separately; shell syntax is not evaluated."
+        },
+        "seloryn.diagnostics.timeoutMs": {
+          "type": "number",
+          "default": 2500,
+          "minimum": 100,
+          "maximum": 10000,
+          "description": "Maximum time allowed for one saved-file check."
+        },
+        "seloryn.diagnostics.maxOutputBytes": {
+          "type": "number",
+          "default": 262144,
+          "minimum": 4096,
+          "maximum": 4194304,
+          "description": "Maximum combined CLI output accepted by the editor integration."
         }
       }
     }
   },
   "scripts": {
     "test": "node test/extension.test.js && node test/package.test.js",
+    "test:cli": "node test/cli.integration.test.js",
     "check": "npm test",
     "package": "npm run check && vsce package --no-dependencies && node scripts/normalize-vsix.js"
   },

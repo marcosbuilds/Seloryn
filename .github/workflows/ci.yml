@@ -30,6 +30,8 @@ jobs:
           rustc --version
           cargo --version
           python --version
+      - name: Verify earned version comparison
+        run: python scripts/release/verify-version.py
       - name: Format
         run: cargo fmt --all -- --check
       - name: Rust tests (all targets)
@@ -49,12 +51,16 @@ jobs:
         run: python tests/n2_probe.py
       - name: Independent N3a CLI comparison
         run: python tests/n3_probe.py
+      - name: Independent N3b tensor autograd comparison
+        run: python tests/n3_tensor_probe.py
       - name: Public projects and bundle probe
         run: python tests/release_probe.py
       - name: Install VS Code packaging dependencies
         run: npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
       - name: Build deterministic VSIX preview
         run: npm run package --prefix tooling/vscode
+      - name: VS Code extension and CLI diagnostic integration
+        run: npm run test:cli --prefix tooling/vscode
       - name: VS Code extension metadata and API-double tests
         run: npm test --prefix tooling/vscode
       - name: PowerShell 5.1 CLI smoke

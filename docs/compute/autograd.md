@@ -1,13 +1,14 @@
 # Automatic differentiation
 
-**General reverse-mode autodiff remains a design target:** Seloryn 0.00 now
-contains a narrow, executable N3a scalar reverse-mode tape for one scalar
-input. F32/F64 annotations are accepted, but the current `Value` representation
+**General reverse-mode autodiff remains a design target:** Seloryn now contains
+an executable N3a scalar reverse-mode tape and an N3b bounded CPU Tensor[F32]
+reverse-mode tape. F32/F64 annotations are accepted, but the current `Value` representation
 uses F64 for scalars and does not claim an independent F32 rounding contract. It records scalar operations, accumulates shared parents, supports
 helper calls, simple conditions and constant-exponent powers, and fails
 explicitly for unsupported constructs. `gradcheck` independently compares the
-tape derivative with a finite-difference estimate. This is not a tensor graph,
-optimizer or general training engine.
+tape derivative with a finite-difference estimate. The tensor gate traces one
+Tensor[F32] input and a rank-zero Tensor[F32] objective. This is not a GPU
+graph, optimizer or general training engine.
 
 The first ML-ready gradient engine is still intended to use **reverse-mode
 automatic differentiation** over an explicit computation graph, with leaf
@@ -48,14 +49,19 @@ same analytic derivative without the finite-difference comparison. The tape
 implementation is in [`src/autograd.rs`](../../src/autograd.rs), the runtime
 bridge is in [`src/runtime.rs`](../../src/runtime.rs), and the independent
 black-box proof is [`tests/n3_probe.py`](../../tests/n3_probe.py). Tensor
-`backward` remains a narrow broadcast fixture and is not a general gradient
-engine.
+`backward` now builds and executes a real bounded reverse tape. The
+[`tensor-gradient.sely`](../../examples/autograd/tensor-gradient.sely) example
+propagates through `matmul`, elementwise multiplication and `tensor_mean`.
+The tensor rules cover broadcasting, reductions, matrix multiplication,
+transpose, reshape, ReLU, exp, log, softmax, log-sum-exp and
+`tensor_sum_to_shape`.
 
 The N3a boundary is deliberately small: scalar `+`, `-`, `*`, `/`, unary
 negation, constant-exponent `**`, helper calls, comparisons used by simple
-conditions, and `require`. Loops, `match`, variable exponents, tensor values,
-multiple differentiated inputs and higher-order derivatives are rejected or
-remain future work.
+conditions, and `require`. The N3b tensor boundary is one F32 tensor input,
+pure tensor expressions and a rank-zero output; loops, `match`, variable
+exponents, multiple differentiated inputs and higher-order derivatives are
+rejected or remain future work.
 
 ### Required derivation tests
 

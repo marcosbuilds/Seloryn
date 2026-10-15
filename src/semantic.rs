@@ -1515,7 +1515,12 @@ impl<'a> Checker<'a> {
                     .map(|input| self.type_of_expr(input))
                     .unwrap_or(Type::Unknown);
                 match input_type {
-                    Type::Tensor(TensorDtype::F32) => Type::Tensor(TensorDtype::F32),
+                    Type::Tensor(TensorDtype::F32) => {
+                        if let Some(function) = arguments.first() {
+                            self.check_tensor_autograd_callable(function, span);
+                        }
+                        Type::Tensor(TensorDtype::F32)
+                    }
                     Type::F32 | Type::F64 => {
                         if let Some(function) = arguments.first() {
                             self.check_scalar_autograd_callable(function, span);
@@ -1582,6 +1587,27 @@ impl<'a> Checker<'a> {
                 span,
             ),
             _ => self.error("SEL-M002", "autograd expects a named scalar callable", span),
+        }
+    }
+
+    fn check_tensor_autograd_callable(&mut self, expression: &Expr, span: Span) {
+        let callable = self.type_of_expr(expression);
+        match callable {
+            Type::Function(parameters, return_type)
+                if parameters.len() == 1
+                    && parameters[0] == Type::Tensor(TensorDtype::F32)
+                    && *return_type == Type::Tensor(TensorDtype::F32) => {}
+            Type::Unknown | Type::Error => {}
+            Type::Function(_, _) => self.error(
+                "SEL-M002",
+                "tensor backward callable must take and return one Tensor[F32]",
+                span,
+            ),
+            _ => self.error(
+                "SEL-M002",
+                "tensor backward expects a named Tensor[F32] callable",
+                span,
+            ),
         }
     }
 

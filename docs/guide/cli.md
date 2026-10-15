@@ -12,7 +12,8 @@ seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
 ```
 
-The development version reports `0.00` and `build=local-development`; this is
+The development version reports `0.01`, `package=0.1.0` and
+`build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
 scalar types, records, enums, `Result`, `Option`, `require`, postfix `?`,

@@ -42,7 +42,7 @@ Legend: **✓ implemented** means the checker/interpreter has source and tests; 
 | Tensor engine | **⚠️ Experimental N1/N2:** owned F32/I64 CPU buffers, checked shapes, broadcasting, reductions, rank-2 matmul, shape/stride transpose views, F32 unary/stable reductions and broadcast sum-to-shape with bounded resident memory | No symbolic shapes, autodiff or device movement |
 | Device interface | **✗ Not implemented** | CPU and accelerator providers require later evidence |
 | System library | **⚠️ Narrow:** local project modules and bounded JSON reads | HTTP, subprocesses and unrestricted files require later gates |
-| Product tools | **⚠️ Partial:** development CLI, experimental build/exec and local installer scripts | Packages, formatter, LSP and public release packaging are future |
+| Product tools | **⚠️ Partial:** development CLI, experimental build/exec, VS Code extension release workflow and local installer scripts | Runtime packages, formatter, LSP and supported runtime distribution are future |
 
 ### Capability sequencing
 

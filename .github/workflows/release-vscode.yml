@@ -1,0 +1,42 @@
+name: Release experimental VS Code extension
+
+on:
+  push:
+    tags:
+      - 'vscode-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Package and publish VS Code extension
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: tooling/vscode/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify earned version comparison
+        run: python scripts/release/verify-version.py
+      - name: Install extension dependencies
+        run: npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
+      - name: Build deterministic VSIX
+        run: npm run package --prefix tooling/vscode
+      - name: Publish experimental GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "tooling/vscode/seloryn-language-0.1.0.vsix" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Seloryn Language for VS Code 0.1.0" \
+            --notes-file docs/releases/vscode-0.1.0.md \
+            --prerelease \
+            --latest=false

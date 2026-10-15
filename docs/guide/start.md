@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.00 currently provides an experimental syntax and semantic checker, deterministic core IR, pure interpreter, local project modules, bounded JSON capability, narrow training fixtures and an experimental `.selyapp` bundle path in the development repository. There is no verified release, package registry, hosted API or supported installation command; local installer scripts are development tooling only.
+**Availability:** Seloryn 0.01 currently provides an experimental syntax and semantic checker, deterministic core IR, pure interpreter, local project modules, bounded JSON capability, Tensor[F32] reverse-mode autodiff, narrow training fixtures and an experimental `.selyapp` bundle path in the development repository. There is no verified runtime release, package registry, hosted API or supported runtime installation command; local installer scripts are development tooling only.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 

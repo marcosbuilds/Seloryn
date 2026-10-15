@@ -7,6 +7,8 @@
   they compare real CLI output and do not execute Seloryn behind the scenes.
 - `n3_probe.py` independently computes scalar derivatives with finite
   differences and compares them with the real scalar reverse-mode CLI gate.
+- `n3_tensor_probe.py` compares a real Tensor[F32] reverse-mode result with an
+  independent matrix/mean derivative oracle.
 - `release_probe.py` executes a typed tensor-index example, public projects and
   a bundle with declared JSON data on the locally built release binary.
 

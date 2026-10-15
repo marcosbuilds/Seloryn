@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { EventEmitter } = require('node:events');
 const path = require('node:path');
 const fs = require('node:fs');
 const extension = require('../extension');
@@ -37,6 +38,21 @@ class InlineCompletionItem {
   }
 }
 
+class Position {
+  constructor(line, character) {
+    this.line = line;
+    this.character = character;
+  }
+}
+
+class Diagnostic {
+  constructor(range, message, severity) {
+    this.range = range;
+    this.message = message;
+    this.severity = severity;
+  }
+}
+
 const vscode = {
   CompletionItem,
   CompletionItemKind: {
@@ -47,11 +63,15 @@ const vscode = {
     Enum: 5,
     Class: 6,
     Keyword: 7,
-    Module: 8
+    Module: 8,
+    Snippet: 9
   },
   CompletionItemTag: { Deprecated: 1 },
   InsertTextFormat: { Snippet: 2 },
   InlineCompletionItem,
+  Diagnostic,
+  DiagnosticSeverity: { Error: 0, Warning: 1, Information: 2, Hint: 3 },
+  Position,
   Range,
   SnippetString,
   LanguageModelChatMessage: {
@@ -74,7 +94,13 @@ const vscode = {
 function documentFor(source) {
   const lines = source.split('\n');
   return {
-    uri: { toString: () => 'file:///fixture.sely' },
+    uri: {
+      toString: () => 'file:///workspace/fixture.sely',
+      fsPath: path.join('workspace', 'fixture.sely'),
+      scheme: 'file'
+    },
+    languageId: 'seloryn',
+    lineCount: lines.length,
     getText: () => source,
     lineAt: (line) => ({ text: lines[line] || '' }),
     offsetAt: (position) => lines.slice(0, position.line).reduce((total, value) => total + value.length + 1, 0) + position.character
@@ -120,6 +146,15 @@ const labels = completionItems.map((item) => item.label);
 assert.ok(labels.includes('label'), 'local binding must be suggested');
 assert.ok(!labels.includes('tensor_f32'), 'prefix filtering must be applied');
 
+const snippetSource = 'fn';
+const snippetDocument = documentFor(snippetSource);
+const snippetItems = extension
+  .createCompletionProvider(vscode)
+  .provideCompletionItems(snippetDocument, { line: 0, character: 2 });
+const functionSnippet = snippetItems.find((item) => item.label === 'fn');
+assert.ok(functionSnippet, 'implemented function snippet must be suggested');
+assert.match(functionSnippet.insertText.value, /fn \$\{1:name\}/u);
+
 const broadPosition = { line: 2, character: 0 };
 const broadItems = extension.createCompletionProvider(vscode)
   .provideCompletionItems(completionDocument, broadPosition);
@@ -138,6 +173,194 @@ assert.equal(extension.sanitizeGhostText('```seloryn\nreturn 1\n```', 100), 'ret
 assert.equal(extension.sanitizeGhostText('return 1 <SELORYN_CURSOR>', 100), '');
 assert.equal(extension.sanitizeGhostText('\u0000return 1', 100), 'return 1');
 assert.equal(extension.sanitizeGhostText('abcdefgh', 4), 'abcd');
+
+const diagnosticDocument = documentFor('🙂\nfn main() -> Unit:\n    return\n');
+const diagnosticPayload = JSON.stringify({
+  diagnostics: [{
+    code: 'SEL-P001',
+    severity: 'error',
+    category: 'parser',
+    message: 'expected expression',
+    file: diagnosticDocument.uri.fsPath,
+    primary: {
+      start: { line: 1, column: 2 },
+      end: { line: 1, column: 2 }
+    },
+    help: 'check the surrounding syntax',
+    stack: []
+  }]
+});
+const parsedDiagnostics = extension.parseDiagnosticJson(vscode, diagnosticDocument, diagnosticPayload);
+assert.equal(parsedDiagnostics.length, 1);
+assert.equal(parsedDiagnostics[0].code, 'SEL-P001');
+assert.equal(parsedDiagnostics[0].source, 'Seloryn');
+assert.equal(parsedDiagnostics[0].range.start.line, 0);
+assert.equal(parsedDiagnostics[0].range.start.character, 2, 'Unicode scalar column must become UTF-16 position');
+assert.match(parsedDiagnostics[0].message, /check the surrounding syntax/u);
+
+function mockSpawn({ stderr = '', stdout = '', code = 65, emitClose = true } = {}) {
+  let invocation;
+  const spawn = (command, args, options) => {
+    invocation = { command, args, options };
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.killed = false;
+    child.kill = () => {
+      child.killed = true;
+    };
+    process.nextTick(() => {
+      if (stdout) child.stdout.emit('data', stdout);
+      if (stderr) child.stderr.emit('data', stderr);
+      if (emitClose) child.emit('close', code, null);
+    });
+    spawn.child = child;
+    return child;
+  };
+  spawn.invocation = () => invocation;
+  return spawn;
+}
+
+const diagnosticConfiguration = {
+  cliPath: 'seloryn-test',
+  'diagnostics.timeoutMs': 500,
+  'diagnostics.maxOutputBytes': 4096
+};
+const diagnosticVscode = {
+  ...vscode,
+  workspace: {
+    getConfiguration: () => ({
+      get: (key, fallback) => Object.prototype.hasOwnProperty.call(diagnosticConfiguration, key)
+        ? diagnosticConfiguration[key]
+        : fallback
+    }),
+    getWorkspaceFolder: () => ({ uri: { fsPath: path.resolve('workspace') } })
+  }
+};
+
+(async () => {
+  const spawn = mockSpawn({ stderr: `${diagnosticPayload}\n` });
+  const runner = extension.createSelorynDiagnosticRunner(diagnosticVscode, spawn, path);
+  const result = await runner.check(diagnosticDocument, { isCancellationRequested: false });
+  assert.equal(result.status, 'diagnostics');
+  assert.equal(result.diagnostics[0].code, 'SEL-P001');
+  assert.equal(spawn.invocation().command, 'seloryn-test');
+  assert.deepEqual(spawn.invocation().args, [
+    'check',
+    diagnosticDocument.uri.fsPath,
+    '--format=json',
+    '--color=never'
+  ]);
+  assert.equal(spawn.invocation().options.cwd, path.resolve('workspace'));
+  assert.equal(spawn.invocation().options.shell, false);
+
+  const unicodePayload = JSON.stringify({
+    diagnostics: [{
+      code: 'SEL-P001',
+      severity: 'error',
+      message: 'erro 😀',
+      primary: {
+        start: { line: 1, column: 1 },
+        end: { line: 1, column: 1 }
+      }
+    }]
+  });
+  let splitChild;
+  const splitSpawn = () => {
+    splitChild = new EventEmitter();
+    splitChild.stdout = new EventEmitter();
+    splitChild.stderr = new EventEmitter();
+    splitChild.kill = () => {};
+    process.nextTick(() => {
+      const bytes = Buffer.from(unicodePayload, 'utf8');
+      const emojiOffset = bytes.indexOf(Buffer.from('😀', 'utf8')) + 1;
+      splitChild.stderr.emit('data', bytes.subarray(0, emojiOffset));
+      splitChild.stderr.emit('data', bytes.subarray(emojiOffset));
+      splitChild.emit('close', 65, null);
+    });
+    return splitChild;
+  };
+  const splitResult = await extension
+    .createSelorynDiagnosticRunner(diagnosticVscode, splitSpawn, path)
+    .check(diagnosticDocument, { isCancellationRequested: false });
+  assert.equal(splitResult.status, 'diagnostics');
+  assert.match(splitResult.diagnostics[0].message, /😀/u);
+
+  const projectRoot = path.resolve('workspace', 'project');
+  const projectDocument = documentFor('fn main() -> Unit:\n    return\n');
+  projectDocument.uri = {
+    toString: () => 'file:///workspace/project/src/main.sely',
+    fsPath: path.join(projectRoot, 'src', 'main.sely'),
+    scheme: 'file'
+  };
+  const projectSpawn = mockSpawn({ stdout: 'checked project\n', code: 0 });
+  const projectRunner = extension.createSelorynDiagnosticRunner(
+    diagnosticVscode,
+    projectSpawn,
+    path,
+    { existsSync: (candidate) => candidate === path.join(projectRoot, 'seloryn.toml') }
+  );
+  const projectResult = await projectRunner.check(projectDocument, { isCancellationRequested: false });
+  assert.equal(projectResult.status, 'ok');
+  assert.equal(projectSpawn.invocation().args[1], projectRoot, 'project files must check the manifest root');
+
+  const successSpawn = mockSpawn({ stdout: 'checked fixture (syntax + semantics)\n', code: 0 });
+  const success = await extension
+    .createSelorynDiagnosticRunner(diagnosticVscode, successSpawn, path)
+    .check(diagnosticDocument, { isCancellationRequested: false });
+  assert.equal(success.status, 'ok');
+
+  let cancelRequest;
+  const hangingSpawn = mockSpawn({ emitClose: false });
+  const cancellation = extension
+    .createSelorynDiagnosticRunner(diagnosticVscode, hangingSpawn, path)
+    .check(diagnosticDocument, {
+      isCancellationRequested: false,
+      onCancellationRequested: (callback) => {
+        cancelRequest = callback;
+        return { dispose() {} };
+      }
+    });
+  cancelRequest();
+  const cancelled = await cancellation;
+  assert.equal(cancelled.status, 'cancelled');
+  assert.equal(hangingSpawn.child.killed, true);
+
+  let collectionItems;
+  const saveListeners = [];
+  const controllerVscode = {
+    ...diagnosticVscode,
+    languages: {
+      createDiagnosticCollection: () => ({
+        set: (_uri, items) => { collectionItems = items; },
+        delete: () => {},
+        dispose: () => {}
+      })
+    },
+    workspace: {
+      ...diagnosticVscode.workspace,
+      onDidSaveTextDocument: (listener) => {
+        saveListeners.push(listener);
+        return { dispose() {} };
+      },
+      onDidCloseTextDocument: () => ({ dispose() {} })
+    }
+  };
+  const controllerSpawn = mockSpawn({ stderr: diagnosticPayload });
+  const controller = extension.createSelorynDiagnosticController(
+    controllerVscode,
+    { subscriptions: [] },
+    { spawn: controllerSpawn, path }
+  );
+  await controller.checkDocument(diagnosticDocument);
+  assert.equal(collectionItems[0].code, 'SEL-P001');
+  assert.equal(saveListeners.length, 1);
+  controller.dispose();
+  console.log('vscode CLI diagnostic integration tests passed');
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
 
 (async () => {
   const provider = extension.createInlineCompletionProvider(vscode);

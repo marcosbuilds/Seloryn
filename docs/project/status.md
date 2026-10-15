@@ -1,6 +1,6 @@
 # Current capability status
 
-**Primary truth source for Seloryn 0.00.** The repository contains an experimental syntax and semantic checker, a deterministic lowered core IR, a bounded pure E4 interpreter, local project modules, bounded JSON capability, narrow model/training fixtures and bounded pure N1/N2 CPU tensor runtimes. It does not contain a package registry, general effects runtime, accelerator backend, supported installer or public release. This page reports the observed implementation boundary.
+**Primary truth source for Seloryn 0.01.** The repository contains an experimental syntax and semantic checker, a deterministic lowered core IR, a bounded pure E4 interpreter, local project modules, bounded JSON capability, narrow model/training fixtures, bounded pure N1/N2 CPU tensor runtimes and bounded Tensor[F32] reverse-mode autodiff. It does not contain a package registry, general effects runtime, accelerator backend, supported runtime installer or stable runtime release. This page reports the observed implementation boundary.
 
 ## What works today
 
@@ -16,10 +16,10 @@
 | N2 CPU numeric closure | Experimental implemented and tested | [`src/tensor/ops.rs`](../../src/tensor/ops.rs), [`n2_probe.py`](../../tests/n2_probe.py), [`tensor-numeric.sely`](../../examples/tensors/tensor-numeric.sely) |
 | Deterministic core IR boundary | Experimental implemented and tested | [`src/ir.rs`](../../src/ir.rs), runtime and lowering tests |
 | Local project modules and `seloryn.toml` | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`json-config`](../../examples/projects/json-config/README.md) |
-| VS Code `.sely` highlighting, native completion, optional file icons and opt-in AI ghost text | Verified preview, tested headlessly and packaged as a reproducible local VSIX | [`tooling/vscode`](../../tooling/vscode), Node API-double/package tests and VSIX archive; no full LSP, Explorer rendering or live provider claim |
+| VS Code `.sely` highlighting, native completion, saved-file CLI diagnostics, optional file icons and opt-in AI ghost text | Verified preview, tested with the real CLI and packaged as a reproducible local VSIX | [`tooling/vscode`](../../tooling/vscode), API/package tests, Unicode/CRLF CLI bridge and VSIX archive; no full LSP, Explorer rendering or live provider claim |
 | JSON read/parse/encode/get with root and size limits | Experimental implemented and tested | [`src/json.rs`](../../src/json.rs), [`json-config`](../../examples/projects/json-config/README.md) |
 | Multi-file project execution with typed business decisions and bundle parity | Experimental implemented and tested | [`evaluation-pipeline`](../../examples/projects/evaluation-pipeline/README.md), [`release_probe.py`](../../tests/release_probe.py) |
-| Model contract, scalar reverse-mode tape, finite-difference check, linear training and checkpoint-schema fixtures | Experimental implemented, narrow | [`autograd`](../../examples/autograd/README.md), [`linear-training`](../../examples/projects/linear-training/README.md) and [`checkpoint-validation`](../../examples/projects/checkpoint-validation/README.md); no tensor tape or general trainer |
+| Model contract, scalar and Tensor[F32] reverse-mode tapes, finite-difference check, linear training and checkpoint-schema fixtures | Experimental implemented, narrow | [`autograd`](../../examples/autograd/README.md), [`linear-training`](../../examples/projects/linear-training/README.md) and [`checkpoint-validation`](../../examples/projects/checkpoint-validation/README.md); no optimizer or general trainer |
 | Opt-in sampled events for the narrow linear-training fixture | Experimental implemented, narrow | [`--log=human|json`](../guide/cli.md), CLI regression tests; stderr-only, no general telemetry contract |
 | CLI `--help`, `--version`, `check`, `run`, `build` and `exec` | Implemented development CLI | [`src/main.rs`](../../src/main.rs), CLI and bundle fixtures |
 | Human/JSON diagnostics, stable source spans, `--quiet` and `from io import print` | Experimental subset implemented and tested | [`Diagnostic`](../../src/diagnostic.rs), [`--format=json`](../../src/main.rs), CLI tests |
@@ -31,9 +31,9 @@
 | Core IR optimization and SSA passes | **Not implemented** | the current IR is deterministic and structural; no optimizer or SSA pass is claimed |
 | External packages, registry and broad standard library | **Not implemented** | local modules and narrow stdlib fixtures only |
 | HTTP, processes and unrestricted file effects | **Not implemented** | only bounded root-confined JSON reads are available |
-| General tensor autograd, optimizers, MLPs and model serving | **Not implemented** | The implemented scalar reverse-mode fixture and narrow broadcast/linear fixtures do not imply a general ML stack |
+| General tensor autograd, optimizers, MLPs and model serving | **Not implemented** | Tensor[F32] reverse mode is real but bounded to one input and a rank-zero CPU objective; this does not imply a general ML stack |
 | GPU, distributed execution and serving | **Not implemented** | no accelerator or production service exists |
-| Formatter, full LSP, public runtime installer and runtime release artifacts | **Not implemented or verified** | the VS Code editor preview has a local VSIX path, but no public marketplace/release artifact or supported runtime distribution exists |
+| Formatter, full LSP, public runtime installer and runtime release artifacts | **Not implemented or verified** | the VS Code extension has an experimental release workflow; no supported public runtime distribution exists |
 
 ## E3 gate fulfillment
 
@@ -98,14 +98,17 @@ CLI output against an independent Python standard-library reference and repeats
 negative diagnostics.
 
 N2 does not provide a general tape, optimizer, arbitrary tensor views, symbolic
-shapes, GPU or effects. The scalar reverse-mode fixture described in
+shapes, GPU or effects. The scalar and bounded Tensor[F32] reverse-mode gates
+described in
 [`docs/compute/autograd.md`](../compute/autograd.md); it does not differentiate
-tensors or build a reusable tensor computation graph. The current linear
+tensors outside the documented N3b subset or build a reusable public graph API.
+The current linear
 training and checkpoint-schema fixtures are narrow, explicitly tested
 contracts and do not claim a general training framework. A rank-0 F32 reduction
 can be converted explicitly with
 `tensor_item_f32`; non-scalar shapes and wrong dtypes fail with a structured
-diagnostic. The language version remains `0.00`.
+diagnostic. The language version is `0.01` because the N3B tensor-autograd gain
+is now accepted and independently verified.
 
 ## Gaps versus the design review
 
@@ -114,6 +117,6 @@ E3 is therefore **not fully complete**. The checker proves a meaningful front-en
 - A successful `check` means syntax and supported static rules passed; `run` adds the separately tested pure E4 execution step.
 - General training, model-serving and GPU text in the repository describes design targets, not available capabilities.
 - Examples using broad effects, named record patterns or future libraries remain design concepts unless a page explicitly says otherwise.
-- E4, N1, N2, local-project, training and bundle fixtures have bounded experimental results; broader tensor autograd remains future work.
+- E4, N1, N2, local-project, training and bundle fixtures have bounded experimental results; broader tensor autograd remains future work beyond N3B.
 
-The implementation policy is staged: a feature becomes available only after source behavior, negative tests and platform evidence exist. The language version remains `0.00`; no release or earned gain is claimed by this status page.
+The implementation policy is staged: a feature becomes available only after source behavior, negative tests and platform evidence exist. The current accepted gain is recorded in [`VERSION.toml`](../../VERSION.toml); no GPU, distributed or general-training claim is made by this status page.

@@ -4,6 +4,7 @@
   "fileTypes": ["sely"],
   "patterns": [
     { "include": "#comments" },
+    { "include": "#directives" },
     { "include": "#strings" },
     { "include": "#numbers" },
     { "include": "#declarations" },
@@ -45,13 +46,20 @@
     },
     "numbers": {
       "patterns": [
-        { "name": "constant.numeric.integer.seloryn", "match": "\\b(?:0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|[0-9](?:_?[0-9])*)\\b" },
-        { "name": "constant.numeric.float.seloryn", "match": "(?<![\\w.])(?:[0-9](?:_?[0-9])*)\\.[0-9](?:_?[0-9])*(?:[eE][+-]?[0-9](?:_?[0-9])*)?(?![\\w.])" }
+        { "name": "constant.numeric.float.seloryn", "match": "(?<![\\w.])(?:[0-9](?:_?[0-9])*)\\.[0-9](?:_?[0-9])*(?:[eE][+-]?[0-9](?:_?[0-9])*)?(?![\\w.])" },
+        { "name": "constant.numeric.integer.seloryn", "match": "\\b(?:0[xX][0-9A-Fa-f](?:_?[0-9A-Fa-f])*|0[bB][01](?:_?[01])*|0[oO][0-7](?:_?[0-7])*|[0-9](?:_?[0-9])*)\\b" }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        { "match": "\\b(from)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)\\s+(import)\\s+([\\p{L}_][\\p{L}\\p{N}_]*(?:\\s*,\\s*[\\p{L}_][\\p{L}\\p{N}_]*)*)", "captures": { "1": { "name": "keyword.control.import.seloryn" }, "2": { "name": "entity.name.namespace.seloryn" }, "3": { "name": "keyword.control.import.seloryn" }, "4": { "name": "support.function.seloryn" } } },
+        { "match": "\\b(import)\\s+([\\p{L}_][\\p{L}\\p{N}_]*(?:\\.[\\p{L}_][\\p{L}\\p{N}_]*)*)", "captures": { "1": { "name": "keyword.control.import.seloryn" }, "2": { "name": "entity.name.namespace.seloryn" } } }
       ]
     },
     "declarations": {
       "patterns": [
-        { "match": "\\b(fn|record|enum)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)", "captures": { "1": { "name": "storage.type.declaration.seloryn" }, "2": { "name": "entity.name.function.seloryn" } } },
+        { "match": "\\b(fn)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)", "captures": { "1": { "name": "storage.type.declaration.seloryn" }, "2": { "name": "entity.name.function.seloryn" } } },
+        { "match": "\\b(record|enum)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)", "captures": { "1": { "name": "storage.type.declaration.seloryn" }, "2": { "name": "entity.name.type.seloryn" } } },
         { "match": "\\b(let|var|const)\\s+([\\p{L}_][\\p{L}\\p{N}_]*)", "captures": { "1": { "name": "storage.type.binding.seloryn" }, "2": { "name": "variable.other.readwrite.seloryn" } } }
       ]
     },
@@ -63,14 +71,14 @@
     },
     "keywords": {
       "patterns": [
-        { "name": "keyword.control.seloryn", "match": "\\b(?:return|if|elif|else|for|while|loop|break|continue|match|case|require|in|is|from|import|as|pub|module)\\b" },
+        { "name": "keyword.control.seloryn", "match": "\\b(?:return|if|elif|else|for|while|loop|break|continue|match|case|require|in|is|as|pub|module)\\b" },
         { "name": "keyword.operator.logical.seloryn", "match": "\\b(?:and|or|not)\\b" },
         { "name": "storage.modifier.seloryn", "match": "\\b(?:async|await|using|defer|try|catch|finally|yield|trait|impl|class)\\b" }
       ]
     },
     "builtins": {
       "patterns": [
-        { "name": "support.function.builtin.seloryn", "match": "\\b(?:tensor_f32|tensor_i64|tensor_zeros_f32|tensor_zeros_i64|tensor_shape|tensor_rank|tensor_elements|tensor_dtype|tensor_to_f32|tensor_to_i64|tensor_item_f32|tensor_get_f32|tensor_get_i64|reshape|tensor_sum|tensor_mean|matmul|transpose|tensor_relu|tensor_exp|tensor_log|tensor_softmax|tensor_logsumexp|tensor_sum_to_shape|train_linear|load_checkpoint|read_stdin|read_file|parse|encode|get|as_text|as_i64|as_f32|as_f64|as_bool|ModelRequest|ModelResponse|fixture_provider|slow_fixture_provider|backward|gradcheck|print)\\b" }
+        { "name": "support.function.builtin.seloryn", "match": "\\b(?:tensor_f32|tensor_i64|tensor_zeros_f32|tensor_zeros_i64|tensor_shape|tensor_rank|tensor_elements|tensor_dtype|tensor_to_f32|tensor_to_i64|tensor_item_f32|tensor_get_f32|tensor_get_i64|reshape|tensor_sum|sum|tensor_mean|matmul|transpose|tensor_relu|tensor_exp|tensor_log|tensor_softmax|tensor_logsumexp|tensor_sum_to_shape|train_linear|load_checkpoint|read_stdin|read_file|parse|encode|get|as_text|as_i64|as_f32|as_f64|as_bool|ModelRequest|ModelResponse|fixture_provider|slow_fixture_provider|backward|gradcheck|print)\\b" }
       ]
     },
     "functions": {

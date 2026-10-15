@@ -11,6 +11,7 @@ mod project;
 mod runtime;
 mod semantic;
 mod tensor;
+mod tensor_autograd;
 
 use std::collections::BTreeMap;
 use std::env;
@@ -20,14 +21,15 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const LANGUAGE_VERSION: &str = "0.00";
+const LANGUAGE_VERSION: &str = "0.01";
+const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
 const EXIT_OK: u8 = 0;
 const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar and N1/N2 CPU tensor subset.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; when enabled, narrow training progress is streamed to stderr.\n`build` creates a deterministic experimental `.selyapp` bundle; `exec` runs one.\nNo installer or supported release is available yet.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar, N1/N2 CPU tensor and bounded Tensor[F32] backward subsets.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; when enabled, narrow training progress is streamed to stderr.\n`build` creates a deterministic experimental `.selyapp` bundle; `exec` runs one.\nNo installer or supported release is available yet.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -99,7 +101,7 @@ fn run(args: &[OsString]) -> u8 {
     match classify(args) {
         Action::Help => write_stdout(HELP_TEXT),
         Action::Version => write_stdout(&format!(
-            "seloryn {LANGUAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=experimental-implemented\n"
+            "seloryn {LANGUAGE_VERSION} package={PACKAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=experimental-implemented\n"
         )),
         Action::Check { path, options } => check_path(PathBuf::from(path), options),
         Action::Run { path, options } => run_path(PathBuf::from(path), options),
@@ -653,9 +655,12 @@ fn check_path(path: PathBuf, options: Options) -> u8 {
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
         Err(error) => {
-            return write_io_diagnostic(&format!(
-                "SEL-C003 failed to read source `{label}`: {error}\n"
-            ));
+            let diagnostic = diagnostic::Diagnostic::new(
+                "SEL-C003",
+                format!("failed to read source `{label}`: {error}"),
+                diagnostic::Span::new(0, 0),
+            );
+            return write_diagnostics(&path, "", &[diagnostic], options);
         }
     };
     let source = match String::from_utf8(bytes) {
@@ -674,7 +679,12 @@ fn check_path(path: PathBuf, options: Options) -> u8 {
     let parsed = parser::parse(&source);
     if parsed.diagnostics.is_empty() {
         let Some(program) = parsed.program else {
-            return write_stderr("SEL-C004 parser returned no program without diagnostics\n");
+            let diagnostic = diagnostic::Diagnostic::new(
+                "SEL-C004",
+                "parser returned no program without diagnostics",
+                diagnostic::Span::new(0, 0),
+            );
+            return write_diagnostics(&path, &source, &[diagnostic], options);
         };
         let semantic_diagnostics = semantic::check(&program);
         if semantic_diagnostics.is_empty() {
@@ -725,7 +735,12 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
         return write_diagnostics(&path, &source, &parsed.diagnostics, options);
     }
     let Some(program) = parsed.program else {
-        return write_stderr("SEL-C004 parser returned no program without diagnostics\n");
+        let diagnostic = diagnostic::Diagnostic::new(
+            "SEL-C004",
+            "parser returned no program without diagnostics",
+            diagnostic::Span::new(0, 0),
+        );
+        return write_diagnostics(&path, &source, &[diagnostic], options);
     };
     let semantic_diagnostics = semantic::check(&program);
     if !semantic_diagnostics.is_empty() {
@@ -763,9 +778,12 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
 fn check_json_data_path(path: &std::path::Path, options: Options) -> u8 {
     let label = display_argument(path.as_os_str());
     if let Err(error) = std::fs::read(path) {
-        return write_io_diagnostic(&format!(
-            "SEL-C003 failed to read source `{label}`: {error}\n"
-        ));
+        let diagnostic = diagnostic::Diagnostic::new(
+            "SEL-C003",
+            format!("failed to read source `{label}`: {error}"),
+            diagnostic::Span::new(0, 0),
+        );
+        return write_diagnostics(path, "", &[diagnostic], options);
     }
     if options.quiet {
         EXIT_OK
