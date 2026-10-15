@@ -4,6 +4,8 @@
 //! the existing CPU tensor kernels instead of pretending to be a general
 //! device runtime: one F32 tensor input is traced through the implemented
 //! pure tensor operations and the scalar (rank-zero) result is differentiated.
+//! A call may expose several Tensor[F32] inputs and returns one gradient per
+//! input in parameter order.
 //! Every rule is explicit and the graph has a hard node limit.
 
 use crate::ir::{Expr, Function, IfBranch, Item, Program, Statement};
@@ -141,25 +143,29 @@ struct Node {
 #[derive(Debug)]
 struct Tape {
     nodes: Vec<Node>,
-    input: usize,
+    inputs: Vec<usize>,
 }
 
 impl Tape {
-    fn new(input: Tensor) -> (Self, TracedValue) {
+    fn new_many(inputs: Vec<Tensor>) -> (Self, Vec<TracedValue>) {
         let mut tape = Self {
             nodes: Vec::new(),
-            input: 0,
+            inputs: Vec::with_capacity(inputs.len()),
         };
-        let node = tape
-            .push(input.clone(), Rule::Leaf)
-            .expect("leaf is bounded");
-        (
-            tape,
-            TracedValue::Tensor {
-                value: input,
-                node: Some(node),
-            },
-        )
+        let traced = inputs
+            .into_iter()
+            .map(|input| {
+                let node = tape
+                    .push(input.clone(), Rule::Leaf)
+                    .expect("leaf is bounded");
+                tape.inputs.push(node);
+                TracedValue::Tensor {
+                    value: input,
+                    node: Some(node),
+                }
+            })
+            .collect();
+        (tape, traced)
     }
 
     fn push(&mut self, _value: Tensor, rule: Rule) -> Result<usize, Error> {
@@ -189,7 +195,7 @@ impl Tape {
         Ok(())
     }
 
-    fn gradient(&self, output: usize) -> Result<Tensor, Error> {
+    fn gradients(&self, output: usize) -> Result<Vec<Tensor>, Error> {
         let mut gradients = vec![None; self.nodes.len()];
         let seed = scalar_one()?;
         gradients[output] = Some(seed);
@@ -197,12 +203,20 @@ impl Tape {
             let Some(gradient) = gradients[node_index].take() else {
                 continue;
             };
-            if node_index == self.input {
-                return Ok(gradient);
+            if !self.inputs.contains(&node_index) {
+                self.apply_rule(&mut gradients, &self.nodes[node_index].rule, &gradient)?;
+            } else if let Some(slot) = gradients.get_mut(node_index) {
+                *slot = Some(gradient);
             }
-            self.apply_rule(&mut gradients, &self.nodes[node_index].rule, &gradient)?;
         }
-        Err(Error::new("tensor autograd input has no gradient"))
+        self.inputs
+            .iter()
+            .map(|node| {
+                gradients[*node]
+                    .clone()
+                    .ok_or_else(|| Error::new("tensor autograd input has no gradient"))
+            })
+            .collect()
     }
 
     fn apply_rule(
@@ -357,7 +371,7 @@ struct Evaluator<'a> {
 }
 
 impl<'a> Evaluator<'a> {
-    fn new(program: &'a Program, input: Tensor) -> (Self, TracedValue) {
+    fn new_many(program: &'a Program, inputs: Vec<Tensor>) -> (Self, Vec<TracedValue>) {
         let functions = program
             .items
             .iter()
@@ -366,8 +380,8 @@ impl<'a> Evaluator<'a> {
                 _ => None,
             })
             .collect();
-        let (tape, input) = Tape::new(input);
-        (Self { functions, tape }, input)
+        let (tape, inputs) = Tape::new_many(inputs);
+        (Self { functions, tape }, inputs)
     }
 
     fn call(
@@ -856,10 +870,27 @@ pub fn differentiate_tensor(
     function_name: &str,
     input: Tensor,
 ) -> Result<Tensor, Error> {
-    if input.dtype() != crate::tensor::TensorDtype::F32 {
-        return Err(Error::new("tensor backward requires a Tensor[F32] input"));
+    differentiate_tensors(program, function_name, vec![input])?
+        .into_iter()
+        .next()
+        .ok_or_else(|| Error::new("tensor backward input has no gradient"))
+}
+
+pub fn differentiate_tensors(
+    program: &Program,
+    function_name: &str,
+    inputs: Vec<Tensor>,
+) -> Result<Vec<Tensor>, Error> {
+    if inputs.is_empty() {
+        return Err(Error::new("tensor gradients requires at least one input"));
     }
-    let (mut evaluator, input_value) = Evaluator::new(program, input);
+    if inputs
+        .iter()
+        .any(|input| input.dtype() != crate::tensor::TensorDtype::F32)
+    {
+        return Err(Error::new("tensor gradients requires Tensor[F32] inputs"));
+    }
+    let (mut evaluator, input_values) = Evaluator::new_many(program, inputs);
     let function = evaluator
         .functions
         .get(function_name)
@@ -869,12 +900,12 @@ pub fn differentiate_tensor(
                 "autograd function `{function_name}` is unavailable"
             ))
         })?;
-    if function.parameters.len() != 1 {
+    if function.parameters.len() != input_values.len() {
         return Err(Error::new(
-            "tensor backward requires exactly one function parameter",
+            "tensor gradients input count must match function parameters",
         ));
     }
-    let output = evaluator.call(function_name, vec![input_value], 0)?;
+    let output = evaluator.call(function_name, input_values, 0)?;
     let (output, output_node) = output.tensor()?;
     if !output.shape().is_empty() {
         return Err(Error::new(format!(
@@ -884,7 +915,7 @@ pub fn differentiate_tensor(
     }
     let output_node = output_node
         .ok_or_else(|| Error::new("tensor backward output is not connected to input"))?;
-    evaluator.tape.gradient(output_node)
+    evaluator.tape.gradients(output_node)
 }
 
 fn is_tensor_builtin(name: &str) -> bool {
@@ -1030,7 +1061,7 @@ fn f32_list(value: Option<&TracedValue>) -> Result<Vec<f32>, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::differentiate_tensor;
+    use super::{differentiate_tensor, differentiate_tensors};
     use crate::{ir, parser, tensor::Tensor};
 
     fn gradient(source: &str, values: Vec<f32>, shape: &[i64]) -> Tensor {
@@ -1060,5 +1091,31 @@ mod tests {
         );
         let values = result.values_f32().expect("values");
         assert_eq!(values, vec![1.25, 2.25, 1.25, 2.25]);
+    }
+
+    #[test]
+    fn differentiates_multiple_tensor_inputs() {
+        let source = "fn f(left: Tensor[F32], right: Tensor[F32]) -> Tensor[F32]:\n    return tensor_sum(left * right)\n";
+        let parsed = parser::parse(source);
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        let program = ir::lower(&parsed.program.expect("program"));
+        let gradients = differentiate_tensors(
+            &program,
+            "f",
+            vec![
+                Tensor::from_f32(vec![2.0, 3.0], &[2]).expect("left tensor"),
+                Tensor::from_f32(vec![5.0, 7.0], &[2]).expect("right tensor"),
+            ],
+        )
+        .expect("tensor gradients");
+        assert_eq!(gradients.len(), 2);
+        assert_eq!(
+            gradients[0].values_f32().expect("left gradient"),
+            vec![5.0, 7.0]
+        );
+        assert_eq!(
+            gradients[1].values_f32().expect("right gradient"),
+            vec![2.0, 3.0]
+        );
     }
 }

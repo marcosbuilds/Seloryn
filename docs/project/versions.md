@@ -7,6 +7,7 @@ Language versions use **two numeric components** `M.mm`, where `mm` is always tw
 | 0 | `0.00` — planning baseline, **not a release** |
 | 1 | `0.01` |
 | 2 | `0.02` |
+| 3 | `0.03` |
 | 12 | `0.12` |
 | 99 | `0.99` |
 | 100 | `1.00` |
@@ -17,14 +18,14 @@ The version advances only when an independently accepted, evidenced, user-releva
 
 ## Current comparison
 
-The first earned implementation gain is now recorded in [`VERSION.toml`](../../VERSION.toml)
+The latest earned implementation gain is now recorded in [`VERSION.toml`](../../VERSION.toml)
 and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
-| Language capability | `0.01` | `0.02` | N4 bounded CPU MLP training with mini-batching, evaluation, checkpoint/resume and live events |
-| Runtime package | `0.1.0` | `0.2.0` | package identity follows the accepted gain |
-| VS Code extension | `0.1.0` | `0.2.0` | extension completions and snippets expose the verified MLP workflow |
+| Language capability | `0.02` | `0.03` | N5 Seloryn-authored multi-input gradients, bounded range and SGD loop |
+| Runtime package | `0.2.0` | `0.3.0` | package identity follows the accepted gain |
+| VS Code extension | `0.2.0` | `0.3.0` | extension completions expose gradients, range and the self-hosted workflow |
 
 The comparison is intentionally visible: a new commit alone cannot advance
 the language version. The N3B gain has executable source, negative behavior,

@@ -164,6 +164,9 @@ assert.ok(broadItems.some((item) => item.label === 'json'));
 assert.ok(broadItems.some((item) => item.label === 'match'));
 assert.ok(broadItems.some((item) => item.label === 'Tensor'));
 assert.ok(broadItems.some((item) => item.label === 'train_mlp'));
+assert.ok(broadItems.some((item) => item.label === 'gradients'));
+assert.ok(broadItems.some((item) => item.label === 'range'));
+assert.ok(broadItems.some((item) => item.label === 'data'));
 
 const trainingProject = path.resolve(__dirname, '..', '..', '..', 'examples', 'projects', 'mlp-training');
 const trainingTerminalCalls = [];

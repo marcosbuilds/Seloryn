@@ -1402,6 +1402,49 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                         Control::Runtime(self.runtime("SEL-R203", error.message, span))
                     })
             }
+            "gradients" => {
+                let Some(Value::Function(function_name)) = values.first().cloned() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "gradients requires a callable function",
+                        span,
+                    )));
+                };
+                let inputs = values
+                    .iter()
+                    .skip(1)
+                    .map(|value| match value {
+                        Value::Tensor(tensor) => Ok(tensor.clone()),
+                        _ => Err("gradients requires Tensor[F32] inputs"),
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                let gradients =
+                    tensor_autograd::differentiate_tensors(self.program, &function_name, inputs)
+                        .map_err(|error| {
+                            Control::Runtime(self.runtime("SEL-R203", error.message, span))
+                        })?;
+                Ok(Value::List(
+                    gradients.into_iter().map(Value::Tensor).collect(),
+                ))
+            }
+            "range" => {
+                let Some(Value::I64(stop)) = values.first() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "range stop must be I64",
+                        span,
+                    )));
+                };
+                if *stop < 0 || *stop > 1_000_000 {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "range stop must be between 0 and 1000000",
+                        span,
+                    )));
+                }
+                Ok(Value::List((0..*stop).map(Value::I64).collect()))
+            }
             "train_linear" => {
                 let (Some(Value::Text(train)), Some(Value::Text(test))) =
                     (values.first(), values.get(1))

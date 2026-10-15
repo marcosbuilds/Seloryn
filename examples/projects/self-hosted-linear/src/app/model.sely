@@ -1,0 +1,14 @@
+module app.model
+
+pub record TrainingReport:
+    initial_loss: F32
+    final_loss: F32
+    weight: F32
+    bias: F32
+
+pub fn objective(inputs: Tensor[F32], weight: Tensor[F32], bias: Tensor[F32], targets: Tensor[F32]) -> Tensor[F32]:
+    let error: Tensor[F32] = matmul(inputs, weight) + bias - targets
+    return tensor_mean(error * error)
+
+pub fn report(initial_loss: F32, final_loss: F32, weight: Tensor[F32], bias: Tensor[F32]) -> TrainingReport:
+    return TrainingReport(initial_loss, final_loss, tensor_get_f32(weight, [0, 0]), tensor_get_f32(bias, [0, 0]))

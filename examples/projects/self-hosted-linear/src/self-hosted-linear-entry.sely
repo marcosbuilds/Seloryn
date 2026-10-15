@@ -1,0 +1,4 @@
+from app.training import train
+
+fn main() -> TrainingReport:
+    return train()

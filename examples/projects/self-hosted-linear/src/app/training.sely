@@ -1,0 +1,23 @@
+module app.training
+
+from app.model import TrainingReport
+from app.model import objective
+from app.model import report
+from autograd import gradients
+from data import range
+
+pub fn train() -> TrainingReport:
+    let inputs: Tensor[F32] = tensor_f32([1.0, 2.0, 3.0, 4.0], [4, 1])
+    let targets: Tensor[F32] = tensor_f32([3.0, 5.0, 7.0, 9.0], [4, 1])
+    let rate: Tensor[F32] = tensor_f32([0.1], [])
+    var weight: Tensor[F32] = tensor_f32([0.0], [1, 1])
+    var bias: Tensor[F32] = tensor_f32([0.0], [1, 1])
+    let initial: Tensor[F32] = objective(inputs, weight, bias, targets)
+    for step in range(120):
+        let derivatives: List[Tensor[F32]] = gradients(objective, inputs, weight, bias, targets)
+        let weight_gradient: Tensor[F32] = derivatives[1]
+        let bias_gradient: Tensor[F32] = derivatives[2]
+        weight = weight - rate * weight_gradient
+        bias = bias - rate * bias_gradient
+    let final: Tensor[F32] = objective(inputs, weight, bias, targets)
+    return report(tensor_item_f32(initial), tensor_item_f32(final), weight, bias)

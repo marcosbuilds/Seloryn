@@ -66,6 +66,7 @@ const MODULES = Object.freeze([
   ['json', 'Bounded JSON project capability'],
   ['models', 'Narrow model contract fixture'],
   ['training', 'Bounded CPU linear and MLP training'],
+  ['data', 'Bounded data iteration helpers'],
 ]);
 
 const STANDARD_FUNCTIONS = Object.freeze([
@@ -83,8 +84,10 @@ const STANDARD_FUNCTIONS = Object.freeze([
   ['ModelResponse', 'ModelResponse(status, text)', 'Create the model response fixture'],
   ['fixture_provider', 'fixture_provider(request)', 'Call the deterministic model fixture'],
   ['slow_fixture_provider', 'slow_fixture_provider(request, timeout)', 'Call the bounded slow model fixture'],
-  ['backward', 'backward(function, point)', 'Use the scalar reverse-mode fixture'],
-  ['gradcheck', 'gradcheck(function, point)', 'Run the scalar finite-difference fixture']
+  ['backward', 'backward(function, point)', 'Use the scalar or single-tensor reverse-mode fixture'],
+  ['gradcheck', 'gradcheck(function, point)', 'Run the scalar finite-difference fixture'],
+  ['gradients', 'gradients(function, tensor_1, tensor_2, ...)', 'Return bounded gradients for multiple Tensor[F32] inputs'],
+  ['range', 'range(stop)', 'Create a bounded I64 sequence for Seloryn loops']
 ]);
 
 const SNIPPETS = Object.freeze([
@@ -95,6 +98,7 @@ const SNIPPETS = Object.freeze([
   ['for', 'List iteration', 'for ${1:item} in ${2:items}:\n    ${0}'],
   ['match', 'Exhaustive match block', 'match ${1:value}:\n    case ${2:pattern}:\n        ${0}'],
   ['train_mlp', 'Real bounded CPU MLP training', 'from training import train_mlp\n\nfn main() -> Json:\n    return train_mlp("data/train.json", "data/test.json", "checkpoints/model.json", seed=17, steps=240, batch_size=4, hidden_size=8, learning_rate=0.1)${0}'],
+  ['self_hosted_train', 'Seloryn-authored gradient loop', 'from autograd import gradients\nfrom data import range\n\nfor ${1:step} in range(${2:120}):\n    let ${3:derivatives}: List[Tensor[F32]] = gradients(${4:objective}, ${5:inputs}, ${6:weight}, ${7:bias}, ${8:targets})\n    ${9:weight} = ${9:weight} - ${10:rate} * ${3:derivatives}[1]\n    ${11:bias} = ${11:bias} - ${10:rate} * ${3:derivatives}[2]${0}'],
   ['tensor_objective', 'Tensor objective returning a scalar', 'fn ${1:objective}(input: Tensor[F32]) -> Tensor[F32]:\n    let weights: Tensor[F32] = tensor_f32([1.0], [1, 1])\n    let prediction: Tensor[F32] = matmul(input, weights)\n    return tensor_mean(prediction * prediction)${0}']
 ]);
 

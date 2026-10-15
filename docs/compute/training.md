@@ -1,10 +1,28 @@
 # Model training
 
-Seloryn `0.02` contains one executable CPU training profile: a bounded,
+Seloryn `0.03` contains executable CPU training profiles, including a
 two-layer `F32` MLP with ReLU hidden activation, mean-squared error, SGD,
 deterministic mini-batches, holdout evaluation and resumable checkpoints. This
 is a verified preview of a small training workflow, not a general neural
-network framework.
+network framework. Seloryn source can now own a bounded optimization loop
+through multi-input reverse-mode gradients and a bounded integer range.
+
+## Seloryn-authored optimization
+
+The [`self-hosted-linear`](../../examples/projects/self-hosted-linear) project
+keeps the model, loss, parameter updates and loop in `.sely` source:
+
+```seloryn
+let derivatives: List[Tensor[F32]] = gradients(objective, inputs, weight, bias, targets)
+weight = weight - rate * derivatives[1]
+bias = bias - rate * derivatives[2]
+```
+
+`from autograd import gradients` accepts a named function with multiple
+`Tensor[F32]` parameters and returns one gradient tensor per input. `from data
+import range` creates a bounded `List[I64]` for ordinary Seloryn `for` loops.
+The native runtime still owns the bounded tensor kernels and tape traversal;
+the training policy is no longer hidden inside `train_mlp`.
 
 ## Executable MLP profile
 
@@ -95,3 +113,7 @@ reproducibility, different-seed divergence, split-run equivalence after
 resume, corrupted-checkpoint rejection and receipt of `training.start` while
 the process is still alive. This is stronger evidence than inspecting a
 training loop or a post-process log alone.
+
+[`tests/self_hosted_probe.py`](../../tests/self_hosted_probe.py) independently
+executes the Seloryn-authored loop and checks that the loss falls below
+`1e-3`, with learned weight and bias within `0.01` of `2` and `1`.

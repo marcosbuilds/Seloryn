@@ -633,7 +633,10 @@ fn imports(program: &Program) -> Vec<Import> {
 }
 
 fn is_standard_module(module: &str) -> bool {
-    matches!(module, "io" | "json" | "models" | "autograd" | "training")
+    matches!(
+        module,
+        "io" | "json" | "models" | "autograd" | "training" | "data"
+    )
 }
 
 fn is_local_directive(item: &Item, _source_root: &Path) -> bool {

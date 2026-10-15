@@ -13,7 +13,7 @@ seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
 ```
 
-The preview version reports `0.02`, `package=0.2.0` and
+The preview version reports `0.03`, `package=0.3.0` and
 `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
@@ -36,7 +36,9 @@ value is the JSON representation of the final Seloryn value; tensor values
 expose dtype, shape and element count rather than an unbounded render. For
 failures, the same flag keeps one JSON diagnostic document on stderr, with
 source byte spans, Unicode-aware locations, help and runtime stack.
-`--quiet` suppresses the successful `check`
+`from autograd import gradients` returns one gradient tensor for each of
+multiple Tensor[F32] inputs, while `from data import range` creates a bounded
+I64 sequence for Seloryn `for` loops. `--quiet` suppresses the successful `check`
 line. `--log=human` or `--log=json` is opt-in and streams the active training
 lifecycle to stderr; it never changes program stdout.
 Human logs are concise, while JSON logs are one deterministic JSON object per

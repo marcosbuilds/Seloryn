@@ -1517,7 +1517,7 @@ impl<'a> Checker<'a> {
                 match input_type {
                     Type::Tensor(TensorDtype::F32) => {
                         if let Some(function) = arguments.first() {
-                            self.check_tensor_autograd_callable(function, span);
+                            self.check_tensor_autograd_callable(function, 1, span);
                         }
                         Type::Tensor(TensorDtype::F32)
                     }
@@ -1537,6 +1537,33 @@ impl<'a> Checker<'a> {
                         Type::Error
                     }
                 }
+            }
+            "gradients" => {
+                if arguments.len() < 2 {
+                    self.error(
+                        "SEL-T005",
+                        "standard function `gradients` expects a callable and at least one tensor input",
+                        span,
+                    );
+                    return Type::Error;
+                }
+                let function = arguments.first().expect("checked minimum arity");
+                self.check_tensor_autograd_callable(function, arguments.len() - 1, span);
+                for input in arguments.iter().skip(1) {
+                    self.ensure_expr_assignable(
+                        input,
+                        &Type::Tensor(TensorDtype::F32),
+                        "tensor gradient input",
+                    );
+                }
+                Type::List(Box::new(Type::Tensor(TensorDtype::F32)))
+            }
+            "range" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(stop) = arguments.first() {
+                    self.ensure_expr_assignable(stop, &Type::I64, "range stop");
+                }
+                Type::List(Box::new(Type::I64))
             }
             "train_linear" => {
                 self.check_standard_arity(name, arguments, 4, span);
@@ -1594,17 +1621,27 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn check_tensor_autograd_callable(&mut self, expression: &Expr, span: Span) {
+    fn check_tensor_autograd_callable(
+        &mut self,
+        expression: &Expr,
+        parameter_count: usize,
+        span: Span,
+    ) {
         let callable = self.type_of_expr(expression);
         match callable {
             Type::Function(parameters, return_type)
-                if parameters.len() == 1
+                if parameters.len() == parameter_count
                     && parameters[0] == Type::Tensor(TensorDtype::F32)
+                    && parameters
+                        .iter()
+                        .all(|parameter| *parameter == Type::Tensor(TensorDtype::F32))
                     && *return_type == Type::Tensor(TensorDtype::F32) => {}
             Type::Unknown | Type::Error => {}
             Type::Function(_, _) => self.error(
                 "SEL-M002",
-                "tensor backward callable must take and return one Tensor[F32]",
+                format!(
+                    "tensor gradient callable must take {parameter_count} Tensor[F32] parameter(s) and return Tensor[F32]"
+                ),
                 span,
             ),
             _ => self.error(
@@ -1955,7 +1992,8 @@ fn is_supported_standard_directive(text: &str) -> bool {
             "slow_fixture_provider",
         ]
         .as_slice(),
-        "autograd" => ["backward", "gradcheck"].as_slice(),
+        "autograd" => ["backward", "gradcheck", "gradients"].as_slice(),
+        "data" => ["range"].as_slice(),
         "training" => ["train_linear", "train_mlp", "load_checkpoint"].as_slice(),
         _ => return false,
     };

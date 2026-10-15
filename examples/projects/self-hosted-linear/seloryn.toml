@@ -1,0 +1,5 @@
+[package]
+name = "self-hosted-linear"
+language = "0.03"
+source_root = "src"
+entry = "self-hosted-linear-entry.sely"

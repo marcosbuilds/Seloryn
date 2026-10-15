@@ -1,6 +1,6 @@
 [package]
 name = "seloryn"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2024"
 publish = false
 description = "Seloryn language bootstrap CLI"
@@ -8,7 +8,7 @@ license = "MIT"
 default-run = "seloryn"
 
 [package.metadata.seloryn]
-language-version = "0.02"
+language-version = "0.03"
 status = "verified-preview"
 
 [dependencies]

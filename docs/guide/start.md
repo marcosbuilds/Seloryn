@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.02 currently provides a verified-preview CPU MLP training profile, plus an experimental syntax/semantic checker, deterministic core IR, pure interpreter, local project modules, bounded JSON capability, Tensor[F32] reverse-mode autodiff and `.selyapp` bundles. There is no GPU/distributed backend, package registry, hosted API, stable ABI or supported runtime installer; the preview is used from a built binary or source checkout.
+**Availability:** Seloryn 0.03 currently provides a verified-preview CPU MLP profile plus a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. It also includes an experimental syntax/semantic checker, deterministic core IR, pure interpreter, local project modules, bounded JSON capability, Tensor[F32] reverse-mode autodiff and `.selyapp` bundles. There is no GPU/distributed backend, package registry, hosted API, stable ABI or supported runtime installer; the preview is used from a built binary or source checkout.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 
@@ -38,7 +38,7 @@ stdout.
 - No package registry, external dependency resolver or broad standard library runtime.
 - No GPU, distributed or symbolic-shape execution; N1/N2 support only bounded CPU tensors.
 - No HTTP, process or unrestricted file/package runtime; only bounded standard-input JSON and root-confined project JSON reads are available.
-- No general model loading, optimizer, MLP training or production model serving; only the narrow fixture contracts are implemented.
+- No public `Module`/`Parameter`/`Dataset` framework, model loading or production model serving; the verified training profiles remain bounded CPU contracts.
 - No GPU, distributed backend, supported installer or supported release target; local installer scripts are not a release.
 
 The current capability limits are recorded in the [status page](../project/status.md) and the [tensor reference](../compute/tensors.md).

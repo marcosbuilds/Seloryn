@@ -1,6 +1,6 @@
 # Tensors
 
-**Current availability (`0.02`):** Seloryn has an experimental N1/N2 CPU
+**Current availability (`0.03`):** Seloryn has an experimental N1/N2 CPU
 tensor runtime. It allocates owned, bounded buffers for `Tensor[F32]` and
 `Tensor[I64]`; N2 adds a small pure numeric closure needed before autograd. It
 does not use a GPU, perform training or expose arbitrary views or slicing.
@@ -92,7 +92,7 @@ does not change the tensor contents used by computation.
 ## Not available yet
 
 There are no symbolic dimensions, arbitrary strided views, device transfers or
-GPU backends. Tensor reverse-mode `backward` is now available for one bounded
+GPU backends. Tensor reverse-mode `backward` and multi-input `gradients` are now available for bounded
 Tensor[F32] input and a rank-zero objective; it is documented separately in
 [`autograd.md`](autograd.md). Optimizers and a general training API remain
 unavailable; the separate bounded CPU MLP profile documents the current

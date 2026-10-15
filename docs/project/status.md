@@ -1,6 +1,6 @@
 # Current capability status
 
-Seloryn `0.02` is a verified-preview language/runtime for a bounded `.sely`
+Seloryn `0.03` is a verified-preview language/runtime for a bounded `.sely`
 subset. It now includes an executable CPU MLP training profile in addition to
 the earlier scalar, project, tensor and autodiff gates. The status applies to
 the observed contracts below; it does not turn the whole runtime into a stable
@@ -17,6 +17,7 @@ general-purpose ML platform.
 | Two-layer CPU MLP training with mini-batches, ReLU backpropagation, SGD, evaluation and deterministic seeds | **Verified preview** | [`training.md`](../compute/training.md), [`examples/projects/mlp-training`](../../examples/projects/mlp-training), [`tests/mlp_training_probe.py`](../../tests/mlp_training_probe.py) |
 | Versioned checkpoint save/resume with dataset hashes and sampler state | **Verified preview** | [`src/runtime.rs`](../../src/runtime.rs), MLP black-box probe |
 | Human/JSON Lines terminal streaming with flush and stdout/stderr separation | **Verified preview for the CPU MLP profile** | [`src/main.rs`](../../src/main.rs), MLP black-box probe |
+| Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop | **Verified preview** | [`examples/projects/self-hosted-linear`](../../examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](../../tests/self_hosted_probe.py) |
 | VS Code `.sely` highlighting, real snippets/completions, CLI diagnostics and Seloryn file icon | Verified editor preview | [`tooling/vscode`](../../tooling/vscode), packaged VSIX release |
 | Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
 
@@ -24,7 +25,7 @@ general-purpose ML platform.
 
 | Capability | State | Consequence |
 |---|---|---|
-| General tensor autograd, public `Module`/`Parameter`/`Dataset` APIs and optimizer families | Not implemented | `train_mlp` is a concrete bounded profile, not an extensible framework |
+| Public `Module`/`Parameter`/`Dataset` APIs and optimizer families | Not implemented | Seloryn can now own a bounded optimization loop, but the reusable object API is still not exposed |
 | GPU, distributed execution, mixed precision and memory sharding | Not implemented | only single-process CPU execution is supported |
 | Transformer/LLM training, tokenizers and serving | Not implemented | no model-scale or production-serving claim |
 | Runtime installer, registry, broad package ecosystem and stable ABI | Not implemented | use a built binary or the source checkout; the preview is not a stable distribution |
@@ -32,10 +33,14 @@ general-purpose ML platform.
 
 ## Evidence rule
 
-The MLP profile earns language `0.02` because an external user can run the
-same project and independently observe a nontrivial learned model, a measured
-holdout loss, a resumable checkpoint and a live event stream. The gain does
-not imply that GPU, distributed or general training promises are fulfilled.
+The language `0.02` baseline earned its evidence from the MLP profile's measured
+holdout loss, resumable checkpoint and live event stream. The self-hosted
+optimization profile earns `0.03` because an external user can run a separate
+`.sely` project and observe a nontrivial learned model from its own objective,
+multi-input gradients, bounded loop and parameter updates. The gain does not
+imply that GPU, distributed or general training promises are fulfilled; it
+demonstrates that model/loss/update orchestration can now be written in Seloryn
+rather than only selected through a native trainer.
 The public comparison remains honest: Seloryn's current differentiator is a
 single typed, bounded and observable workflow; broad productivity or
 performance superiority over established ML runtimes has not been proved.
