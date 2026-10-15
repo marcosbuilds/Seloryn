@@ -1,6 +1,6 @@
 # Next executable gates
 
-Seloryn is currently `0.01`: a bounded experimental language and runtime for
+Seloryn is currently `0.02`: a bounded verified-preview language and runtime for
 AI development and integration. The next steps are executable gates, not a
 promise that every design proposal already exists.
 
@@ -9,8 +9,11 @@ promise that every design proposal already exists.
 - The public repository has a deterministic front end, pure bounded execution,
   local project/bundle support and bounded N1/N2 CPU tensor behavior.
 - Tensor[F32] reverse-mode autodiff is executable for one input and a rank-zero
-  CPU objective, with an independent CLI oracle; optimizers and general
-  trainers remain outside the gate.
+  CPU objective, with an independent CLI oracle.
+- A bounded two-layer CPU MLP now trains on real JSON data with deterministic
+  mini-batches, holdout evaluation, checkpoint/resume and live terminal events;
+  a general model API, optimizer family and accelerator path remain outside
+  the gate.
 - Public CI exercises Linux, Windows and macOS, while independent CLI probes
   compare selected tensor results with external references.
 - The VS Code package provides `.sely` association, syntax highlighting,
@@ -31,9 +34,10 @@ promise that every design proposal already exists.
    with an equivalent conventional workflow. Measure invalid states,
    development/production adaptations and diagnostic effort before making an
    advantage claim.
-4. **Numerical continuation:** define tensor autodiff contracts and an
-   independent numerical oracle before calling training general. The current
-   scalar gradient and linear-training fixtures remain narrow.
+4. **Numerical continuation:** connect reusable tensor parameters and a public
+   optimizer/data API to the bounded MLP only after independent gradient,
+   memory and compatibility contracts. The current MLP is a concrete profile,
+   not general training.
 5. **Runtime release:** publish supported binaries, checksums, provenance,
    upgrade/rollback behavior and a release only after the corresponding
    platform and failure-path evidence exists.

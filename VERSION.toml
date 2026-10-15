@@ -2,18 +2,24 @@
 # The language version is a capability count (M.mm), not a decimal float.
 
 [current]
-language = "0.01"
-runtime_package = "0.1.0"
-extension_package = "0.1.0"
-channel = "experimental"
+language = "0.02"
+runtime_package = "0.2.0"
+extension_package = "0.2.0"
+channel = "verified-preview"
 
 [comparison]
-previous_language = "0.00"
-previous_runtime_package = "0.0.0"
-previous_extension_package = "0.0.1"
+previous_language = "0.01"
+previous_runtime_package = "0.1.0"
+previous_extension_package = "0.1.0"
 
 [[gains]]
 id = "N3B-TENSOR-AUTODIFF"
 language = "0.01"
 summary = "Bounded CPU Tensor[F32] reverse-mode autodiff"
 evidence = "src/tensor_autograd.rs; examples/autograd/tensor-gradient.sely; tests/n3_tensor_probe.py"
+
+[[gains]]
+id = "N4-CPU-MLP-TRAINING"
+language = "0.02"
+summary = "Bounded CPU MLP training with deterministic mini-batches, evaluation, checkpoint and resume"
+evidence = "src/runtime.rs; examples/projects/mlp-training; tests/mlp_training_probe.py"

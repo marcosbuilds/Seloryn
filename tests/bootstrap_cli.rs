@@ -46,12 +46,12 @@ fn help_is_utf8_and_documents_only_available_commands() {
     assert!(output.stderr.is_empty());
 
     let stdout = String::from_utf8(output.stdout).expect("help must be UTF-8");
-    assert!(stdout.contains("Seloryn — native CLI bootstrap"));
+    assert!(stdout.contains("Seloryn — native CLI"));
     assert!(stdout.contains("seloryn --help"));
     assert!(stdout.contains("seloryn check <file.sely>"));
     assert!(stdout.contains("seloryn run <file.sely>"));
     assert!(stdout.contains("--log=off|human|json"));
-    assert!(stdout.contains("No installer or supported release is available yet"));
+    assert!(stdout.contains("verified-preview runtime is CPU-only"));
 }
 
 #[test]
@@ -63,7 +63,7 @@ fn version_reports_earned_language_and_package_versions_without_claiming_runtime
     let stdout = String::from_utf8(output.stdout).expect("version must be UTF-8");
     assert_eq!(
         stdout,
-        "seloryn 0.01 package=0.1.0 build=local-development status=experimental-implemented\n"
+        "seloryn 0.02 package=0.2.0 build=local-development status=verified-preview\n"
     );
 }
 

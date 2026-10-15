@@ -163,6 +163,33 @@ assert.ok(broadItems.some((item) => item.label === 'read_stdin'));
 assert.ok(broadItems.some((item) => item.label === 'json'));
 assert.ok(broadItems.some((item) => item.label === 'match'));
 assert.ok(broadItems.some((item) => item.label === 'Tensor'));
+assert.ok(broadItems.some((item) => item.label === 'train_mlp'));
+
+const trainingProject = path.resolve(__dirname, '..', '..', '..', 'examples', 'projects', 'mlp-training');
+const trainingTerminalCalls = [];
+const trainingVscode = {
+  workspace: {
+    workspaceFolders: [{ uri: { fsPath: trainingProject } }],
+    getWorkspaceFolder: () => ({ uri: { fsPath: trainingProject } }),
+    getConfiguration: () => ({ get: (key, fallback) => key === 'cliPath' ? 'seloryn-test' : fallback })
+  },
+  window: {
+    activeTextEditor: {
+      document: { uri: { fsPath: path.join(trainingProject, 'src', 'mlp-training-entry.sely') } }
+    },
+    createTerminal: (options) => {
+      trainingTerminalCalls.push(options);
+      return { show: () => {} };
+    }
+  }
+};
+assert.deepEqual(extension.createTrainingTerminal(trainingVscode), {
+  status: 'started',
+  projectRoot: trainingProject,
+  cliPath: 'seloryn-test'
+});
+assert.deepEqual(trainingTerminalCalls[0].shellArgs, ['run', trainingProject, '--log=human']);
+assert.equal(trainingTerminalCalls[0].shellPath, 'seloryn-test');
 
 const prompt = extension.buildPrompt(completionDocument, completionPosition);
 assert.match(prompt, /Seloryn/u);

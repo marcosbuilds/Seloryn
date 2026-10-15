@@ -1,6 +1,6 @@
 # Editor support
 
-The public repository contains an experimental VS Code extension release at
+The public repository contains a verified-preview VS Code extension release at
 [`tooling/vscode`](../../tooling/vscode). It supports the current bounded
 language surface and can be packaged as a local VSIX. It is not a complete
 Language Server Protocol implementation and is not a release of the Seloryn
@@ -34,7 +34,7 @@ Build and install the local editor preview with:
 ```text
 npm ci --prefix tooling/vscode
 npm run package --prefix tooling/vscode
-code --install-extension tooling/vscode/seloryn-language-0.1.0.vsix
+code --install-extension tooling/vscode/seloryn-language-0.2.0.vsix
 ```
 
 In VS Code, choose `Seloryn File Icons` from `Preferences: File Icon Theme` to

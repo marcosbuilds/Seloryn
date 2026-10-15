@@ -1,7 +1,8 @@
 # Command-line interface
 
-The native CLI exposes help, version metadata, the E3 source checker and an
-experimental E4 interpreter and the narrow project/bundle gates. It is not an installable release.
+The native CLI exposes help, version metadata, the E3 source checker, the
+bounded CPU training profile and project/bundle gates. It is a verified
+preview, not an installable stable release.
 
 ```text
 seloryn --help
@@ -12,7 +13,7 @@ seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
 ```
 
-The development version reports `0.01`, `package=0.1.0` and
+The preview version reports `0.02`, `package=0.2.0` and
 `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
@@ -36,11 +37,12 @@ expose dtype, shape and element count rather than an unbounded render. For
 failures, the same flag keeps one JSON diagnostic document on stderr, with
 source byte spans, Unicode-aware locations, help and runtime stack.
 `--quiet` suppresses the successful `check`
-line. `--log=human` or `--log=json` is opt-in and streams only the narrow
-`training.train_linear` lifecycle to stderr; it never changes program stdout.
+line. `--log=human` or `--log=json` is opt-in and streams the active training
+lifecycle to stderr; it never changes program stdout.
 Human logs are concise, while JSON logs are one deterministic JSON object per
-line. Events report dataset paths, sample counts, metadata-only seed, sampled
-steps and measured losses. `--log=off` is the default. A standalone source run performs no file, network, process or GPU
+line. The MLP profile reports dataset paths, sample counts, effective seed,
+batch/model sizes, checkpoint hash and measured train/evaluation losses.
+`--log=off` is the default. A standalone source run performs no file, network, process or GPU
 effects. A program may explicitly import read_stdin from json to consume one
 bounded UTF-8 JSON document from standard input; it does not grant filesystem
 or network access. A project run may perform only its explicitly bounded JSON reads. The
@@ -51,7 +53,8 @@ references in [`tests/n2_probe.py`](../../tests/n2_probe.py). Public project
 examples are grouped under [`examples/projects`](../../examples/projects/README.md).
 
 `build` validates a local `seloryn.toml` project, packages its validated source
-files and explicitly declared `[capabilities].read` directories into a
+files and explicitly declared `[capabilities].read` and `[capabilities].write`
+directories into a
 deterministic experimental `.selyapp` bundle and writes JSON build metadata.
 The runtime performs the same deterministic lowering at `exec` time; this
 bundle is not native code or a public release. `exec` validates and materializes

@@ -21,7 +21,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const LANGUAGE_VERSION: &str = "0.01";
+const LANGUAGE_VERSION: &str = "0.02";
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
 const EXIT_OK: u8 = 0;
@@ -29,7 +29,7 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI bootstrap\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the E3 semantic core.\n`run` validates the same front end, then executes the pure E4 scalar, N1/N2 CPU tensor and bounded Tensor[F32] backward subsets.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; when enabled, narrow training progress is streamed to stderr.\n`build` creates a deterministic experimental `.selyapp` bundle; `exec` runs one.\nNo installer or supported release is available yet.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes the bounded scalar, CPU tensor, reverse-mode and CPU MLP training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; when enabled, training progress is streamed and flushed to stderr.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\nThe verified-preview runtime is CPU-only and has no GPU, distributed or installer support.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -101,7 +101,7 @@ fn run(args: &[OsString]) -> u8 {
     match classify(args) {
         Action::Help => write_stdout(HELP_TEXT),
         Action::Version => write_stdout(&format!(
-            "seloryn {LANGUAGE_VERSION} package={PACKAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=experimental-implemented\n"
+            "seloryn {LANGUAGE_VERSION} package={PACKAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=verified-preview\n"
         )),
         Action::Check { path, options } => check_path(PathBuf::from(path), options),
         Action::Run { path, options } => run_path(PathBuf::from(path), options),
@@ -418,6 +418,87 @@ fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
             "seloryn training.complete schema=1 operation=train_linear model={} device={} dtype={} optimizer={} learning_rate={learning_rate:.8} parameter_count={} updates={} steps={} initial_loss={initial_loss:.8} final_loss={final_loss:.8} loss_delta={loss_delta:.8} loss_decreased={} holdout_mae_observed={holdout_mae_observed:.8} weight={weight:.8} bias={bias:.8} seed_metadata={}",
             model, device, dtype, optimizer, parameter_count, updates, steps, loss_decreased, seed
         ),
+        runtime::RuntimeEvent::MlpStarted {
+            model,
+            train_path,
+            test_path,
+            checkpoint_path,
+            train_samples,
+            test_samples,
+            steps,
+            seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            batch_size,
+            hidden_size,
+            parameter_count,
+            resumed_from,
+        } => format!(
+            "seloryn training.start schema=1 operation=train_mlp model={} device={} dtype={} optimizer={} learning_rate={learning_rate:.8} parameter_count={} batch_size={} hidden_size={} train={} test={} checkpoint={} train_samples={} test_samples={} steps={} seed={} resumed_from={}",
+            model,
+            device,
+            dtype,
+            optimizer,
+            parameter_count,
+            batch_size,
+            hidden_size,
+            json::encode(&json::JsonValue::String(train_path.clone())),
+            json::encode(&json::JsonValue::String(test_path.clone())),
+            json::encode(&json::JsonValue::String(checkpoint_path.clone())),
+            train_samples,
+            test_samples,
+            steps,
+            seed,
+            resumed_from,
+        ),
+        runtime::RuntimeEvent::MlpStep {
+            model,
+            step,
+            steps,
+            updates,
+            epoch,
+            loss,
+            evaluation_loss,
+        } => format!(
+            "seloryn training.step schema=1 operation=train_mlp model={} step={}/{} updates={} epoch={} loss={loss:.8} evaluation_loss={evaluation_loss:.8}",
+            model, step, steps, updates, epoch
+        ),
+        runtime::RuntimeEvent::MlpCompleted {
+            model,
+            steps,
+            updates,
+            seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            batch_size,
+            hidden_size,
+            parameter_count,
+            initial_loss,
+            final_loss,
+            evaluation_loss,
+            loss_decreased,
+            resumed_from,
+            checkpoint_sha256,
+        } => format!(
+            "seloryn training.complete schema=1 operation=train_mlp model={} device={} dtype={} optimizer={} learning_rate={learning_rate:.8} parameter_count={} batch_size={} hidden_size={} updates={} steps={} initial_loss={initial_loss:.8} final_loss={final_loss:.8} evaluation_loss={evaluation_loss:.8} loss_decreased={} seed={} resumed_from={} checkpoint_sha256={}",
+            model,
+            device,
+            dtype,
+            optimizer,
+            parameter_count,
+            batch_size,
+            hidden_size,
+            updates,
+            steps,
+            loss_decreased,
+            seed,
+            resumed_from,
+            checkpoint_sha256,
+        ),
     }
 }
 
@@ -615,6 +696,225 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
             object.insert(
                 "bias".to_owned(),
                 json::JsonValue::Number(format!("{bias:.8}")),
+            );
+        }
+        runtime::RuntimeEvent::MlpStarted {
+            model,
+            train_path,
+            test_path,
+            checkpoint_path,
+            train_samples,
+            test_samples,
+            steps,
+            seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            batch_size,
+            hidden_size,
+            parameter_count,
+            resumed_from,
+        } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("training.start".to_owned()),
+            );
+            object.insert(
+                "operation".to_owned(),
+                json::JsonValue::String("train_mlp".to_owned()),
+            );
+            object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert("device".to_owned(), json::JsonValue::String(device.clone()));
+            object.insert("dtype".to_owned(), json::JsonValue::String(dtype.clone()));
+            object.insert(
+                "optimizer".to_owned(),
+                json::JsonValue::String(optimizer.clone()),
+            );
+            object.insert(
+                "learning_rate".to_owned(),
+                json::JsonValue::Number(format!("{learning_rate:.8}")),
+            );
+            object.insert(
+                "parameter_count".to_owned(),
+                json::JsonValue::Number(parameter_count.to_string()),
+            );
+            object.insert(
+                "batch_size".to_owned(),
+                json::JsonValue::Number(batch_size.to_string()),
+            );
+            object.insert(
+                "hidden_size".to_owned(),
+                json::JsonValue::Number(hidden_size.to_string()),
+            );
+            object.insert(
+                "train_path".to_owned(),
+                json::JsonValue::String(train_path.clone()),
+            );
+            object.insert(
+                "test_path".to_owned(),
+                json::JsonValue::String(test_path.clone()),
+            );
+            object.insert(
+                "checkpoint_path".to_owned(),
+                json::JsonValue::String(checkpoint_path.clone()),
+            );
+            object.insert(
+                "train_samples".to_owned(),
+                json::JsonValue::Number(train_samples.to_string()),
+            );
+            object.insert(
+                "test_samples".to_owned(),
+                json::JsonValue::Number(test_samples.to_string()),
+            );
+            object.insert(
+                "steps".to_owned(),
+                json::JsonValue::Number(steps.to_string()),
+            );
+            object.insert("seed".to_owned(), json::JsonValue::Number(seed.to_string()));
+            object.insert(
+                "resumed_from".to_owned(),
+                json::JsonValue::Number(resumed_from.to_string()),
+            );
+            object.insert(
+                "seed_semantics".to_owned(),
+                json::JsonValue::String("deterministic_cpu_stream".to_owned()),
+            );
+        }
+        runtime::RuntimeEvent::MlpStep {
+            model,
+            step,
+            steps,
+            updates,
+            epoch,
+            loss,
+            evaluation_loss,
+        } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("training.step".to_owned()),
+            );
+            object.insert(
+                "operation".to_owned(),
+                json::JsonValue::String("train_mlp".to_owned()),
+            );
+            object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert("step".to_owned(), json::JsonValue::Number(step.to_string()));
+            object.insert(
+                "steps".to_owned(),
+                json::JsonValue::Number(steps.to_string()),
+            );
+            object.insert(
+                "updates".to_owned(),
+                json::JsonValue::Number(updates.to_string()),
+            );
+            object.insert(
+                "epoch".to_owned(),
+                json::JsonValue::Number(epoch.to_string()),
+            );
+            object.insert(
+                "loss".to_owned(),
+                json::JsonValue::Number(format!("{loss:.8}")),
+            );
+            object.insert(
+                "evaluation_loss".to_owned(),
+                json::JsonValue::Number(format!("{evaluation_loss:.8}")),
+            );
+        }
+        runtime::RuntimeEvent::MlpCompleted {
+            model,
+            steps,
+            updates,
+            seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            batch_size,
+            hidden_size,
+            parameter_count,
+            initial_loss,
+            final_loss,
+            evaluation_loss,
+            loss_decreased,
+            resumed_from,
+            checkpoint_sha256,
+        } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("training.complete".to_owned()),
+            );
+            object.insert(
+                "operation".to_owned(),
+                json::JsonValue::String("train_mlp".to_owned()),
+            );
+            object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert("device".to_owned(), json::JsonValue::String(device.clone()));
+            object.insert("dtype".to_owned(), json::JsonValue::String(dtype.clone()));
+            object.insert(
+                "optimizer".to_owned(),
+                json::JsonValue::String(optimizer.clone()),
+            );
+            object.insert(
+                "learning_rate".to_owned(),
+                json::JsonValue::Number(format!("{learning_rate:.8}")),
+            );
+            object.insert(
+                "batch_size".to_owned(),
+                json::JsonValue::Number(batch_size.to_string()),
+            );
+            object.insert(
+                "hidden_size".to_owned(),
+                json::JsonValue::Number(hidden_size.to_string()),
+            );
+            object.insert(
+                "parameter_count".to_owned(),
+                json::JsonValue::Number(parameter_count.to_string()),
+            );
+            object.insert(
+                "steps".to_owned(),
+                json::JsonValue::Number(steps.to_string()),
+            );
+            object.insert(
+                "updates".to_owned(),
+                json::JsonValue::Number(updates.to_string()),
+            );
+            object.insert("seed".to_owned(), json::JsonValue::Number(seed.to_string()));
+            object.insert(
+                "initial_loss".to_owned(),
+                json::JsonValue::Number(format!("{initial_loss:.8}")),
+            );
+            object.insert(
+                "final_loss".to_owned(),
+                json::JsonValue::Number(format!("{final_loss:.8}")),
+            );
+            object.insert(
+                "evaluation_loss".to_owned(),
+                json::JsonValue::Number(format!("{evaluation_loss:.8}")),
+            );
+            object.insert(
+                "loss_decreased".to_owned(),
+                json::JsonValue::Bool(*loss_decreased),
+            );
+            object.insert(
+                "resumed_from".to_owned(),
+                json::JsonValue::Number(resumed_from.to_string()),
+            );
+            object.insert(
+                "checkpoint_sha256".to_owned(),
+                json::JsonValue::String(checkpoint_sha256.clone()),
             );
         }
     }
@@ -861,6 +1161,7 @@ fn run_project_path_with_diagnostic_path(
         loaded.json_max_bytes,
         loaded.json_max_depth,
         &loaded.read_roots,
+        &loaded.write_roots,
         &mut event_sink,
     );
     if let Some(error) = event_sink.take_failure() {

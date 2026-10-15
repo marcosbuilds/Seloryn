@@ -8,9 +8,10 @@ use crate::json::{self, JsonValue};
 use crate::parser as source_parser;
 use crate::tensor::{Tensor, TensorError};
 use crate::tensor_autograd;
+use sha2::{Digest, Sha256};
 use std::cmp::Ordering;
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 // Keep the logical recursion guard below the smallest stack budget used by
@@ -26,6 +27,10 @@ const MAX_TRAINING_UPDATES: usize = 10_000_000;
 const MAX_TRAINING_DATASET_BYTES: usize = 1_048_576;
 const MAX_TRAINING_SAMPLES: usize = 100_000;
 const MAX_CHECKPOINT_BYTES: usize = 1_048_576;
+const MAX_TRAINING_INPUTS: usize = 64;
+const MAX_TRAINING_OUTPUTS: usize = 32;
+const MAX_TRAINING_HIDDEN: usize = 256;
+const MAX_TRAINING_PARAMETERS: usize = 1_000_000;
 const LINEAR_DEVICE: &str = "cpu";
 const LINEAR_DTYPE: &str = "f64";
 const LINEAR_OPTIMIZER: &str = "sgd";
@@ -198,8 +203,8 @@ pub struct ExecutionOutput {
 
 /// Observable progress emitted by an explicitly enabled runtime event sink.
 ///
-/// Events are deliberately limited to the implemented linear-training
-/// fixture. They are not a general trainer or telemetry contract.
+/// Events expose the bounded CPU training profiles implemented by the runtime.
+/// They are a stable CLI stream, not a general distributed telemetry protocol.
 #[derive(Clone, Debug, PartialEq)]
 pub enum RuntimeEvent {
     Started {
@@ -241,6 +246,52 @@ pub enum RuntimeEvent {
         holdout_mae_observed: f64,
         weight: f64,
         bias: f64,
+    },
+    MlpStarted {
+        model: String,
+        train_path: String,
+        test_path: String,
+        checkpoint_path: String,
+        train_samples: usize,
+        test_samples: usize,
+        steps: i64,
+        seed: i64,
+        device: String,
+        dtype: String,
+        optimizer: String,
+        learning_rate: f32,
+        batch_size: usize,
+        hidden_size: usize,
+        parameter_count: usize,
+        resumed_from: i64,
+    },
+    MlpStep {
+        model: String,
+        step: i64,
+        steps: i64,
+        updates: usize,
+        epoch: usize,
+        loss: f32,
+        evaluation_loss: f32,
+    },
+    MlpCompleted {
+        model: String,
+        steps: i64,
+        updates: usize,
+        seed: i64,
+        device: String,
+        dtype: String,
+        optimizer: String,
+        learning_rate: f32,
+        batch_size: usize,
+        hidden_size: usize,
+        parameter_count: usize,
+        initial_loss: f32,
+        final_loss: f32,
+        evaluation_loss: f32,
+        loss_decreased: bool,
+        resumed_from: i64,
+        checkpoint_sha256: String,
     },
 }
 
@@ -288,6 +339,7 @@ pub fn execute_with_context_and_events(
         json_max_bytes,
         json_max_depth,
         &[],
+        &[],
         event_sink,
     )
 }
@@ -298,6 +350,7 @@ pub fn execute_with_capabilities_and_events(
     json_max_bytes: usize,
     json_max_depth: usize,
     read_roots: &[PathBuf],
+    write_roots: &[PathBuf],
     event_sink: &mut dyn EventSink,
 ) -> Result<ExecutionOutput, RuntimeError> {
     let lowered = crate::ir::lower(program);
@@ -307,6 +360,7 @@ pub fn execute_with_capabilities_and_events(
         json_max_bytes,
         json_max_depth,
         read_roots,
+        write_roots,
         event_sink,
     )
 }
@@ -335,6 +389,7 @@ pub fn execute_ir_with_context_and_events(
         json_max_bytes,
         json_max_depth,
         &[],
+        &[],
         event_sink,
     )
 }
@@ -345,6 +400,7 @@ pub fn execute_ir_with_capabilities_and_events(
     json_max_bytes: usize,
     json_max_depth: usize,
     read_roots: &[PathBuf],
+    write_roots: &[PathBuf],
     event_sink: &mut dyn EventSink,
 ) -> Result<ExecutionOutput, RuntimeError> {
     Interpreter::new(
@@ -353,6 +409,7 @@ pub fn execute_ir_with_capabilities_and_events(
         json_max_bytes,
         json_max_depth,
         read_roots,
+        write_roots,
         event_sink,
     )
     .execute()
@@ -379,6 +436,7 @@ struct Interpreter<'a, 'event> {
     output: String,
     base_dir: PathBuf,
     read_roots: Vec<PathBuf>,
+    write_roots: Vec<PathBuf>,
     json_max_bytes: usize,
     json_max_depth: usize,
     stdin_json: Option<Result<JsonValue, String>>,
@@ -392,6 +450,7 @@ impl<'a, 'event> Interpreter<'a, 'event> {
         json_max_bytes: usize,
         json_max_depth: usize,
         read_roots: &[PathBuf],
+        write_roots: &[PathBuf],
         event_sink: &'event mut dyn EventSink,
     ) -> Self {
         let mut functions = HashMap::new();
@@ -451,6 +510,7 @@ impl<'a, 'event> Interpreter<'a, 'event> {
             output: String::new(),
             base_dir: base_dir.to_path_buf(),
             read_roots: read_roots.to_vec(),
+            write_roots: write_roots.to_vec(),
             json_max_bytes,
             json_max_depth,
             stdin_json: None,
@@ -1087,10 +1147,7 @@ impl<'a, 'event> Interpreter<'a, 'event> {
     }
 
     fn eval_standard(&mut self, name: &str, arguments: &[Expr], span: Span) -> Eval<Value> {
-        let values = arguments
-            .iter()
-            .map(|argument| self.eval_expr(argument))
-            .collect::<Result<Vec<_>, _>>()?;
+        let values = self.eval_standard_arguments(name, arguments, span)?;
         match name {
             "read_stdin" => {
                 if self.stdin_json.is_none() {
@@ -1378,6 +1435,71 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
                 Ok(result)
             }
+            "train_mlp" => {
+                let strings = values
+                    .iter()
+                    .take(3)
+                    .map(|value| match value {
+                        Value::Text(value) => Ok(value.as_str()),
+                        _ => Err("train_mlp dataset and checkpoint paths must be Text"),
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                let number = |index: usize, label: &str| -> Result<i64, String> {
+                    match values.get(index) {
+                        Some(Value::I64(value)) => Ok(*value),
+                        _ => Err(format!("train_mlp {label} must be I64")),
+                    }
+                };
+                let learning_rate = match values.get(7) {
+                    Some(Value::F64(value)) if value.is_finite() => *value as f32,
+                    Some(Value::I64(value)) => *value as f32,
+                    _ => {
+                        return Err(Control::Runtime(self.runtime(
+                            "SEL-R203",
+                            "train_mlp learning_rate must be a finite F64",
+                            span,
+                        )));
+                    }
+                };
+                if !learning_rate.is_finite() || learning_rate <= 0.0 {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "train_mlp learning_rate must be positive and finite",
+                        span,
+                    )));
+                }
+                let seed = number(3, "seed")
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                let steps = number(4, "steps")
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                let batch_size = number(5, "batch_size")
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                let hidden_size = number(6, "hidden_size")
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                let train_file = self.resolve_read_path(strings[0], span)?;
+                let test_file = self.resolve_read_path(strings[1], span)?;
+                let checkpoint_file = self.resolve_write_path(strings[2], span)?;
+                let result = train_mlp_json(
+                    MlpTrainingRequest {
+                        train_file: &train_file,
+                        test_file: &test_file,
+                        checkpoint_file: &checkpoint_file,
+                        train_path: strings[0],
+                        test_path: strings[1],
+                        checkpoint_path: strings[2],
+                        seed,
+                        steps,
+                        batch_size,
+                        hidden_size,
+                        learning_rate,
+                    },
+                    &mut *self.event_sink,
+                )
+                .map(Value::Json)
+                .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                Ok(result)
+            }
             "load_checkpoint" => {
                 let Some(Value::Text(checkpoint)) = values.first() else {
                     return Err(Control::Runtime(self.runtime(
@@ -1403,6 +1525,93 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 span,
             ))),
         }
+    }
+
+    fn eval_standard_arguments(
+        &mut self,
+        name: &str,
+        arguments: &[Expr],
+        span: Span,
+    ) -> Eval<Vec<Value>> {
+        let parameter_names: Option<&[&str]> = match name {
+            "train_linear" => Some(&["train", "test", "seed", "steps"]),
+            "train_mlp" => Some(&[
+                "train",
+                "test",
+                "checkpoint",
+                "seed",
+                "steps",
+                "batch_size",
+                "hidden_size",
+                "learning_rate",
+            ]),
+            _ => None,
+        };
+        let Some(parameter_names) = parameter_names else {
+            return arguments
+                .iter()
+                .map(|argument| self.eval_expr(argument))
+                .collect();
+        };
+        let mut values: Vec<Option<Value>> = (0..parameter_names.len()).map(|_| None).collect();
+        let mut next_positional = 0;
+        for argument in arguments {
+            let (index, value_expression) = match argument {
+                Expr::NamedArgument {
+                    name: parameter,
+                    value,
+                    ..
+                } => {
+                    let Some(index) = parameter_names
+                        .iter()
+                        .position(|candidate| candidate == parameter)
+                    else {
+                        return Err(Control::Runtime(self.runtime(
+                            "SEL-R103",
+                            format!(
+                                "standard function `{name}` has no named parameter `{parameter}`"
+                            ),
+                            argument.span(),
+                        )));
+                    };
+                    (index, value.as_ref())
+                }
+                _ => {
+                    while next_positional < values.len() && values[next_positional].is_some() {
+                        next_positional += 1;
+                    }
+                    if next_positional >= values.len() {
+                        return Err(Control::Runtime(self.runtime(
+                            "SEL-R103",
+                            format!("standard function `{name}` received too many arguments"),
+                            span,
+                        )));
+                    }
+                    let index = next_positional;
+                    next_positional += 1;
+                    (index, argument)
+                }
+            };
+            if values[index].is_some() {
+                return Err(Control::Runtime(self.runtime(
+                    "SEL-R103",
+                    format!(
+                        "standard function `{name}` received duplicate argument `{}`",
+                        parameter_names[index]
+                    ),
+                    argument.span(),
+                )));
+            }
+            values[index] = Some(self.eval_expr(value_expression)?);
+        }
+        if values.iter().any(Option::is_none) {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-R103",
+                format!("standard function `{name}` is missing an argument"),
+                span,
+            )));
+        }
+        Ok(values.into_iter().map(Option::unwrap).collect())
     }
 
     fn resolve_read_path(&self, relative: &str, span: Span) -> Eval<PathBuf> {
@@ -1450,6 +1659,66 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 span,
             ))),
         }
+    }
+
+    fn resolve_write_path(&self, relative: &str, span: Span) -> Eval<PathBuf> {
+        let path = Path::new(relative);
+        if path.as_os_str().is_empty()
+            || path.is_absolute()
+            || path
+                .components()
+                .any(|component| matches!(component, std::path::Component::ParentDir))
+        {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-S004",
+                "path is outside the granted write root",
+                span,
+            )));
+        }
+        let candidate = self.base_dir.join(path);
+        let Some(root) = self
+            .write_roots
+            .iter()
+            .find(|root| candidate.starts_with(root))
+        else {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-S004",
+                "path is not inside a declared write capability",
+                span,
+            )));
+        };
+        let parent = candidate.parent().unwrap_or(root);
+        let canonical_parent = std::fs::canonicalize(parent).map_err(|_| {
+            Control::Runtime(self.runtime(
+                "SEL-S004",
+                "write path parent could not be canonicalized within a declared capability",
+                span,
+            ))
+        })?;
+        if !canonical_parent.starts_with(root) {
+            return Err(Control::Runtime(self.runtime(
+                "SEL-S004",
+                "write path escapes a declared capability through a symbolic link",
+                span,
+            )));
+        }
+        if candidate.exists() {
+            let canonical = std::fs::canonicalize(&candidate).map_err(|_| {
+                Control::Runtime(self.runtime(
+                    "SEL-S004",
+                    "existing write path could not be canonicalized",
+                    span,
+                ))
+            })?;
+            if !canonical.starts_with(root) {
+                return Err(Control::Runtime(self.runtime(
+                    "SEL-S004",
+                    "write path escapes a declared capability through a symbolic link",
+                    span,
+                )));
+            }
+        }
+        Ok(candidate)
     }
 
     fn eval_builtin(&mut self, builtin: Builtin, arguments: &[Expr], span: Span) -> Eval<Value> {
@@ -2511,6 +2780,910 @@ fn train_linear_json(
         ),
         ("seed".to_owned(), JsonValue::Number(seed.to_string())),
     ])))
+}
+
+struct MlpDataset {
+    inputs: Vec<Vec<f32>>,
+    targets: Vec<Vec<f32>>,
+    input_size: usize,
+    output_size: usize,
+    sha256: String,
+}
+
+struct MlpModel {
+    input_size: usize,
+    hidden_size: usize,
+    output_size: usize,
+    first_weights: Vec<f32>,
+    first_bias: Vec<f32>,
+    second_weights: Vec<f32>,
+    second_bias: Vec<f32>,
+}
+
+struct MlpState {
+    model: MlpModel,
+    step: i64,
+    cursor: usize,
+    epoch: usize,
+    order: Vec<usize>,
+    rng_state: u64,
+}
+
+struct MlpTrainingRequest<'a> {
+    train_file: &'a Path,
+    test_file: &'a Path,
+    checkpoint_file: &'a Path,
+    train_path: &'a str,
+    test_path: &'a str,
+    checkpoint_path: &'a str,
+    seed: i64,
+    steps: i64,
+    batch_size: i64,
+    hidden_size: i64,
+    learning_rate: f32,
+}
+
+fn train_mlp_json(
+    request: MlpTrainingRequest<'_>,
+    event_sink: &mut dyn EventSink,
+) -> Result<JsonValue, String> {
+    let MlpTrainingRequest {
+        train_file,
+        test_file,
+        checkpoint_file,
+        train_path,
+        test_path,
+        checkpoint_path,
+        seed,
+        steps,
+        batch_size,
+        hidden_size,
+        learning_rate,
+    } = request;
+    let train = read_mlp_dataset(train_file, train_path)?;
+    let test = read_mlp_dataset(test_file, test_path)?;
+    if train.input_size != test.input_size || train.output_size != test.output_size {
+        return Err(
+            "train and test datasets must have identical input/output dimensions".to_owned(),
+        );
+    }
+    if !(0..=MAX_TRAINING_STEPS).contains(&steps) {
+        return Err(format!(
+            "training steps must be between 0 and {MAX_TRAINING_STEPS}"
+        ));
+    }
+    let batch_size = usize::try_from(batch_size)
+        .map_err(|_| "training batch_size must be positive".to_owned())?;
+    if batch_size == 0 || batch_size > train.inputs.len() {
+        return Err(format!(
+            "training batch_size must be between 1 and {}",
+            train.inputs.len()
+        ));
+    }
+    let hidden_size = usize::try_from(hidden_size)
+        .map_err(|_| "training hidden_size must be positive".to_owned())?;
+    if hidden_size == 0 || hidden_size > MAX_TRAINING_HIDDEN {
+        return Err(format!(
+            "training hidden_size must be between 1 and {MAX_TRAINING_HIDDEN}"
+        ));
+    }
+    let parameter_count = train
+        .input_size
+        .checked_mul(hidden_size)
+        .and_then(|value| value.checked_add(hidden_size))
+        .and_then(|value| value.checked_add(hidden_size.checked_mul(train.output_size)?))
+        .and_then(|value| value.checked_add(train.output_size))
+        .ok_or_else(|| "MLP parameter count overflowed".to_owned())?;
+    if parameter_count > MAX_TRAINING_PARAMETERS {
+        return Err(format!(
+            "MLP parameter count exceeds maximum {MAX_TRAINING_PARAMETERS}"
+        ));
+    }
+    if !learning_rate.is_finite() || learning_rate <= 0.0 {
+        return Err("training learning_rate must be positive and finite".to_owned());
+    }
+
+    let mut resumed_from = 0_i64;
+    let mut state = if checkpoint_file.is_file() {
+        let source = read_bounded_utf8(checkpoint_file, MAX_CHECKPOINT_BYTES, "MLP checkpoint")?;
+        let value =
+            json::parse(&source, MAX_CHECKPOINT_BYTES, 32).map_err(|error| error.message)?;
+        let loaded = parse_mlp_checkpoint(
+            &value,
+            &train,
+            &test,
+            seed,
+            batch_size,
+            hidden_size,
+            learning_rate,
+        )?;
+        resumed_from = loaded.step;
+        loaded
+    } else {
+        let rng_state = seed as u64 ^ 0x9E37_79B9_7F4A_7C15;
+        let model = initialize_mlp(train.input_size, hidden_size, train.output_size, rng_state);
+        let mut state = MlpState {
+            model,
+            step: 0,
+            cursor: 0,
+            epoch: 0,
+            order: (0..train.inputs.len()).collect(),
+            rng_state,
+        };
+        shuffle_order(&mut state.order, &mut state.rng_state);
+        state
+    };
+    if state.step > steps {
+        return Err(format!(
+            "checkpoint step {} is ahead of requested target {steps}",
+            state.step
+        ));
+    }
+    let initial_loss = mlp_loss(&state.model, &train)?;
+    event_sink.emit(RuntimeEvent::MlpStarted {
+        model: "mlp".to_owned(),
+        train_path: train_path.to_owned(),
+        test_path: test_path.to_owned(),
+        checkpoint_path: checkpoint_path.to_owned(),
+        train_samples: train.inputs.len(),
+        test_samples: test.inputs.len(),
+        steps,
+        seed,
+        device: "cpu".to_owned(),
+        dtype: "f32".to_owned(),
+        optimizer: "sgd".to_owned(),
+        learning_rate,
+        batch_size,
+        hidden_size,
+        parameter_count,
+        resumed_from,
+    });
+
+    let progress_interval = (steps / 10).max(1);
+    while state.step < steps {
+        if state.cursor >= state.order.len() {
+            state.cursor = 0;
+            state.epoch = state.epoch.saturating_add(1);
+            shuffle_order(&mut state.order, &mut state.rng_state);
+        }
+        let end = (state.cursor + batch_size).min(state.order.len());
+        let batch = state.order[state.cursor..end].to_vec();
+        state.cursor = end;
+        mlp_update(&mut state.model, &train, &batch, learning_rate)?;
+        state.step += 1;
+        if state.step == 1 || state.step == steps || state.step % progress_interval == 0 {
+            let loss = mlp_loss(&state.model, &train)?;
+            let evaluation_loss = mlp_loss(&state.model, &test)?;
+            let checkpoint =
+                encode_mlp_checkpoint(&state, &train, &test, seed, batch_size, learning_rate);
+            let checkpoint_sha256 = write_checkpoint_atomic(checkpoint_file, &checkpoint)?;
+            event_sink.emit(RuntimeEvent::MlpStep {
+                model: "mlp".to_owned(),
+                step: state.step,
+                steps,
+                updates: state.step as usize,
+                epoch: state.epoch,
+                loss,
+                evaluation_loss,
+            });
+            let _ = checkpoint_sha256;
+        }
+    }
+    let final_loss = mlp_loss(&state.model, &train)?;
+    let evaluation_loss = mlp_loss(&state.model, &test)?;
+    let checkpoint = encode_mlp_checkpoint(&state, &train, &test, seed, batch_size, learning_rate);
+    let checkpoint_sha256 = write_checkpoint_atomic(checkpoint_file, &checkpoint)?;
+    let loss_decreased = final_loss < initial_loss;
+    event_sink.emit(RuntimeEvent::MlpCompleted {
+        model: "mlp".to_owned(),
+        steps,
+        updates: state.step as usize,
+        seed,
+        device: "cpu".to_owned(),
+        dtype: "f32".to_owned(),
+        optimizer: "sgd".to_owned(),
+        learning_rate,
+        batch_size,
+        hidden_size,
+        parameter_count,
+        initial_loss,
+        final_loss,
+        evaluation_loss,
+        loss_decreased,
+        resumed_from,
+        checkpoint_sha256: checkpoint_sha256.clone(),
+    });
+    Ok(JsonValue::Object(std::collections::BTreeMap::from([
+        (
+            "operation".to_owned(),
+            JsonValue::String("train_mlp".to_owned()),
+        ),
+        ("model".to_owned(), JsonValue::String("mlp".to_owned())),
+        ("device".to_owned(), JsonValue::String("cpu".to_owned())),
+        ("dtype".to_owned(), JsonValue::String("f32".to_owned())),
+        ("optimizer".to_owned(), JsonValue::String("sgd".to_owned())),
+        (
+            "steps".to_owned(),
+            JsonValue::Number(state.step.to_string()),
+        ),
+        (
+            "batch_size".to_owned(),
+            JsonValue::Number(batch_size.to_string()),
+        ),
+        (
+            "hidden_size".to_owned(),
+            JsonValue::Number(hidden_size.to_string()),
+        ),
+        (
+            "parameter_count".to_owned(),
+            JsonValue::Number(parameter_count.to_string()),
+        ),
+        (
+            "initial_loss".to_owned(),
+            JsonValue::Number(format_f32(initial_loss)),
+        ),
+        (
+            "final_loss".to_owned(),
+            JsonValue::Number(format_f32(final_loss)),
+        ),
+        (
+            "evaluation_loss".to_owned(),
+            JsonValue::Number(format_f32(evaluation_loss)),
+        ),
+        ("loss_decreased".to_owned(), JsonValue::Bool(loss_decreased)),
+        (
+            "resumed_from".to_owned(),
+            JsonValue::Number(resumed_from.to_string()),
+        ),
+        (
+            "checkpoint_sha256".to_owned(),
+            JsonValue::String(checkpoint_sha256),
+        ),
+    ])))
+}
+
+fn read_mlp_dataset(path: &Path, label: &str) -> Result<MlpDataset, String> {
+    let source = read_bounded_utf8(
+        path,
+        MAX_TRAINING_DATASET_BYTES,
+        &format!("training dataset `{label}`"),
+    )?;
+    let sha256 = sha256_hex(source.as_bytes());
+    let value =
+        json::parse(&source, MAX_TRAINING_DATASET_BYTES, 32).map_err(|error| error.message)?;
+    let JsonValue::Object(values) = value else {
+        return Err("MLP dataset must be a JSON object".to_owned());
+    };
+    let Some(JsonValue::Array(input_values)) = values.get("inputs") else {
+        return Err("MLP dataset is missing inputs".to_owned());
+    };
+    let Some(JsonValue::Array(target_values)) = values.get("targets") else {
+        return Err("MLP dataset is missing targets".to_owned());
+    };
+    if input_values.is_empty() || input_values.len() != target_values.len() {
+        return Err("MLP dataset inputs/targets lengths are invalid".to_owned());
+    }
+    if input_values.len() > MAX_TRAINING_SAMPLES {
+        return Err(format!(
+            "MLP dataset exceeds maximum {MAX_TRAINING_SAMPLES} samples"
+        ));
+    }
+    let inputs = input_values
+        .iter()
+        .map(|value| json_vector(value, "inputs"))
+        .collect::<Result<Vec<_>, _>>()?;
+    let targets = target_values
+        .iter()
+        .map(|value| json_vector(value, "targets"))
+        .collect::<Result<Vec<_>, _>>()?;
+    let input_size = inputs[0].len();
+    let output_size = targets[0].len();
+    if input_size == 0 || input_size > MAX_TRAINING_INPUTS {
+        return Err(format!(
+            "MLP input size must be between 1 and {MAX_TRAINING_INPUTS}"
+        ));
+    }
+    if output_size == 0 || output_size > MAX_TRAINING_OUTPUTS {
+        return Err(format!(
+            "MLP output size must be between 1 and {MAX_TRAINING_OUTPUTS}"
+        ));
+    }
+    if inputs.iter().any(|row| row.len() != input_size)
+        || targets.iter().any(|row| row.len() != output_size)
+    {
+        return Err("MLP dataset rows must have uniform dimensions".to_owned());
+    }
+    Ok(MlpDataset {
+        inputs,
+        targets,
+        input_size,
+        output_size,
+        sha256,
+    })
+}
+
+fn json_vector(value: &JsonValue, label: &str) -> Result<Vec<f32>, String> {
+    let JsonValue::Array(values) = value else {
+        return Err(format!("MLP dataset {label} rows must be arrays"));
+    };
+    values
+        .iter()
+        .map(|value| {
+            let JsonValue::Number(number) = value else {
+                return Err(format!("MLP dataset {label} contains a non-number"));
+            };
+            let value = number
+                .parse::<f32>()
+                .map_err(|_| format!("MLP dataset {label} contains an invalid number"))?;
+            value
+                .is_finite()
+                .then_some(value)
+                .ok_or_else(|| format!("MLP dataset {label} contains a non-finite number"))
+        })
+        .collect()
+}
+
+fn initialize_mlp(
+    input_size: usize,
+    hidden_size: usize,
+    output_size: usize,
+    mut rng_state: u64,
+) -> MlpModel {
+    let first_scale = (2.0 / input_size as f32).sqrt();
+    let second_scale = (2.0 / hidden_size as f32).sqrt();
+    let first_weights = (0..input_size * hidden_size)
+        .map(|_| (next_unit(&mut rng_state) * 2.0 - 1.0) * first_scale)
+        .collect();
+    let second_weights = (0..hidden_size * output_size)
+        .map(|_| (next_unit(&mut rng_state) * 2.0 - 1.0) * second_scale)
+        .collect();
+    MlpModel {
+        input_size,
+        hidden_size,
+        output_size,
+        first_weights,
+        first_bias: vec![0.0; hidden_size],
+        second_weights,
+        second_bias: vec![0.0; output_size],
+    }
+}
+
+fn mlp_update(
+    model: &mut MlpModel,
+    dataset: &MlpDataset,
+    batch: &[usize],
+    learning_rate: f32,
+) -> Result<(), String> {
+    let mut first_gradients = vec![0.0; model.first_weights.len()];
+    let mut first_bias_gradients = vec![0.0; model.first_bias.len()];
+    let mut second_gradients = vec![0.0; model.second_weights.len()];
+    let mut second_bias_gradients = vec![0.0; model.second_bias.len()];
+    let mut hidden = vec![0.0; model.hidden_size];
+    let mut pre_activation = vec![0.0; model.hidden_size];
+    let mut output = vec![0.0; model.output_size];
+    let scale = 1.0 / (batch.len() * model.output_size) as f32;
+    for &sample in batch {
+        forward_mlp(
+            model,
+            &dataset.inputs[sample],
+            &mut pre_activation,
+            &mut hidden,
+            &mut output,
+        );
+        let mut output_gradient = vec![0.0; model.output_size];
+        for index in 0..model.output_size {
+            output_gradient[index] = (output[index] - dataset.targets[sample][index]) * 2.0 * scale;
+            second_bias_gradients[index] += output_gradient[index];
+            for hidden_index in 0..model.hidden_size {
+                second_gradients[hidden_index * model.output_size + index] +=
+                    hidden[hidden_index] * output_gradient[index];
+            }
+        }
+        for hidden_index in 0..model.hidden_size {
+            let hidden_gradient = if pre_activation[hidden_index] > 0.0 {
+                (0..model.output_size)
+                    .map(|index| {
+                        output_gradient[index]
+                            * model.second_weights[hidden_index * model.output_size + index]
+                    })
+                    .sum::<f32>()
+            } else {
+                0.0
+            };
+            first_bias_gradients[hidden_index] += hidden_gradient;
+            for input_index in 0..model.input_size {
+                first_gradients[input_index * model.hidden_size + hidden_index] +=
+                    dataset.inputs[sample][input_index] * hidden_gradient;
+            }
+        }
+    }
+    for (value, gradient) in model.first_weights.iter_mut().zip(first_gradients) {
+        *value -= learning_rate * gradient;
+    }
+    for (value, gradient) in model.first_bias.iter_mut().zip(first_bias_gradients) {
+        *value -= learning_rate * gradient;
+    }
+    for (value, gradient) in model.second_weights.iter_mut().zip(second_gradients) {
+        *value -= learning_rate * gradient;
+    }
+    for (value, gradient) in model.second_bias.iter_mut().zip(second_bias_gradients) {
+        *value -= learning_rate * gradient;
+    }
+    if model
+        .first_weights
+        .iter()
+        .chain(&model.first_bias)
+        .chain(&model.second_weights)
+        .chain(&model.second_bias)
+        .any(|value| !value.is_finite())
+    {
+        return Err("MLP update produced a non-finite parameter".to_owned());
+    }
+    Ok(())
+}
+
+fn forward_mlp(
+    model: &MlpModel,
+    input: &[f32],
+    pre_activation: &mut [f32],
+    hidden: &mut [f32],
+    output: &mut [f32],
+) {
+    for hidden_index in 0..model.hidden_size {
+        let value = model.first_bias[hidden_index]
+            + input
+                .iter()
+                .enumerate()
+                .map(|(input_index, value)| {
+                    value * model.first_weights[input_index * model.hidden_size + hidden_index]
+                })
+                .sum::<f32>();
+        pre_activation[hidden_index] = value;
+        hidden[hidden_index] = value.max(0.0);
+    }
+    for (output_index, output_value) in output.iter_mut().enumerate().take(model.output_size) {
+        *output_value = model.second_bias[output_index]
+            + (0..model.hidden_size)
+                .map(|hidden_index| {
+                    hidden[hidden_index]
+                        * model.second_weights[hidden_index * model.output_size + output_index]
+                })
+                .sum::<f32>();
+    }
+}
+
+fn mlp_loss(model: &MlpModel, dataset: &MlpDataset) -> Result<f32, String> {
+    let mut pre_activation = vec![0.0; model.hidden_size];
+    let mut hidden = vec![0.0; model.hidden_size];
+    let mut output = vec![0.0; model.output_size];
+    let mut loss = 0.0;
+    for (input, target) in dataset.inputs.iter().zip(&dataset.targets) {
+        forward_mlp(model, input, &mut pre_activation, &mut hidden, &mut output);
+        loss += output
+            .iter()
+            .zip(target)
+            .map(|(predicted, target)| (predicted - target).powi(2))
+            .sum::<f32>();
+    }
+    let loss = loss / (dataset.inputs.len() * model.output_size) as f32;
+    loss.is_finite()
+        .then_some(loss)
+        .ok_or_else(|| "MLP loss is non-finite".to_owned())
+}
+
+fn parse_mlp_checkpoint(
+    value: &JsonValue,
+    train: &MlpDataset,
+    test: &MlpDataset,
+    seed: i64,
+    batch_size: usize,
+    hidden_size: usize,
+    learning_rate: f32,
+) -> Result<MlpState, String> {
+    let JsonValue::Object(values) = value else {
+        return Err("MLP checkpoint root must be an object".to_owned());
+    };
+    if !matches!(values.get("schema"), Some(JsonValue::String(value)) if value == "seloryn.training.checkpoint.v1")
+    {
+        return Err("MLP checkpoint schema is unsupported".to_owned());
+    }
+    if !matches!(values.get("model"), Some(JsonValue::String(value)) if value == "mlp") {
+        return Err("MLP checkpoint model is unsupported".to_owned());
+    }
+    if !matches!(
+        values.get("optimizer"),
+        Some(JsonValue::Object(optimizer))
+            if matches!(optimizer.get("name"), Some(JsonValue::String(value)) if value == "sgd")
+                && matches!(optimizer.get("state"), Some(JsonValue::String(value)) if value == "stateless")
+    ) {
+        return Err("MLP checkpoint optimizer is unsupported".to_owned());
+    }
+    if !matches!(values.get("train_sha256"), Some(JsonValue::String(value)) if value == &train.sha256)
+        || !matches!(values.get("test_sha256"), Some(JsonValue::String(value)) if value == &test.sha256)
+    {
+        return Err("MLP checkpoint dataset hash does not match the current data".to_owned());
+    }
+    let checkpoint_seed = json_i64_field(values, "seed")?;
+    if checkpoint_seed != seed {
+        return Err("MLP checkpoint seed does not match the requested seed".to_owned());
+    }
+    let step = json_i64_field(values, "step")?;
+    let checkpoint_batch = json_usize_field(values, "batch_size")?;
+    let checkpoint_hidden = json_usize_field(values, "hidden_size")?;
+    let checkpoint_learning_rate = json_f32_field(values, "learning_rate")?;
+    if checkpoint_batch != batch_size
+        || checkpoint_hidden != hidden_size
+        || (checkpoint_learning_rate - learning_rate).abs() > f32::EPSILON
+    {
+        return Err("MLP checkpoint hyperparameters do not match the requested run".to_owned());
+    }
+    if step < 0 {
+        return Err("MLP checkpoint step cannot be negative".to_owned());
+    }
+    let input_size = json_usize_field(values, "input_size")?;
+    if input_size != train.input_size
+        || json_usize_field(values, "output_size")? != train.output_size
+    {
+        return Err("MLP checkpoint dimensions do not match the current data".to_owned());
+    }
+    let model_values = match values.get("weights") {
+        Some(JsonValue::Object(value)) => value,
+        _ => return Err("MLP checkpoint weights are missing".to_owned()),
+    };
+    let actual_weights_hash =
+        sha256_hex(json::encode(&JsonValue::Object(model_values.clone())).as_bytes());
+    if !matches!(values.get("weights_sha256"), Some(JsonValue::String(value)) if value == &actual_weights_hash)
+    {
+        return Err("MLP checkpoint weights hash does not match the payload".to_owned());
+    }
+    let model = MlpModel {
+        input_size,
+        hidden_size,
+        output_size: train.output_size,
+        first_weights: json_f32_array(model_values, "first_weights")?,
+        first_bias: json_f32_array(model_values, "first_bias")?,
+        second_weights: json_f32_array(model_values, "second_weights")?,
+        second_bias: json_f32_array(model_values, "second_bias")?,
+    };
+    if model.first_weights.len() != input_size * hidden_size
+        || model.first_bias.len() != hidden_size
+        || model.second_weights.len() != hidden_size * train.output_size
+        || model.second_bias.len() != train.output_size
+    {
+        return Err("MLP checkpoint parameter shapes are invalid".to_owned());
+    }
+    let data = match values.get("data") {
+        Some(JsonValue::Object(value)) => value,
+        _ => return Err("MLP checkpoint data state is missing".to_owned()),
+    };
+    let order = json_usize_array(data, "order")?;
+    if order.len() != train.inputs.len()
+        || order.iter().any(|index| *index >= train.inputs.len())
+        || {
+            let mut sorted = order.clone();
+            sorted.sort_unstable();
+            sorted != (0..train.inputs.len()).collect::<Vec<_>>()
+        }
+    {
+        return Err("MLP checkpoint sampler order is invalid".to_owned());
+    }
+    let cursor = json_usize_field(data, "cursor")?;
+    if cursor > order.len() {
+        return Err("MLP checkpoint sampler cursor is invalid".to_owned());
+    }
+    Ok(MlpState {
+        model,
+        step,
+        cursor,
+        epoch: json_usize_field(data, "epoch")?,
+        order,
+        rng_state: json_u64_field(data, "rng_state")?,
+    })
+}
+
+fn encode_mlp_checkpoint(
+    state: &MlpState,
+    train: &MlpDataset,
+    test: &MlpDataset,
+    seed: i64,
+    batch_size: usize,
+    learning_rate: f32,
+) -> String {
+    let model = &state.model;
+    let weights = std::collections::BTreeMap::from([
+        (
+            "first_weights".to_owned(),
+            json_f32_values(&model.first_weights),
+        ),
+        ("first_bias".to_owned(), json_f32_values(&model.first_bias)),
+        (
+            "second_weights".to_owned(),
+            json_f32_values(&model.second_weights),
+        ),
+        (
+            "second_bias".to_owned(),
+            json_f32_values(&model.second_bias),
+        ),
+    ]);
+    let data = std::collections::BTreeMap::from([
+        (
+            "cursor".to_owned(),
+            JsonValue::Number(state.cursor.to_string()),
+        ),
+        (
+            "epoch".to_owned(),
+            JsonValue::Number(state.epoch.to_string()),
+        ),
+        (
+            "order".to_owned(),
+            JsonValue::Array(
+                state
+                    .order
+                    .iter()
+                    .map(|value| JsonValue::Number(value.to_string()))
+                    .collect(),
+            ),
+        ),
+        (
+            "rng_state".to_owned(),
+            JsonValue::Number(state.rng_state.to_string()),
+        ),
+    ]);
+    let weights_value = JsonValue::Object(weights);
+    let weights_sha256 = sha256_hex(json::encode(&weights_value).as_bytes());
+    let checkpoint = JsonValue::Object(std::collections::BTreeMap::from([
+        (
+            "schema".to_owned(),
+            JsonValue::String("seloryn.training.checkpoint.v1".to_owned()),
+        ),
+        ("model".to_owned(), JsonValue::String("mlp".to_owned())),
+        ("step".to_owned(), JsonValue::Number(state.step.to_string())),
+        ("seed".to_owned(), JsonValue::Number(seed.to_string())),
+        (
+            "input_size".to_owned(),
+            JsonValue::Number(train.input_size.to_string()),
+        ),
+        (
+            "hidden_size".to_owned(),
+            JsonValue::Number(model.hidden_size.to_string()),
+        ),
+        (
+            "output_size".to_owned(),
+            JsonValue::Number(train.output_size.to_string()),
+        ),
+        (
+            "batch_size".to_owned(),
+            JsonValue::Number(batch_size.to_string()),
+        ),
+        (
+            "learning_rate".to_owned(),
+            JsonValue::Number(format_f32(learning_rate)),
+        ),
+        (
+            "train_sha256".to_owned(),
+            JsonValue::String(train.sha256.clone()),
+        ),
+        (
+            "test_sha256".to_owned(),
+            JsonValue::String(test.sha256.clone()),
+        ),
+        (
+            "optimizer".to_owned(),
+            JsonValue::Object(std::collections::BTreeMap::from([
+                ("name".to_owned(), JsonValue::String("sgd".to_owned())),
+                (
+                    "state".to_owned(),
+                    JsonValue::String("stateless".to_owned()),
+                ),
+            ])),
+        ),
+        (
+            "weights_sha256".to_owned(),
+            JsonValue::String(weights_sha256),
+        ),
+        ("weights".to_owned(), weights_value),
+        ("data".to_owned(), JsonValue::Object(data)),
+    ]));
+    json::encode(&checkpoint)
+}
+
+fn write_checkpoint_atomic(path: &Path, source: &str) -> Result<String, String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "checkpoint path has no parent directory".to_owned())?;
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "checkpoint path has no valid file name".to_owned())?;
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "checkpoint temporary file clock is invalid".to_owned())?
+        .as_nanos();
+    let temporary = parent.join(format!(".{file_name}.tmp-{}-{nonce}", std::process::id()));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| format!("checkpoint temporary file creation failed: {error}"))?;
+    file.write_all(source.as_bytes())
+        .and_then(|()| file.flush())
+        .and_then(|()| file.sync_all())
+        .map_err(|error| format!("checkpoint temporary file flush failed: {error}"))?;
+    drop(file);
+    replace_checkpoint_atomically(&temporary, path)?;
+    Ok(sha256_hex(source.as_bytes()))
+}
+
+#[cfg(not(windows))]
+fn replace_checkpoint_atomically(temporary: &Path, destination: &Path) -> Result<(), String> {
+    std::fs::rename(temporary, destination)
+        .map_err(|error| format!("checkpoint atomic rename failed: {error}"))
+}
+
+#[cfg(windows)]
+fn replace_checkpoint_atomically(temporary: &Path, destination: &Path) -> Result<(), String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows_sys::Win32::Storage::FileSystem::{
+        MOVEFILE_REPLACE_EXISTING, MOVEFILE_WRITE_THROUGH, MoveFileExW,
+    };
+    let temporary = temporary
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let destination = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect::<Vec<_>>();
+    let result = unsafe {
+        MoveFileExW(
+            temporary.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        return Err(format!(
+            "checkpoint atomic replacement failed: {}",
+            std::io::Error::last_os_error()
+        ));
+    }
+    Ok(())
+}
+
+fn json_f32_values(values: &[f32]) -> JsonValue {
+    JsonValue::Array(
+        values
+            .iter()
+            .map(|value| JsonValue::Number(format_f32(*value)))
+            .collect(),
+    )
+}
+
+fn json_f32_array(
+    values: &std::collections::BTreeMap<String, JsonValue>,
+    field: &str,
+) -> Result<Vec<f32>, String> {
+    let Some(JsonValue::Array(values)) = values.get(field) else {
+        return Err(format!("MLP checkpoint field `{field}` is missing"));
+    };
+    values
+        .iter()
+        .map(|value| match value {
+            JsonValue::Number(value) => {
+                let parsed = value.parse::<f32>().map_err(|_| {
+                    format!("MLP checkpoint field `{field}` contains an invalid number")
+                })?;
+                parsed.is_finite().then_some(parsed).ok_or_else(|| {
+                    format!("MLP checkpoint field `{field}` contains a non-finite number")
+                })
+            }
+            _ => Err(format!(
+                "MLP checkpoint field `{field}` contains a non-number"
+            )),
+        })
+        .collect()
+}
+
+fn json_usize_array(
+    values: &std::collections::BTreeMap<String, JsonValue>,
+    field: &str,
+) -> Result<Vec<usize>, String> {
+    let Some(JsonValue::Array(values)) = values.get(field) else {
+        return Err(format!("MLP checkpoint field `{field}` is missing"));
+    };
+    values
+        .iter()
+        .map(|value| match value {
+            JsonValue::Number(value) => value
+                .parse::<usize>()
+                .map_err(|_| format!("MLP checkpoint field `{field}` contains an invalid integer")),
+            _ => Err(format!(
+                "MLP checkpoint field `{field}` contains a non-integer"
+            )),
+        })
+        .collect()
+}
+
+fn json_i64_field(
+    values: &std::collections::BTreeMap<String, JsonValue>,
+    field: &str,
+) -> Result<i64, String> {
+    match values.get(field) {
+        Some(JsonValue::Number(value)) => value
+            .parse()
+            .map_err(|_| format!("MLP checkpoint field `{field}` is not an integer")),
+        _ => Err(format!("MLP checkpoint field `{field}` is missing")),
+    }
+}
+
+fn json_u64_field(
+    values: &std::collections::BTreeMap<String, JsonValue>,
+    field: &str,
+) -> Result<u64, String> {
+    match values.get(field) {
+        Some(JsonValue::Number(value)) => value
+            .parse::<u64>()
+            .map_err(|_| format!("MLP checkpoint field `{field}` is not an unsigned integer")),
+        _ => Err(format!("MLP checkpoint field `{field}` is missing")),
+    }
+}
+
+fn json_usize_field(
+    values: &std::collections::BTreeMap<String, JsonValue>,
+    field: &str,
+) -> Result<usize, String> {
+    json_u64_field(values, field).and_then(|value| {
+        usize::try_from(value).map_err(|_| format!("MLP checkpoint field `{field}` is too large"))
+    })
+}
+
+fn json_f32_field(
+    values: &std::collections::BTreeMap<String, JsonValue>,
+    field: &str,
+) -> Result<f32, String> {
+    match values.get(field) {
+        Some(JsonValue::Number(value)) => {
+            let parsed = value
+                .parse::<f32>()
+                .map_err(|_| format!("MLP checkpoint field `{field}` is not a finite number"))?;
+            parsed
+                .is_finite()
+                .then_some(parsed)
+                .ok_or_else(|| format!("MLP checkpoint field `{field}` is not a finite number"))
+        }
+        _ => Err(format!("MLP checkpoint field `{field}` is missing")),
+    }
+}
+
+fn shuffle_order(order: &mut [usize], state: &mut u64) {
+    for index in (1..order.len()).rev() {
+        let swap = (next_u64(state) as usize) % (index + 1);
+        order.swap(index, swap);
+    }
+}
+
+fn next_u64(state: &mut u64) -> u64 {
+    let mut value = *state;
+    value ^= value << 13;
+    value ^= value >> 7;
+    value ^= value << 17;
+    *state = value;
+    value
+}
+
+fn next_unit(state: &mut u64) -> f32 {
+    (next_u64(state) as u32) as f32 / u32::MAX as f32
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn format_f32(value: f32) -> String {
+    value.to_string()
 }
 
 fn read_xy_dataset(path: &Path, label: &str) -> Result<(Vec<f64>, Vec<f64>), String> {

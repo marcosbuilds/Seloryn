@@ -1,6 +1,6 @@
 [package]
 name = "seloryn"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 publish = false
 description = "Seloryn language bootstrap CLI"
@@ -8,12 +8,16 @@ license = "MIT"
 default-run = "seloryn"
 
 [package.metadata.seloryn]
-language-version = "0.01"
-status = "experimental-implemented"
+language-version = "0.02"
+status = "verified-preview"
 
 [dependencies]
+sha2 = "0.10"
 unicode-ident = "1.0"
 unicode-normalization = "0.1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Storage_FileSystem"] }
 
 [[bin]]
 name = "seloryn"

@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.01 currently provides an experimental syntax and semantic checker, deterministic core IR, pure interpreter, local project modules, bounded JSON capability, Tensor[F32] reverse-mode autodiff, narrow training fixtures and an experimental `.selyapp` bundle path in the development repository. There is no verified runtime release, package registry, hosted API or supported runtime installation command; local installer scripts are development tooling only.
+**Availability:** Seloryn 0.02 currently provides a verified-preview CPU MLP training profile, plus an experimental syntax/semantic checker, deterministic core IR, pure interpreter, local project modules, bounded JSON capability, Tensor[F32] reverse-mode autodiff and `.selyapp` bundles. There is no GPU/distributed backend, package registry, hosted API, stable ABI or supported runtime installer; the preview is used from a built binary or source checkout.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 

@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current status: language 0.01 / runtime package 0.1.0, experimental checker/runtime, bounded N1/N2 CPU tensors, scalar and Tensor[F32] reverse-mode autodiff, narrow linear-training and checkpoint-schema fixtures, and deterministic bundles.** Seloryn can validate and execute a bounded `.sely` subset through `check`, `run` and local project commands. There is no package registry, GPU backend, distributed runtime, supported runtime installer or stable release. Code samples below are design concepts unless explicitly marked as checked behavior. See the [current status](docs/project/status.md) and [tensor reference](docs/compute/tensors.md).
+> **Current status: language 0.02 / runtime package 0.2.0, verified-preview CPU MLP training plus bounded tensors, autodiff, projects and deterministic bundles.** Seloryn can validate and execute a bounded `.sely` subset through `check`, `run` and local project commands. GPU, distributed, registry, installer and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
 
 > **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** This repository records only what is implemented and verified.
 
@@ -13,7 +13,7 @@
 
 ## What exists today vs. what is designed
 
-Seloryn is being designed as one expressive language for reliable AI development, integration and serving. The implemented result is a checker, deterministic core IR, pure interpreter, local modules, bounded JSON/file capabilities, narrow model/training fixtures and a reproducible experimental bundle path. General effects, broad model APIs and accelerator layers remain roadmap work.
+Seloryn is being built as one typed language for reliable AI development, integration and serving. The implemented result is a checker, deterministic core IR, pure interpreter, local modules, bounded JSON/file capabilities, a real small CPU MLP training profile and a reproducible bundle path. General effects, broad model APIs and accelerator layers remain outside the verified preview.
 
 ## Mission: AI development and integration
 
@@ -25,7 +25,7 @@ claim. If equivalent workloads do not show the proposed reduction in failures,
 integration drift or diagnostic cost, the architecture must be reconsidered
 instead of gaining features by default.
 
-| Capability | Availability in 0.01 | Evidence or boundary |
+| Capability | Availability in 0.02 | Evidence or boundary |
 |:--|:--|:--|
 | UTF-8 lexer, layout and parser subset | Implemented and tested | [`src/parser.rs`](src/parser.rs), parser tests |
 | Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | [`src/semantic.rs`](src/semantic.rs), semantic tests |
@@ -37,8 +37,9 @@ instead of gaining features by default.
 | Local modules and project manifests | Experimental implemented | Public project fixtures; no registry or external package resolver |
 | VS Code syntax highlighting, native completion, saved-file CLI diagnostics and optional `.sely` file icons | Verified editor preview | [`tooling/vscode`](tooling/vscode); headless tests, real CLI bridge fixture, reproducible local VSIX and CLI installation inspection; Explorer rendering remains environment-dependent |
 | JSON read/parse/encode/get and bounded file capability | Experimental implemented | JSON project fixtures; paths remain root-confined |
-| Scalar and Tensor[F32] reverse-mode tapes, finite-difference gradient check, linear-training and checkpoint-validation fixtures | Experimental implemented, narrow | [`examples/autograd`](examples/autograd), [`tests/n3_tensor_probe.py`](tests/n3_tensor_probe.py), runtime tests and public linear example; no optimizer, provider or MLP claim |
-| Opt-in sampled training events | Experimental implemented, narrow | `seloryn run ... --log=human|json`; stderr-only lifecycle for `training.train_linear`, not general telemetry |
+| Scalar and Tensor[F32] reverse-mode tapes and finite-difference gradient check | Experimental implemented, narrow | [`examples/autograd`](examples/autograd), [`tests/n3_tensor_probe.py`](tests/n3_tensor_probe.py) |
+| Bounded CPU MLP training, mini-batches, evaluation, deterministic seed and checkpoint/resume | Verified preview | [`examples/projects/mlp-training`](examples/projects/mlp-training), [`tests/mlp_training_probe.py`](tests/mlp_training_probe.py); CPU/single-process only |
+| Opt-in human/JSON training event stream | Verified preview for MLP | `seloryn run ... --log=human|json`; flushed stderr JSONL, stdout remains the program result |
 | `build`/`exec` `.selyapp` bundle path | Experimental | Deterministic bundle and clean terminal fixtures; not an installer |
 | HTTP, packages, GPU and distributed execution | Not implemented or verified | No supported release artifact exists |
 | Local installer scripts | Development-only; Windows x64 lifecycle verified here | No public download, signing or cross-OS binary support |

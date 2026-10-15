@@ -1,10 +1,9 @@
-name: Release experimental VS Code extension
+name: Release verified-preview VS Code extension
 
 on:
   push:
     tags:
       - 'vscode-v*'
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -29,14 +28,27 @@ jobs:
         run: npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
       - name: Build deterministic VSIX
         run: npm run package --prefix tooling/vscode
-      - name: Publish experimental GitHub release
+      - name: Verify tag and artifact version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./tooling/vscode/package.json').version")
+          test "${GITHUB_REF_NAME}" = "vscode-v${VERSION}"
+          test -f "tooling/vscode/seloryn-language-${VERSION}.vsix"
+      - name: Create artifact checksums
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./tooling/vscode/package.json').version")
+          sha256sum "tooling/vscode/seloryn-language-${VERSION}.vsix" > "tooling/vscode/SHA256SUMS"
+      - name: Publish verified-preview GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          VERSION=$(node -p "require('./tooling/vscode/package.json').version")
           gh release create "${GITHUB_REF_NAME}" \
-            "tooling/vscode/seloryn-language-0.1.0.vsix" \
+            "tooling/vscode/seloryn-language-${VERSION}.vsix" \
+            "tooling/vscode/SHA256SUMS" \
             --repo "${GITHUB_REPOSITORY}" \
-            --title "Seloryn Language for VS Code 0.1.0" \
-            --notes-file docs/releases/vscode-0.1.0.md \
+            --title "Seloryn Language for VS Code ${VERSION}" \
+            --notes-file "docs/releases/vscode-${VERSION}.md" \
             --prerelease \
             --latest=false

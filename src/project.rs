@@ -17,6 +17,7 @@ pub struct LoadedProgram {
     pub label: String,
     pub base_dir: PathBuf,
     pub read_roots: Vec<PathBuf>,
+    pub write_roots: Vec<PathBuf>,
     pub json_max_bytes: usize,
     pub json_max_depth: usize,
 }
@@ -108,6 +109,30 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
     read_roots.sort();
     read_roots.dedup();
 
+    let mut write_roots = declared_write_roots(&manifest_text)
+        .into_iter()
+        .map(|root| {
+            let relative = manifest_relative_path(&root, "capabilities.write")?;
+            let directory = project_root.join(relative);
+            if !directory.is_dir() {
+                return Err(Diagnostic::new(
+                    "SEL-S004",
+                    format!("declared write capability {root} is missing or not a directory"),
+                    Span::new(0, 0),
+                ));
+            }
+            fs::canonicalize(&directory).map_err(|_| {
+                Diagnostic::new(
+                    "SEL-S004",
+                    format!("declared write capability {root} could not be canonicalized"),
+                    Span::new(0, 0),
+                )
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    write_roots.sort();
+    write_roots.dedup();
+
     let mut loader = Loader {
         source_root,
         visiting: HashSet::new(),
@@ -148,6 +173,7 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
         label: format!("project {}", path.display()),
         base_dir: project_root,
         read_roots,
+        write_roots,
         json_max_bytes,
         json_max_depth,
     })
@@ -189,6 +215,16 @@ pub fn encode_bundle(path: &Path, profile: &str) -> Result<Vec<u8>, Diagnostic> 
         if !directory.starts_with(path) || !directory.is_dir() {
             return Err(bundle_error(format!(
                 "declared read capability `{read_root}` is missing or not a directory"
+            )));
+        }
+        collect_bundle_files(path, &directory, &mut files)?;
+    }
+    for write_root in declared_write_roots(&manifest_text) {
+        validate_bundle_path(&write_root.replace('\\', "/"))?;
+        let directory = path.join(&write_root);
+        if !directory.starts_with(path) || !directory.is_dir() {
+            return Err(bundle_error(format!(
+                "declared write capability `{write_root}` is missing or not a directory"
             )));
         }
         collect_bundle_files(path, &directory, &mut files)?;
@@ -643,6 +679,28 @@ fn declared_read_roots(manifest: &str) -> Vec<String> {
     let Some(value) = manifest.lines().find_map(|line| {
         let (name, value) = line.split_once('=')?;
         (name.trim() == "read").then(|| value.trim())
+    }) else {
+        return Vec::new();
+    };
+    let Some(contents) = value
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+    else {
+        return Vec::new();
+    };
+    contents
+        .split(',')
+        .map(str::trim)
+        .map(|value| value.trim_matches('"').trim_matches('\''))
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+fn declared_write_roots(manifest: &str) -> Vec<String> {
+    let Some(value) = manifest.lines().find_map(|line| {
+        let (name, value) = line.split_once('=')?;
+        (name.trim() == "write").then(|| value.trim())
     }) else {
         return Vec::new();
     };

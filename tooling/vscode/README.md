@@ -1,8 +1,8 @@
 # Seloryn for VS Code
 
-This directory contains the experimental Seloryn editor extension. It is
+This directory contains the verified-preview Seloryn editor extension. It is
 public evidence of editor support, not a claim that Seloryn has a complete
-LSP, formatter or stable release.
+LSP, formatter or stable runtime release.
 
 It currently provides:
 
@@ -11,7 +11,10 @@ It currently provides:
 - a Seloryn extension mark and an optional `Seloryn File Icons` theme that
   maps both the `seloryn` language id and `.sely` files to the Seloryn mark;
 - native VS Code completion items for local declarations, parameters, types,
-  implemented builtins, language snippets, keywords and reserved syntax;
+  implemented builtins including `training.train_mlp`, real training snippets,
+  keywords and reserved syntax;
+- a `Seloryn: Run CPU Training in Terminal` command that opens the configured
+  CLI with an argument vector and `--log=human` for live progress;
 - saved-file diagnostics from the configured Seloryn CLI, using its structured
   JSON output without reimplementing parser or type semantics;
 - opt-in inline ghost text through the VS Code Language Model API when a
@@ -69,7 +72,7 @@ npm ci
 npm run package
 ```
 
-The result is a local `seloryn-language-0.1.0.vsix`. The package contains the
+The result is a local `seloryn-language-0.2.0.vsix`. The package contains the
 extension runtime, grammar, language configuration, README, logo and file-icon
 theme; tests, fixtures and the lockfile stay out of the VSIX.
 The packaging step fixes ZIP entry ordering and timestamps, so repeated builds

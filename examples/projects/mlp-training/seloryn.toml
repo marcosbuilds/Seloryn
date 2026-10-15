@@ -1,0 +1,13 @@
+[package]
+name = "mlp-training-example"
+language = "0.02"
+source_root = "src"
+entry = "mlp-training-entry.sely"
+
+[capabilities]
+read = ["data"]
+write = ["checkpoints"]
+
+[limits]
+json_max_bytes = 1048576
+json_max_depth = 32

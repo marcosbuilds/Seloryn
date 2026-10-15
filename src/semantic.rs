@@ -1542,6 +1542,10 @@ impl<'a> Checker<'a> {
                 self.check_standard_arity(name, arguments, 4, span);
                 Type::Json
             }
+            "train_mlp" => {
+                self.check_standard_arity(name, arguments, 8, span);
+                Type::Json
+            }
             "load_checkpoint" => {
                 self.check_standard_arity(name, arguments, 1, span);
                 Type::Result(Box::new(Type::Json), Box::new(Type::CheckpointError))
@@ -1952,7 +1956,7 @@ fn is_supported_standard_directive(text: &str) -> bool {
         ]
         .as_slice(),
         "autograd" => ["backward", "gradcheck"].as_slice(),
-        "training" => ["train_linear", "load_checkpoint"].as_slice(),
+        "training" => ["train_linear", "train_mlp", "load_checkpoint"].as_slice(),
         _ => return false,
     };
     symbols.iter().all(|symbol| allowed.contains(symbol))

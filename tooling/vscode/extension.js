@@ -56,6 +56,7 @@ const BUILTINS = Object.freeze([
   ['tensor_logsumexp', 'tensor_logsumexp(tensor, axis)', 'Compute stable log-sum-exp'],
   ['tensor_sum_to_shape', 'tensor_sum_to_shape(tensor, shape)', 'Reduce a broadcasted tensor'],
   ['train_linear', 'train_linear(train, test, seed, steps)', 'Narrow linear-training fixture'],
+  ['train_mlp', 'train_mlp(train, test, checkpoint, seed, steps, batch_size, hidden_size, learning_rate)', 'Train a bounded CPU MLP with resume checkpoint'],
   ['load_checkpoint', 'load_checkpoint(path)', 'Read a bounded checkpoint fixture'],
   ['print', 'print(text)', 'Write explicit program output']
 ]);
@@ -64,7 +65,7 @@ const MODULES = Object.freeze([
   ['io', 'Standard output import'],
   ['json', 'Bounded JSON project capability'],
   ['models', 'Narrow model contract fixture'],
-  ['training', 'Narrow linear-training fixture']
+  ['training', 'Bounded CPU linear and MLP training'],
 ]);
 
 const STANDARD_FUNCTIONS = Object.freeze([
@@ -93,6 +94,7 @@ const SNIPPETS = Object.freeze([
   ['if', 'Conditional block', 'if ${1:condition}:\n    ${0}'],
   ['for', 'List iteration', 'for ${1:item} in ${2:items}:\n    ${0}'],
   ['match', 'Exhaustive match block', 'match ${1:value}:\n    case ${2:pattern}:\n        ${0}'],
+  ['train_mlp', 'Real bounded CPU MLP training', 'from training import train_mlp\n\nfn main() -> Json:\n    return train_mlp("data/train.json", "data/test.json", "checkpoints/model.json", seed=17, steps=240, batch_size=4, hidden_size=8, learning_rate=0.1)${0}'],
   ['tensor_objective', 'Tensor objective returning a scalar', 'fn ${1:objective}(input: Tensor[F32]) -> Tensor[F32]:\n    let weights: Tensor[F32] = tensor_f32([1.0], [1, 1])\n    let prediction: Tensor[F32] = matmul(input, weights)\n    return tensor_mean(prediction * prediction)${0}']
 ]);
 
@@ -280,6 +282,32 @@ function findProjectRoot(filePath, workspaceRoot, fsModule = fs, pathModule = pa
     current = parent;
   }
   return '';
+}
+
+function createTrainingTerminal(vscode, fsModule = fs, pathModule = path) {
+  const editor = vscode.window?.activeTextEditor;
+  const documentPath = documentFilePath(editor?.document);
+  const workspaceFolder = documentPath
+    ? vscode.workspace?.getWorkspaceFolder?.(editor.document.uri)
+    : undefined;
+  const workspaceRoot = workspaceFolder?.uri?.fsPath
+    || vscode.workspace?.workspaceFolders?.[0]?.uri?.fsPath
+    || '';
+  const projectRoot = findProjectRoot(documentPath || workspaceRoot, workspaceRoot, fsModule, pathModule);
+  if (!projectRoot) {
+    vscode.window?.showErrorMessage?.('Seloryn: open a file inside a project with seloryn.toml before training.');
+    return { status: 'unavailable' };
+  }
+  const configuration = vscode.workspace?.getConfiguration?.('seloryn');
+  const cliPath = String(configuration?.get?.('cliPath', 'seloryn') || 'seloryn').trim();
+  const terminal = vscode.window?.createTerminal?.({
+    name: 'Seloryn Training',
+    cwd: projectRoot,
+    shellPath: cliPath,
+    shellArgs: ['run', projectRoot, '--log=human']
+  });
+  terminal?.show?.();
+  return { status: 'started', projectRoot, cliPath };
 }
 
 function documentLineCount(document) {
@@ -684,6 +712,9 @@ function activate(context) {
       await configuration.update('aiGhostText.enabled', !current, vscode.ConfigurationTarget.Global);
       const state = !current ? 'enabled' : 'disabled';
       vscode.window.showInformationMessage(`Seloryn AI ghost text ${state}.`);
+    }),
+    vscode.commands.registerCommand('seloryn.runTraining', () => {
+      createTrainingTerminal(vscode);
     })
   );
 }
@@ -701,6 +732,7 @@ module.exports = {
   activate,
   buildPrompt,
   createCompletionProvider,
+  createTrainingTerminal,
   createInlineCompletionProvider,
   createSelorynDiagnosticController,
   createSelorynDiagnosticRunner,

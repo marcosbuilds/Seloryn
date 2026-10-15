@@ -1,122 +1,41 @@
 # Current capability status
 
-**Primary truth source for Seloryn 0.01.** The repository contains an experimental syntax and semantic checker, a deterministic lowered core IR, a bounded pure E4 interpreter, local project modules, bounded JSON capability, narrow model/training fixtures, bounded pure N1/N2 CPU tensor runtimes and bounded Tensor[F32] reverse-mode autodiff. It does not contain a package registry, general effects runtime, accelerator backend, supported runtime installer or stable runtime release. This page reports the observed implementation boundary.
+Seloryn `0.02` is a verified-preview language/runtime for a bounded `.sely`
+subset. It now includes an executable CPU MLP training profile in addition to
+the earlier scalar, project, tensor and autodiff gates. The status applies to
+the observed contracts below; it does not turn the whole runtime into a stable
+general-purpose ML platform.
 
 ## What works today
 
 | Area | State | Evidence |
 |---|---|---|
-| UTF-8 lexer, layout and parser subset | Experimental implemented and tested | [`src/parser.rs`](../../src/parser.rs), parser tests |
-| Name resolution and local scopes | Partial E3 checker | [`src/semantic.rs`](../../src/semantic.rs), semantic tests |
-| Scalar types and local inference | Partial E3 checker | [`src/semantic.rs`](../../src/semantic.rs), semantic tests |
-| Records, enums and field/constructor checks | Partial E3 checker | [`src/semantic.rs`](../../src/semantic.rs), semantic tests |
-| `Result`, `Option`, `require`, postfix `?` and `match` coverage | Experimental partial checker | [`src/semantic.rs`](../../src/semantic.rs), semantic tests |
-| Pure E4 interpreter for scalar/list values, list indexing and iteration, mutable `var` assignment, records, enums, `Result`, `Option`, calls, control flow and pipelines | Experimental implemented and tested | [`src/runtime.rs`](../../src/runtime.rs), runtime and CLI tests |
-| N1 CPU tensors (`Tensor[F32]`/`Tensor[I64]`) with typed reads and explicit lossless dtype conversion | Experimental implemented and tested | [`src/tensor`](../../src/tensor), [`tensor_cpu.rs`](../../tests/tensor_cpu.rs) |
-| N2 CPU numeric closure | Experimental implemented and tested | [`src/tensor/ops.rs`](../../src/tensor/ops.rs), [`n2_probe.py`](../../tests/n2_probe.py), [`tensor-numeric.sely`](../../examples/tensors/tensor-numeric.sely) |
-| Deterministic core IR boundary | Experimental implemented and tested | [`src/ir.rs`](../../src/ir.rs), runtime and lowering tests |
-| Local project modules and `seloryn.toml` | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`json-config`](../../examples/projects/json-config/README.md) |
-| VS Code `.sely` highlighting, native completion, saved-file CLI diagnostics, optional file icons and opt-in AI ghost text | Verified preview, tested with the real CLI and packaged as a reproducible local VSIX | [`tooling/vscode`](../../tooling/vscode), API/package tests, Unicode/CRLF CLI bridge and VSIX archive; no full LSP, Explorer rendering or live provider claim |
-| JSON read/parse/encode/get with root and size limits | Experimental implemented and tested | [`src/json.rs`](../../src/json.rs), [`json-config`](../../examples/projects/json-config/README.md) |
-| Multi-file project execution with typed business decisions and bundle parity | Experimental implemented and tested | [`evaluation-pipeline`](../../examples/projects/evaluation-pipeline/README.md), [`release_probe.py`](../../tests/release_probe.py) |
-| Model contract, scalar and Tensor[F32] reverse-mode tapes, finite-difference check, linear training and checkpoint-schema fixtures | Experimental implemented, narrow | [`autograd`](../../examples/autograd/README.md), [`linear-training`](../../examples/projects/linear-training/README.md) and [`checkpoint-validation`](../../examples/projects/checkpoint-validation/README.md); no optimizer or general trainer |
-| Opt-in sampled events for the narrow linear-training fixture | Experimental implemented, narrow | [`--log=human|json`](../guide/cli.md), CLI regression tests; stderr-only, no general telemetry contract |
-| CLI `--help`, `--version`, `check`, `run`, `build` and `exec` | Implemented development CLI | [`src/main.rs`](../../src/main.rs), CLI and bundle fixtures |
-| Human/JSON diagnostics, stable source spans, `--quiet` and `from io import print` | Experimental subset implemented and tested | [`Diagnostic`](../../src/diagnostic.rs), [`--format=json`](../../src/main.rs), CLI tests |
+| UTF-8 lexer, layout, parser, names and partial type checker | Experimental implemented and tested | [`src/parser.rs`](../../src/parser.rs), [`src/semantic.rs`](../../src/semantic.rs) |
+| Bounded scalar/list/project interpreter with structured diagnostics | Experimental implemented and tested | [`src/runtime.rs`](../../src/runtime.rs), CLI tests |
+| CPU `Tensor[F32]`/`Tensor[I64]`, broadcasting, reductions, matmul and stable numeric ops | Experimental implemented and tested | [`src/tensor`](../../src/tensor), [`tests/tensor_cpu.rs`](../../tests/tensor_cpu.rs) |
+| Bounded Tensor[F32] reverse-mode autodiff | Experimental implemented and tested | [`src/tensor_autograd.rs`](../../src/tensor_autograd.rs), [`tests/n3_tensor_probe.py`](../../tests/n3_tensor_probe.py) |
+| Two-layer CPU MLP training with mini-batches, ReLU backpropagation, SGD, evaluation and deterministic seeds | **Verified preview** | [`training.md`](../compute/training.md), [`examples/projects/mlp-training`](../../examples/projects/mlp-training), [`tests/mlp_training_probe.py`](../../tests/mlp_training_probe.py) |
+| Versioned checkpoint save/resume with dataset hashes and sampler state | **Verified preview** | [`src/runtime.rs`](../../src/runtime.rs), MLP black-box probe |
+| Human/JSON Lines terminal streaming with flush and stdout/stderr separation | **Verified preview for the CPU MLP profile** | [`src/main.rs`](../../src/main.rs), MLP black-box probe |
+| VS Code `.sely` highlighting, real snippets/completions, CLI diagnostics and Seloryn file icon | Verified editor preview | [`tooling/vscode`](../../tooling/vscode), packaged VSIX release |
+| Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
 
-## What is not implemented
+## Explicit boundaries
 
 | Capability | State | Consequence |
 |---|---|---|
-| Core IR optimization and SSA passes | **Not implemented** | the current IR is deterministic and structural; no optimizer or SSA pass is claimed |
-| External packages, registry and broad standard library | **Not implemented** | local modules and narrow stdlib fixtures only |
-| HTTP, processes and unrestricted file effects | **Not implemented** | only bounded root-confined JSON reads are available |
-| General tensor autograd, optimizers, MLPs and model serving | **Not implemented** | Tensor[F32] reverse mode is real but bounded to one input and a rank-zero CPU objective; this does not imply a general ML stack |
-| GPU, distributed execution and serving | **Not implemented** | no accelerator or production service exists |
-| Formatter, full LSP, public runtime installer and runtime release artifacts | **Not implemented or verified** | the VS Code extension has an experimental release workflow; no supported public runtime distribution exists |
+| General tensor autograd, public `Module`/`Parameter`/`Dataset` APIs and optimizer families | Not implemented | `train_mlp` is a concrete bounded profile, not an extensible framework |
+| GPU, distributed execution, mixed precision and memory sharding | Not implemented | only single-process CPU execution is supported |
+| Transformer/LLM training, tokenizers and serving | Not implemented | no model-scale or production-serving claim |
+| Runtime installer, registry, broad package ecosystem and stable ABI | Not implemented | use a built binary or the source checkout; the preview is not a stable distribution |
+| Full LSP and interactive VS Code training panel | Not implemented | the extension uses the CLI as source of truth; training is run through CLI/terminal |
 
-## E3 gate fulfillment
+## Evidence rule
 
-Percentages below are engineering estimates of the design gate, not test coverage and not a version score.
-
-| Gate | Estimate | Evidence | Remaining boundary |
-|---|---:|---|---|
-| E3.0 — grammar and AST preflight | 80% | [`src/parser.rs`](../../src/parser.rs), precedence and reserved-syntax tests | Full grammar, closures, generic shape syntax and runtime meaning remain outside the subset |
-| E3.1 — names and scopes | 70% | [`src/semantic.rs`](../../src/semantic.rs), semantic tests | Module visibility/import resolution is unavailable; `pub` is metadata plus signature validation, not a package export system |
-| E3.2 — types and inference | 65% | [`src/semantic.rs`](../../src/semantic.rs), semantic tests | No user generics or symbolic shape constraints |
-| E3.3 — records, enums and fallibility | 75% | [`src/semantic.rs`](../../src/semantic.rs), Result/Option tests | General error conversion and runtime resource behavior remain outside E3/E4 |
-| E3.4 — exhaustive `match` | 70% | [`src/semantic.rs`](../../src/semantic.rs), match tests | Structural/named-field patterns and ranges remain outside; the validated constructor subset executes |
-| E3.5 — semantic CLI proof | 70% | [`src/main.rs`](../../src/main.rs), structured diagnostics and CLI integration tests | Property/fuzz campaign and golden corpus remain absent; CI execution evidence is not a supported release |
-
-## E4 execution evidence
-
-E4 is **experimental implemented** for the validated E3 subset. `seloryn run`
-reads UTF-8 source, stops on any lexical, parse or semantic diagnostic, then
-executes `fn main()` through the deterministic lowered IR interpreter. The runtime covers
-`Bool`, `I64`, `F64`, `Text`, `Unit`, `List`, nominal records, closed enums,
-`Option`, `Result`, `if`, `match`, `require`, calls, recursion, return,
-`??`, postfix `?`, list indexing, list iteration, mutable `var` assignment, list
-concatenation and the named-function `|>` pipeline. Runtime failures carry
-stable `SEL-R***` codes, source spans and a deterministic function stack. Call
-depth, loop size and list size are bounded to keep user programs from
-overflowing the host runtime. Large values are rendered with a deterministic
-truncation marker; storage and computation remain bounded by their separate
-runtime limits.
-
-Evidence is [`src/ir.rs`](../../src/ir.rs) and [`src/runtime.rs`](../../src/runtime.rs) plus the CLI tests in
-[`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs). The interpreter does
-not perform filesystem, network, process, module or GPU effects. The N1 bridge
-adds owned CPU buffers and numeric kernels without adding effects or a `print`
-API. The IR is structural and deterministic; optimization, effects and broader runtime gates remain future work.
-
-## N1 CPU tensor evidence
-
-N1 is experimentally implemented for owned contiguous F32/I64 CPU tensors with
-checked typed element reads and explicit lossless `tensor_to_f32`/
-`tensor_to_i64` conversions. The
-runtime checks rank (maximum 32), nonnegative dimensions, checked element and
-byte products, a 64 MiB per-tensor and process-wide resident-buffer budget
-(not a total-process-memory limit), row-major strides, reshape counts, same-dtype
-arithmetic, right-aligned
-broadcasting, finite F32 results, checked I64 arithmetic, total and axis
-reductions and rank-2 F32 matrix multiplication. The language bridge is covered
-by positive and negative CLI tests, including CRLF, Unicode paths, static dtype
-rejection, bad shapes, incompatible matmul, invalid axes, per-tensor and global
-budget overflow. No GPU, autograd, training, tensor mutation, symbolic shape or
-performance claim follows from N1.
-
-## N2 CPU numeric evidence
-
-N2 is **experimental implemented** for the bounded pure CPU subset. It adds
-rank-2 shape/stride transpose views for both supported dtypes, F32 `relu`, `exp` and
-positive-domain `log`, stable axis `softmax` and `logsumexp`, plus F32
-`tensor_sum_to_shape` for reducing broadcasted results to a compatible operand
-shape. The runtime rejects empty selected reduction axes, invalid log domains,
-incompatible target shapes and non-finite results with `SEL-R210`/`SEL-R211`
-where applicable. [`tests/n2_probe.py`](../../tests/n2_probe.py) compares real
-CLI output against an independent Python standard-library reference and repeats
-negative diagnostics.
-
-N2 does not provide a general tape, optimizer, arbitrary tensor views, symbolic
-shapes, GPU or effects. The scalar and bounded Tensor[F32] reverse-mode gates
-described in
-[`docs/compute/autograd.md`](../compute/autograd.md); it does not differentiate
-tensors outside the documented N3b subset or build a reusable public graph API.
-The current linear
-training and checkpoint-schema fixtures are narrow, explicitly tested
-contracts and do not claim a general training framework. A rank-0 F32 reduction
-can be converted explicitly with
-`tensor_item_f32`; non-scalar shapes and wrong dtypes fail with a structured
-diagnostic. The language version is `0.01` because the N3B tensor-autograd gain
-is now accepted and independently verified.
-
-## Gaps versus the design review
-
-E3 is therefore **not fully complete**. The checker proves a meaningful front-end subset, but E3.3, E3.4 and E3.5 still have the boundaries listed above. In particular:
-
-- A successful `check` means syntax and supported static rules passed; `run` adds the separately tested pure E4 execution step.
-- General training, model-serving and GPU text in the repository describes design targets, not available capabilities.
-- Examples using broad effects, named record patterns or future libraries remain design concepts unless a page explicitly says otherwise.
-- E4, N1, N2, local-project, training and bundle fixtures have bounded experimental results; broader tensor autograd remains future work beyond N3B.
-
-The implementation policy is staged: a feature becomes available only after source behavior, negative tests and platform evidence exist. The current accepted gain is recorded in [`VERSION.toml`](../../VERSION.toml); no GPU, distributed or general-training claim is made by this status page.
+The MLP profile earns language `0.02` because an external user can run the
+same project and independently observe a nontrivial learned model, a measured
+holdout loss, a resumable checkpoint and a live event stream. The gain does
+not imply that GPU, distributed or general training promises are fulfilled.
+The public comparison remains honest: Seloryn's current differentiator is a
+single typed, bounded and observable workflow; broad productivity or
+performance superiority over established ML runtimes has not been proved.

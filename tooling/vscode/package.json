@@ -1,8 +1,8 @@
 {
   "name": "seloryn-language",
   "displayName": "Seloryn Language",
-  "description": "Experimental Seloryn .sely tooling with syntax highlighting, native completions and saved-file diagnostics.",
-  "version": "0.1.0",
+  "description": "Seloryn .sely tooling with syntax highlighting, real code completions, diagnostics and CPU training workflows.",
+  "version": "0.2.0",
   "publisher": "seloryn",
   "icon": "./assets/seloryn-icon.png",
   "repository": {
@@ -26,7 +26,8 @@
   "main": "./extension.js",
   "activationEvents": [
     "onLanguage:seloryn",
-    "onCommand:seloryn.toggleAiGhostText"
+    "onCommand:seloryn.toggleAiGhostText",
+    "onCommand:seloryn.runTraining"
   ],
   "contributes": {
     "languages": [
@@ -60,6 +61,10 @@
       {
         "command": "seloryn.toggleAiGhostText",
         "title": "Seloryn: Toggle AI Ghost Text"
+      },
+      {
+        "command": "seloryn.runTraining",
+        "title": "Seloryn: Run CPU Training in Terminal"
       }
     ],
     "configuration": {

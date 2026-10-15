@@ -19,7 +19,7 @@ flowchart LR
         I[Future autograd graph]
         J[Accelerator backend]
         K[Services]
-        L[Model training]
+        L[Bounded CPU MLP training]
     end
     G --> H
     H -. future tensor autograd .-> I
@@ -46,4 +46,4 @@ Legend: **✓ implemented** means the checker/interpreter has source and tests; 
 
 ### Capability sequencing
 
-The public syntactic API of a future feature is only *accepted* once the underlying behavior is implemented, tested and versioned. Language syntax cannot be considered an alternative for working matrix multiplication, reverse-mode autodiff or performant kernels. The next numerical dependencies after the bounded E4/N1/N2 runtime are broader [autograd](../compute/autograd.md) → [training](../compute/training.md) → [LLMs](../compute/llms.md).
+The public syntactic API of a future feature is only *accepted* once the underlying behavior is implemented, tested and versioned. Language syntax cannot be considered an alternative for working matrix multiplication, reverse-mode autodiff or performant kernels. The current training profile is intentionally concrete; the next numerical dependencies after it are reusable optimizer/data APIs and then [LLMs](../compute/llms.md).

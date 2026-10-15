@@ -6,6 +6,7 @@ Language versions use **two numeric components** `M.mm`, where `mm` is always tw
 |---:|:---|
 | 0 | `0.00` — planning baseline, **not a release** |
 | 1 | `0.01` |
+| 2 | `0.02` |
 | 12 | `0.12` |
 | 99 | `0.99` |
 | 100 | `1.00` |
@@ -21,9 +22,9 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
-| Language capability | `0.00` | `0.01` | N3B Tensor[F32] reverse-mode autodiff |
-| Runtime package | `0.0.0` | `0.1.0` | package identity follows the accepted gain |
-| VS Code extension | `0.0.1` | `0.1.0` | extension now ships as an experimental release candidate with the current editor surface |
+| Language capability | `0.01` | `0.02` | N4 bounded CPU MLP training with mini-batching, evaluation, checkpoint/resume and live events |
+| Runtime package | `0.1.0` | `0.2.0` | package identity follows the accepted gain |
+| VS Code extension | `0.1.0` | `0.2.0` | extension completions and snippets expose the verified MLP workflow |
 
 The comparison is intentionally visible: a new commit alone cannot advance
 the language version. The N3B gain has executable source, negative behavior,
