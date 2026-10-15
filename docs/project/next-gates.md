@@ -1,6 +1,6 @@
 # Next executable gates
 
-Seloryn is currently `0.04`: a bounded verified-preview language and runtime for
+Seloryn is currently `0.05`: a bounded verified-preview language and runtime for
 AI development and integration. The next steps are executable gates, not a
 promise that every design proposal already exists.
 
@@ -17,21 +17,26 @@ promise that every design proposal already exists.
 - A Seloryn-authored project now defines a tensor objective, calls gradients
   for multiple parameters, iterates with `range` and performs SGD updates in
   `.sely`; the native backend supplies the bounded tensor/autodiff kernels.
-- MLP resume now authenticates sampler state as well as weights and enforces a
+- MLP resume now detects tampering in sampler state as well as weights and enforces a
   total sample-update budget. `devices` and `gpu-probe` provide a real
   capability-aware hardware gate with synchronized WGSL readback, while model
   training remains CPU-only.
 - Public CI exercises Linux, Windows and macOS, while independent CLI probes
   compare selected tensor results with external references.
+- Project manifests now use a real TOML parser and reject malformed or
+  future-language declarations before source loading; the independent
+  `project_manifest_probe.py` and editor CLI fixture cover both paths.
 - The VS Code package provides `.sely` association, syntax highlighting,
   native completion and opt-in model ghost text. Its installable preview is
   validated separately from the language runtime.
 
 ## Next gates
 
-1. **Editor distribution:** build and inspect a self-contained VSIX, keep the
-   Seloryn mark on the extension, and provide an optional file-icon theme for
-   `.sely`. The real VS Code host still needs an interactive rendering check.
+1. **Editor distribution — completed:** the public `vscode-v0.4.0` release
+   contains a deterministic self-contained VSIX, the Seloryn mark and the
+   optional `.sely` file-icon theme. A real VS Code host still needs an
+   interactive rendering check; that is a validation task, not an unbuilt
+   distribution feature.
 2. **Editor/runtime integration — saved-file bridge completed:** the editor now
    uses the CLI's structured diagnostics as its source of truth, with separate
    arguments, workspace-root selection, CRLF/Unicode fixtures, cancellation,

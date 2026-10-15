@@ -115,7 +115,7 @@ Status labels mean: **implemented** is present and tested in the checker; **part
 | Fallible workflow | `Result` + `?` + `match` |
 | Data transformation | Iteration/typed collections and `|>` |
 | Domain variants | `enum` with exhaustive pattern matching |
-| Training | `Tensor`, `GradientTape`, `Optimizer` APIs |
+| Training | `Tensor` and bounded `GradientTape` behavior are implemented; general `Optimizer` APIs are design-only and not accepted |
 | Resource safety | Scoped `using` (reserved pending lifetime rules) |
 | Concurrency | Structured `async` and `await` (reserved pending runtime) |
 

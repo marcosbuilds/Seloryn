@@ -17,6 +17,21 @@ The version advances only when an independently accepted, evidenced, user-releva
 
 `1.00` means *100 accepted gains*, **not** that compatibility magically becomes stable. Compatibility and breaking-change classification are separate. Package ecosystem tools may need a different conventional version format. See [status](status.md).
 
+## Extension versioning
+
+The VS Code package uses numeric SemVer `X.Y.Z`, independently from the
+language capability counter. `VERSION.toml` is the source of truth for both
+the current/previous comparison and the append-only `extension_gains` ledger.
+The release verifier requires a canonical SemVer, a non-decreasing current
+version, a unique extension gain with ordered evidence paths when the
+extension advances, and a package manifest/lockfile match. A
+documentation-only extension change keeps its
+package version; a real editor behavior or reliability gain must name its
+evidence before a tag is accepted. The extension may remain unchanged while
+the runtime advances, but it may never move backwards or repeat a new gain
+without evidence. This prevents repeating `0.1.0` or advancing the extension
+without a measurable change in Seloryn's behavior.
+
 ## Current comparison
 
 The latest earned implementation gain is now recorded in [`VERSION.toml`](../../VERSION.toml)
@@ -24,10 +39,12 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
-| Language capability | `0.03` | `0.04` | N6 hardened CPU training contracts plus a physical-host GPU compute/readback probe |
-| Runtime package | `0.3.0` | `0.4.0` | package identity follows the accepted gain |
-| VS Code extension | `0.3.0` | `0.4.0` | extension exposes CPU training, hardware inventory and GPU compute probe commands |
+| Language capability | `0.04` | `0.05` | N7 strict project-manifest parsing and future-language rejection |
+| Runtime package | `0.4.0` | `0.5.0` | package identity follows the accepted runtime reliability gain |
+| VS Code extension | `0.4.0` | `0.4.0` | unchanged: the runtime manifest gain must not be disguised as an editor gain |
 
 The comparison is intentionally visible: a new commit alone cannot advance
-the language version. The N3B gain has executable source, negative behavior,
-unit coverage and an independent CLI oracle, so it is the reason for `0.01`.
+the language version. N3B remains the historical reason for `0.01`; N6 is the
+historical `0.04` gain, and N7 is the current `0.05` reliability gain. The
+extension ledger is checked separately because an editor patch must not be
+disguised as a language gain.

@@ -9,13 +9,13 @@ seloryn --help
 seloryn --version
 seloryn devices [--format=human|json]
 seloryn gpu-probe [--format=human|json]
-seloryn check <file.sely> [--format=human|json] [--quiet]
-seloryn run <file.sely> [--format=human|json] [--log=off|human|json]
+seloryn check <file.sely|project> [--format=human|json] [--quiet]
+seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json]
 seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
 ```
 
-The preview version reports `0.04`, `package=0.4.0` and
+The preview version reports `0.05`, `package=0.5.0` and
 `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
@@ -23,6 +23,10 @@ scalar types, records, enums, `Result`, `Option`, `require`, postfix `?`,
 calls and exhaustive `match`. It reports `checked` only when all these
 checks pass. Local project imports are resolved through `seloryn.toml`; external
 packages and nullable `T?` syntax remain unavailable.
+
+Project commands parse `seloryn.toml` as TOML before loading source. Malformed
+manifests and a `[package] language` newer than the runtime fail with
+`SEL-M001`; no source execution begins after either diagnostic.
 
 `run` performs the same full front-end validation before evaluating the pure E4
 subset and the bounded N1/N2 CPU tensor subset. A successful run prints

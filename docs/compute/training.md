@@ -1,6 +1,6 @@
 # Model training
 
-Seloryn `0.04` contains executable CPU training profiles, including a
+Seloryn `0.05` contains executable CPU training profiles, including a
 two-layer `F32` MLP with ReLU hidden activation, mean-squared error, SGD,
 deterministic mini-batches, holdout evaluation and resumable checkpoints. This
 is a verified preview of a small training workflow, not a general neural

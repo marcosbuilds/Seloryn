@@ -1,0 +1,86 @@
+name: Release Seloryn runtime preview
+
+on:
+  push:
+    tags:
+      - 'seloryn-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package runtime / ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform: windows-x64
+            binary: target/release/seloryn.exe
+          - os: ubuntu-24.04
+            platform: linux-x64
+            binary: target/release/seloryn
+          - os: macos-15
+            platform: macos-arm64
+            binary: target/release/seloryn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Release script dependencies
+        run: python -m pip install --disable-pip-version-check --quiet -r scripts/release/requirements.txt
+      - name: Verify release version and tag
+        shell: bash
+        run: |
+          python scripts/release/verify-version.py
+          test "${GITHUB_REF_NAME}" = "seloryn-v0.05"
+      - name: Build release runtime
+        run: cargo build --release --locked
+      - name: Run release project and manifest evidence
+        run: |
+          python tests/release_probe.py
+          python tests/project_manifest_probe.py
+      - name: Package deterministic runtime archive
+        shell: bash
+        run: |
+          python scripts/release/package-runtime.py \
+            --binary "${{ matrix.binary }}" \
+            --output-dir dist \
+            --platform "${{ matrix.platform }}" \
+            --runtime-version 0.5.0 \
+            --language-version 0.05 \
+            --commit "${GITHUB_SHA}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: seloryn-runtime-${{ matrix.platform }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  publish:
+    name: Publish runtime preview
+    needs: package
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: seloryn-runtime-*
+          merge-multiple: true
+      - name: Create checksums
+        run: sha256sum dist/*.zip | sort > dist/SHA256SUMS
+      - name: Publish immutable runtime preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/*.zip dist/SHA256SUMS \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "Seloryn runtime 0.5.0" \
+            --notes-file docs/releases/runtime-0.05.md \
+            --prerelease \
+            --latest=false

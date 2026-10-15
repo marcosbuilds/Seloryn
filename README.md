@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current status: language 0.04 / runtime package 0.4.0, verified-preview CPU training plus hardened checkpoints, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles.** Seloryn also has a physical non-fallback hardware inventory and bounded GPU compute/readback probe; GPU tensor training, distributed, registry, installer and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
+> **Current status: language 0.05 / runtime package 0.5.0, verified-preview CPU training plus hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles.** Seloryn also has a physical non-fallback hardware inventory and bounded GPU compute/readback probe; GPU tensor training, distributed, registry, installer and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
 
 > **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** This repository records only what is implemented and verified.
 
@@ -25,16 +25,16 @@ claim. If equivalent workloads do not show the proposed reduction in failures,
 integration drift or diagnostic cost, the architecture must be reconsidered
 instead of gaining features by default.
 
-| Capability | Availability in 0.04 | Evidence or boundary |
+| Capability | Availability in 0.05 | Evidence or boundary |
 |:--|:--|:--|
 | UTF-8 lexer, layout and parser subset | Implemented and tested | [`src/parser.rs`](src/parser.rs), parser tests |
 | Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | [`src/semantic.rs`](src/semantic.rs), semantic tests |
-| `seloryn check <file.sely>` diagnostics | Implemented in the development CLI | [`src/main.rs`](src/main.rs), [`tests/bootstrap_cli.rs`](tests/bootstrap_cli.rs) |
+| `seloryn check <file.sely or project>` diagnostics | Implemented in the development CLI | [`src/main.rs`](src/main.rs), [`tests/bootstrap_cli.rs`](tests/bootstrap_cli.rs), [`tests/project_manifest_probe.py`](tests/project_manifest_probe.py) |
 | Pure scalar/list interpreter and `seloryn run` | Experimental E4 implementation | [`src/runtime.rs`](src/runtime.rs), runtime and CLI tests; no effects |
 | CPU `Tensor[F32]` / `Tensor[I64]` buffers and N1/N2 operations | Experimental N1/N2 implementation | [`src/tensor`](src/tensor), tensor unit and CLI tests; CPU only |
 | Typed tensor reads and lossless dtype conversion | Experimental N1 implementation | `tensor_get_f32` / `tensor_get_i64`, `tensor_to_f32` / `tensor_to_i64`, bounds and dtype regressions in [`tests/tensor_cpu.rs`](tests/tensor_cpu.rs) |
 | Deterministic core IR and execution boundary | Experimental implemented | `src/ir.rs`, runtime parity tests; bounded subset only |
-| Local modules and project manifests | Experimental implemented | Public project fixtures; no registry or external package resolver |
+| Local modules and strict project manifests | Experimental implemented | Public project fixtures, real TOML parsing and future-language rejection; no registry or external package resolver |
 | VS Code syntax highlighting, native completion, saved-file CLI diagnostics and optional `.sely` file icons | Verified editor preview | [`tooling/vscode`](tooling/vscode); headless tests, real CLI bridge fixture, reproducible local VSIX and CLI installation inspection; Explorer rendering remains environment-dependent |
 | JSON read/parse/encode/get and bounded file capability | Experimental implemented | JSON project fixtures; paths remain root-confined |
 | Scalar and Tensor[F32] reverse-mode tapes and finite-difference gradient check | Experimental implemented, narrow | [`examples/autograd`](examples/autograd), [`tests/n3_tensor_probe.py`](tests/n3_tensor_probe.py) |

@@ -48,8 +48,8 @@ fn help_is_utf8_and_documents_only_available_commands() {
     let stdout = String::from_utf8(output.stdout).expect("help must be UTF-8");
     assert!(stdout.contains("Seloryn — native CLI"));
     assert!(stdout.contains("seloryn --help"));
-    assert!(stdout.contains("seloryn check <file.sely>"));
-    assert!(stdout.contains("seloryn run <file.sely>"));
+    assert!(stdout.contains("seloryn check <file.sely|project>"));
+    assert!(stdout.contains("seloryn run <file.sely|project>"));
     assert!(stdout.contains("seloryn devices [--format=human|json]"));
     assert!(stdout.contains("seloryn gpu-probe [--format=human|json]"));
     assert!(stdout.contains("--log=off|human|json"));
@@ -65,7 +65,7 @@ fn version_reports_earned_language_and_package_versions_without_claiming_runtime
     let stdout = String::from_utf8(output.stdout).expect("version must be UTF-8");
     assert_eq!(
         stdout,
-        "seloryn 0.04 package=0.4.0 build=local-development status=verified-preview\n"
+        "seloryn 0.05 package=0.5.0 build=local-development status=verified-preview\n"
     );
 }
 
@@ -115,6 +115,66 @@ fn build_and_exec_reproduce_a_project_bundle() {
     );
     assert_eq!(executed.stdout, b"Ok(\"bundle fixture\")\n");
     let _ = std::fs::remove_dir_all(root);
+}
+
+#[test]
+fn rejects_malformed_project_manifest_instead_of_ignoring_it() {
+    let root =
+        std::env::temp_dir().join(format!("seloryn-invalid-manifest-{}", std::process::id()));
+    let source_root = root.join("src");
+    fs::create_dir_all(&source_root).expect("project source root");
+    fs::write(root.join("seloryn.toml"), "this is not valid TOML\n")
+        .expect("invalid project manifest");
+    fs::write(
+        source_root.join("main.sely"),
+        "fn main() -> Unit:\n    return\n",
+    )
+    .expect("project source");
+
+    for command in ["check", "run"] {
+        let output = run_cli_owned(&[command.into(), root.clone().into_os_string()]);
+        assert_eq!(
+            output.status.code(),
+            Some(65),
+            "{command} accepted invalid manifest"
+        );
+        assert!(output.stdout.is_empty(), "{command} wrote a false success");
+        let stderr = String::from_utf8(output.stderr).expect("diagnostic must be UTF-8");
+        assert!(stderr.contains("SEL-M001"), "{command}: {stderr}");
+        assert!(
+            stderr.contains("invalid project manifest"),
+            "{command}: {stderr}"
+        );
+    }
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn rejects_project_language_newer_than_runtime() {
+    let root = std::env::temp_dir().join(format!("seloryn-future-language-{}", std::process::id()));
+    let source_root = root.join("src");
+    fs::create_dir_all(&source_root).expect("project source root");
+    fs::write(
+        root.join("seloryn.toml"),
+        "[package]\nname = \"future-language\"\nlanguage = \"99.99\"\nsource_root = \"src\"\nentry = \"main.sely\"\n",
+    )
+    .expect("future language manifest");
+    fs::write(
+        source_root.join("main.sely"),
+        "fn main() -> Unit:\n    return\n",
+    )
+    .expect("project source");
+
+    let output = run_cli_owned(&["check".into(), root.clone().into_os_string()]);
+    let _ = fs::remove_dir_all(root);
+    assert_eq!(output.status.code(), Some(65));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("diagnostic must be UTF-8");
+    assert!(stderr.contains("SEL-M001"), "{stderr}");
+    assert!(
+        stderr.contains("requires a newer Seloryn runtime"),
+        "{stderr}"
+    );
 }
 
 #[test]

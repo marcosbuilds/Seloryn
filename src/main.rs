@@ -22,7 +22,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const LANGUAGE_VERSION: &str = "0.04";
+pub(crate) const LANGUAGE_VERSION: &str = "0.05";
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
 const EXIT_OK: u8 = 0;
@@ -30,7 +30,7 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored and CPU MLP training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; when enabled, training progress is streamed and flushed to stderr.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\nCPU training remains the verified path; GPU probing is available, but GPU training, distributed execution and installer support remain unavailable.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored and CPU MLP training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; when enabled, training progress is streamed and flushed to stderr.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\nCPU training remains the verified path; GPU probing is available, but GPU training, distributed execution and installer support remain unavailable.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {

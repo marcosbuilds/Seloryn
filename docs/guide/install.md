@@ -1,10 +1,12 @@
 # Installation — experimental local tooling
 
-There is no supported public release or download yet. The repository includes
-experimental local installers for an already-built binary. They verify
-SHA-256 before copying, write provenance metadata, preserve one rollback copy,
-support uninstall and report whether the install directory is on `PATH`.
-They do not download code, modify `PATH` automatically or create a release.
+There is no supported public runtime release or download yet. The repository
+includes local installers for an already-built binary. The validated Windows
+installer verifies SHA-256 before copying, can write supplied provenance
+metadata, preserves one rollback copy, supports uninstall and reports whether
+the install directory is on `PATH`. The POSIX script has lifecycle commands,
+but its native binary and provenance path are not yet verified. Neither script
+downloads code, modifies `PATH` automatically or creates a release.
 
 On the validated Windows x64 host:
 

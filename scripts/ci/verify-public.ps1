@@ -3,8 +3,12 @@ Set-StrictMode -Version Latest
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Push-Location $root
 try {
+    & python -m pip install --disable-pip-version-check --quiet -r scripts/release/requirements.txt
+    if ($LASTEXITCODE -ne 0) { throw 'Release script dependencies failed to install' }
     & python scripts/release/verify-version.py
     if ($LASTEXITCODE -ne 0) { throw 'Earned version comparison failed' }
+    & python tests/versioning_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Versioning regression verification failed' }
     $commands = @(
         @('fmt', '--all', '--', '--check'),
         @('test', '--all-targets', '--locked', '--', '--test-threads=1'),
@@ -24,10 +28,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'N3a independent CLI verification failed' }
     & python tests/n3_tensor_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'N3b tensor independent CLI verification failed' }
-    & python tests/n3_tensor_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'N3b tensor independent CLI verification failed' }
     & python tests/release_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Public project and bundle verification failed' }
+    & python tests/project_manifest_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Project manifest verification failed' }
     & python tests/mlp_training_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'CPU MLP independent verification failed' }
     & python tests/self_hosted_probe.py

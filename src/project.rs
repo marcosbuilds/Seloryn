@@ -58,10 +58,13 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
             Span::new(0, 0),
         )
     })?;
-    let source_root = value_for(&manifest_text, "source_root").unwrap_or_else(|| "src".to_owned());
+    let manifest_document = parse_manifest(&manifest_text)?;
+    validate_language_version(&manifest_document)?;
+    let source_root =
+        value_for(&manifest_document, "source_root").unwrap_or_else(|| "src".to_owned());
     let source_root = manifest_relative_path(&source_root, "source_root")?;
-    let entry = value_for(&manifest_text, "entry")
-        .or_else(|| value_for(&manifest_text, "entrypoint"))
+    let entry = value_for(&manifest_document, "entry")
+        .or_else(|| value_for(&manifest_document, "entrypoint"))
         .unwrap_or_else(|| "main.sely".to_owned());
     let entry = if Path::new(&entry).extension().is_none() {
         format!("{entry}.sely")
@@ -70,10 +73,10 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
     };
     let entry = manifest_relative_path(&entry, "entry")?;
     let source_root = project_root.join(source_root);
-    let json_max_bytes = value_for(&manifest_text, "json_max_bytes")
+    let json_max_bytes = value_for(&manifest_document, "json_max_bytes")
         .and_then(|value| value.parse().ok())
         .unwrap_or(128);
-    let json_max_depth = value_for(&manifest_text, "json_max_depth")
+    let json_max_depth = value_for(&manifest_document, "json_max_depth")
         .and_then(|value| value.parse().ok())
         .unwrap_or(4);
     let entry_path = source_root.join(entry);
@@ -85,7 +88,7 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
         ));
     }
 
-    let mut read_roots = declared_read_roots(&manifest_text)
+    let mut read_roots = declared_read_roots(&manifest_document)
         .into_iter()
         .map(|root| {
             let relative = manifest_relative_path(&root, "capabilities.read")?;
@@ -109,7 +112,7 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
     read_roots.sort();
     read_roots.dedup();
 
-    let mut write_roots = declared_write_roots(&manifest_text)
+    let mut write_roots = declared_write_roots(&manifest_document)
         .into_iter()
         .map(|root| {
             let relative = manifest_relative_path(&root, "capabilities.write")?;
@@ -196,8 +199,12 @@ pub fn encode_bundle(path: &Path, profile: &str) -> Result<Vec<u8>, Diagnostic> 
             Span::new(0, 0),
         )
     })?;
+    let manifest_document = parse_manifest(&manifest_text)
+        .map_err(|diagnostic| Diagnostic::new("SEL-B001", diagnostic.message, diagnostic.span))?;
+    validate_language_version(&manifest_document)
+        .map_err(|diagnostic| Diagnostic::new("SEL-B001", diagnostic.message, diagnostic.span))?;
     let source_root =
-        path.join(value_for(&manifest_text, "source_root").unwrap_or_else(|| "src".to_owned()));
+        path.join(value_for(&manifest_document, "source_root").unwrap_or_else(|| "src".to_owned()));
     let mut files = vec![BundleFile {
         path: "seloryn.toml".to_owned(),
         bytes: fs::read(&manifest).map_err(|_| {
@@ -209,7 +216,7 @@ pub fn encode_bundle(path: &Path, profile: &str) -> Result<Vec<u8>, Diagnostic> 
         })?,
     }];
     collect_bundle_files(path, &source_root, &mut files)?;
-    for read_root in declared_read_roots(&manifest_text) {
+    for read_root in declared_read_roots(&manifest_document) {
         validate_bundle_path(&read_root.replace('\\', "/"))?;
         let directory = path.join(&read_root);
         if !directory.starts_with(path) || !directory.is_dir() {
@@ -219,7 +226,7 @@ pub fn encode_bundle(path: &Path, profile: &str) -> Result<Vec<u8>, Diagnostic> 
         }
         collect_bundle_files(path, &directory, &mut files)?;
     }
-    for write_root in declared_write_roots(&manifest_text) {
+    for write_root in declared_write_roots(&manifest_document) {
         validate_bundle_path(&write_root.replace('\\', "/"))?;
         let directory = path.join(&write_root);
         if !directory.starts_with(path) || !directory.is_dir() {
@@ -654,11 +661,200 @@ fn imports_from_directive(keyword: &str, text: &str) -> bool {
     (keyword == "import" || keyword == "from") && !is_standard_module(module)
 }
 
-fn value_for(manifest: &str, key: &str) -> Option<String> {
-    manifest.lines().find_map(|line| {
-        let (name, value) = line.split_once('=')?;
-        (name.trim() == key).then(|| value.trim().trim_matches('"').to_owned())
-    })
+fn parse_manifest(manifest: &str) -> Result<toml::Value, Diagnostic> {
+    let document = toml::from_str(manifest).map_err(|error| {
+        Diagnostic::new(
+            "SEL-M001",
+            format!("invalid project manifest `seloryn.toml`: {error}"),
+            Span::new(0, 0),
+        )
+    })?;
+    validate_manifest_schema(&document)?;
+    Ok(document)
+}
+
+fn invalid_manifest(message: impl Into<String>) -> Diagnostic {
+    Diagnostic::new("SEL-M001", message, Span::new(0, 0))
+}
+
+fn require_manifest_string(
+    table: &toml::map::Map<String, toml::Value>,
+    key: &str,
+    required: bool,
+) -> Result<(), Diagnostic> {
+    let Some(value) = table.get(key) else {
+        if required {
+            return Err(invalid_manifest(format!(
+                "project manifest field `[package] {key}` must be a string"
+            )));
+        }
+        return Ok(());
+    };
+    if !value.is_str() {
+        return Err(invalid_manifest(format!(
+            "project manifest field `[package] {key}` must be a string"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_manifest_schema(manifest: &toml::Value) -> Result<(), Diagnostic> {
+    let Some(root) = manifest.as_table() else {
+        return Err(invalid_manifest(
+            "project manifest must contain a TOML table",
+        ));
+    };
+    for key in root.keys() {
+        if !matches!(key.as_str(), "package" | "capabilities" | "limits") {
+            return Err(invalid_manifest(format!(
+                "unknown project manifest section or field `{key}`"
+            )));
+        }
+    }
+    let Some(package) = root.get("package").and_then(toml::Value::as_table) else {
+        return Err(invalid_manifest(
+            "project manifest must contain a `[package]` table",
+        ));
+    };
+    for key in package.keys() {
+        if !matches!(
+            key.as_str(),
+            "name" | "language" | "source_root" | "entry" | "entrypoint"
+        ) {
+            return Err(invalid_manifest(format!(
+                "unknown project manifest field `[package] {key}`"
+            )));
+        }
+    }
+    require_manifest_string(package, "name", true)?;
+    require_manifest_string(package, "language", true)?;
+    require_manifest_string(package, "source_root", false)?;
+    require_manifest_string(package, "entry", false)?;
+    require_manifest_string(package, "entrypoint", false)?;
+    if package.contains_key("entry") && package.contains_key("entrypoint") {
+        return Err(invalid_manifest(
+            "project manifest cannot declare both `[package] entry` and `entrypoint`",
+        ));
+    }
+
+    if let Some(capabilities) = root.get("capabilities") {
+        let Some(capabilities) = capabilities.as_table() else {
+            return Err(invalid_manifest(
+                "project manifest `[capabilities]` must be a table",
+            ));
+        };
+        for key in capabilities.keys() {
+            if !matches!(key.as_str(), "read" | "write") {
+                return Err(invalid_manifest(format!(
+                    "unknown project manifest field `[capabilities] {key}`"
+                )));
+            }
+            let Some(values) = capabilities.get(key).and_then(toml::Value::as_array) else {
+                return Err(invalid_manifest(format!(
+                    "project manifest field `[capabilities] {key}` must be an array of strings"
+                )));
+            };
+            if values.iter().any(|value| !value.is_str()) {
+                return Err(invalid_manifest(format!(
+                    "project manifest field `[capabilities] {key}` must be an array of strings"
+                )));
+            }
+        }
+    }
+
+    if let Some(limits) = root.get("limits") {
+        let Some(limits) = limits.as_table() else {
+            return Err(invalid_manifest(
+                "project manifest `[limits]` must be a table",
+            ));
+        };
+        for key in limits.keys() {
+            if !matches!(key.as_str(), "json_max_bytes" | "json_max_depth") {
+                return Err(invalid_manifest(format!(
+                    "unknown project manifest field `[limits] {key}`"
+                )));
+            }
+            let Some(value) = limits.get(key).and_then(toml::Value::as_integer) else {
+                return Err(invalid_manifest(format!(
+                    "project manifest field `[limits] {key}` must be a positive integer"
+                )));
+            };
+            if value <= 0 {
+                return Err(invalid_manifest(format!(
+                    "project manifest field `[limits] {key}` must be a positive integer"
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_language_version(manifest: &toml::Value) -> Result<(), Diagnostic> {
+    let language = manifest
+        .get("package")
+        .and_then(|package| package.get("language"))
+        .and_then(toml::Value::as_str)
+        .ok_or_else(|| {
+            invalid_manifest("project manifest `[package]` must declare `language = \"M.mm\"`")
+        })?;
+    let Some((major, minor)) = language.split_once('.') else {
+        return Err(Diagnostic::new(
+            "SEL-M001",
+            format!("project language version `{language}` is not canonical M.mm"),
+            Span::new(0, 0),
+        ));
+    };
+    if major.is_empty()
+        || (major != "0" && major.starts_with('0'))
+        || !major.chars().all(|character| character.is_ascii_digit())
+        || minor.len() != 2
+        || !minor.chars().all(|character| character.is_ascii_digit())
+    {
+        return Err(Diagnostic::new(
+            "SEL-M001",
+            format!("project language version `{language}` is not canonical M.mm"),
+            Span::new(0, 0),
+        ));
+    }
+    let requested = (
+        major.parse::<u64>().unwrap_or(u64::MAX),
+        minor.parse::<u64>().unwrap_or(u64::MAX),
+    );
+    let Some((supported_major, supported_minor)) = crate::LANGUAGE_VERSION.split_once('.') else {
+        return Err(Diagnostic::new(
+            "SEL-M001",
+            "runtime language version is invalid",
+            Span::new(0, 0),
+        ));
+    };
+    let supported = (
+        supported_major.parse::<u64>().unwrap_or(u64::MAX),
+        supported_minor.parse::<u64>().unwrap_or(u64::MAX),
+    );
+    if requested > supported {
+        return Err(Diagnostic::new(
+            "SEL-M001",
+            format!(
+                "project language version `{language}` requires a newer Seloryn runtime (supported: {})",
+                crate::LANGUAGE_VERSION
+            ),
+            Span::new(0, 0),
+        ));
+    }
+    Ok(())
+}
+
+fn value_for(manifest: &toml::Value, key: &str) -> Option<String> {
+    ["package", "limits"]
+        .into_iter()
+        .filter_map(|table| manifest.get(table))
+        .chain(std::iter::once(manifest))
+        .find_map(|table| table.get(key))
+        .and_then(|value| match value {
+            toml::Value::String(value) => Some(value.clone()),
+            toml::Value::Integer(value) => Some(value.to_string()),
+            _ => None,
+        })
 }
 
 fn manifest_relative_path(value: &str, field: &str) -> Result<PathBuf, Diagnostic> {
@@ -678,46 +874,22 @@ fn manifest_relative_path(value: &str, field: &str) -> Result<PathBuf, Diagnosti
     Ok(path.to_path_buf())
 }
 
-fn declared_read_roots(manifest: &str) -> Vec<String> {
-    let Some(value) = manifest.lines().find_map(|line| {
-        let (name, value) = line.split_once('=')?;
-        (name.trim() == "read").then(|| value.trim())
-    }) else {
-        return Vec::new();
-    };
-    let Some(contents) = value
-        .strip_prefix('[')
-        .and_then(|value| value.strip_suffix(']'))
-    else {
-        return Vec::new();
-    };
-    contents
-        .split(',')
-        .map(str::trim)
-        .map(|value| value.trim_matches('"').trim_matches('\''))
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
-        .collect()
+fn declared_read_roots(manifest: &toml::Value) -> Vec<String> {
+    declared_capability_roots(manifest, "read")
 }
 
-fn declared_write_roots(manifest: &str) -> Vec<String> {
-    let Some(value) = manifest.lines().find_map(|line| {
-        let (name, value) = line.split_once('=')?;
-        (name.trim() == "write").then(|| value.trim())
-    }) else {
-        return Vec::new();
-    };
-    let Some(contents) = value
-        .strip_prefix('[')
-        .and_then(|value| value.strip_suffix(']'))
-    else {
-        return Vec::new();
-    };
-    contents
-        .split(',')
-        .map(str::trim)
-        .map(|value| value.trim_matches('"').trim_matches('\''))
-        .filter(|value| !value.is_empty())
+fn declared_write_roots(manifest: &toml::Value) -> Vec<String> {
+    declared_capability_roots(manifest, "write")
+}
+
+fn declared_capability_roots(manifest: &toml::Value, capability: &str) -> Vec<String> {
+    manifest
+        .get("capabilities")
+        .and_then(|capabilities| capabilities.get(capability))
+        .and_then(toml::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(toml::Value::as_str)
         .map(str::to_owned)
         .collect()
 }

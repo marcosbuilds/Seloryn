@@ -4,6 +4,18 @@ This directory contains the verified-preview Seloryn editor extension. It is
 public evidence of editor support, not a claim that Seloryn has a complete
 LSP, formatter or stable runtime release.
 
+The package version is controlled by the root `VERSION.toml`, not by an
+independent hand-edited number. Before tagging a release, run
+`python scripts/release/verify-version.py` from the repository root. The
+verifier compares the previous and current SemVer values, requires the
+append-only extension gain ledger and checks that the manifest and lockfile
+agree. Keep the extension version unchanged for documentation-only changes.
+
+The diagnostic bridge also exposes strict project-manifest failures from the
+CLI, including malformed TOML and a project language newer than the runtime;
+the public CLI integration test covers these errors without reimplementing
+manifest semantics in the extension.
+
 It currently provides:
 
 - `.sely` file association, comments, brackets, indentation and TextMate

@@ -2,15 +2,15 @@
 # The language version is a capability count (M.mm), not a decimal float.
 
 [current]
-language = "0.04"
-runtime_package = "0.4.0"
+language = "0.05"
+runtime_package = "0.5.0"
 extension_package = "0.4.0"
 channel = "verified-preview"
 
 [comparison]
-previous_language = "0.03"
-previous_runtime_package = "0.3.0"
-previous_extension_package = "0.3.0"
+previous_language = "0.04"
+previous_runtime_package = "0.4.0"
+previous_extension_package = "0.4.0"
 
 [[gains]]
 id = "N3B-TENSOR-AUTODIFF"
@@ -35,3 +35,15 @@ id = "N6-RELIABLE-TRAINING-AND-GPU-PROBE"
 language = "0.04"
 summary = "Hardened CPU MLP resume/training evidence plus physical-host non-fallback GPU compute/readback probe"
 evidence = "src/runtime.rs; src/gpu.rs; tests/mlp_training_probe.py; tests/gpu_probe.py; tooling/vscode"
+
+[[gains]]
+id = "N7-STRICT-PROJECT-MANIFESTS"
+language = "0.05"
+summary = "Project manifests use a real TOML parser and reject malformed or future language declarations before execution"
+evidence = "src/project.rs; tests/bootstrap_cli.rs; tests/project_manifest_probe.py; tests/release_probe.py; docs/guide/cli.md; docs/releases/runtime-0.05.md"
+
+[[extension_gains]]
+id = "EXT-N6-TRAINING-HARDWARE-COMMANDS"
+package = "0.4.0"
+summary = "VS Code terminal commands expose verified CPU training, physical device inventory and bounded GPU compute/readback evidence"
+evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/package.test.js; tooling/vscode/test/cli.integration.test.js; docs/releases/vscode-0.4.0.md"

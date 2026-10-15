@@ -1,6 +1,6 @@
 # Current capability status
 
-Seloryn `0.04` is a verified-preview language/runtime for a bounded `.sely`
+Seloryn `0.05` is a verified-preview language/runtime for a bounded `.sely`
 subset. It includes an executable CPU MLP training profile, hardened resume
 integrity and a real physical non-fallback GPU compute probe in addition to the earlier
 scalar, project, tensor and autodiff gates. The status applies to the observed
@@ -20,8 +20,9 @@ purpose ML platform.
 | Human/JSON Lines terminal streaming with flush and stdout/stderr separation | **Verified preview for the CPU MLP profile** | [`src/main.rs`](../../src/main.rs), MLP black-box probe |
 | Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop | **Verified preview** | [`examples/projects/self-hosted-linear`](../../examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](../../tests/self_hosted_probe.py) |
 | Physical hardware adapter inventory and bounded WGSL compute/readback probe | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`tests/gpu_probe.py`](../../tests/gpu_probe.py) |
-| VS Code `.sely` highlighting, real snippets/completions, CLI diagnostics and Seloryn file icon | Verified editor preview | [`tooling/vscode`](../../tooling/vscode), packaged VSIX release |
+| VS Code `.sely` highlighting, real snippets/completions, CLI diagnostics and Seloryn file icon | Verified editor preview | [`tooling/vscode`](../../tooling/vscode), [public 0.4.0 VSIX release](https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.4.0) |
 | Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
+| Strict `seloryn.toml` parsing and runtime-language compatibility rejection | **Verified preview** | [`src/project.rs`](../../src/project.rs), [`tests/project_manifest_probe.py`](../../tests/project_manifest_probe.py), CLI and VS Code integration fixtures |
 
 ## Explicit boundaries
 
@@ -48,6 +49,10 @@ tamper-detecting sampler state for resumable MLP training, and a real physical
 non-fallback adapter inventory plus an 8-element WGSL compute/readback proof on
 the declared host. It does not claim GPU tensor training or universal backend
 availability.
+The `0.05` gain makes project manifests use a real TOML parser, rejects
+malformed manifests and rejects language declarations newer than the runtime;
+the public CLI and editor integration fixtures exercise both failures before
+source execution.
 The public comparison remains honest: Seloryn's current differentiator is a
 single typed, bounded and observable workflow; broad productivity or
 performance superiority over established ML runtimes has not been proved.

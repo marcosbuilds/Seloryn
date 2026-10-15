@@ -1,0 +1,2 @@
+# Python 3.10 compatibility for the version verifier; Python 3.11+ uses tomllib.
+tomli==2.0.1; python_version < "3.11"

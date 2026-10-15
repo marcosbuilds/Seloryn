@@ -54,7 +54,30 @@ try {
   assert.equal(payload.diagnostics[0].code, 'SEL-T004');
   assert.equal(payload.diagnostics[0].primary.start.line, 2);
   assert.equal(payload.diagnostics[0].file, sourcePath);
-  console.log('Seloryn VS Code CLI integration: 2 cases passed');
+
+  const projectRoot = path.join(temporaryRoot, 'invalid project');
+  fs.mkdirSync(path.join(projectRoot, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(projectRoot, 'seloryn.toml'), 'this is not valid TOML\n', 'utf8');
+  fs.writeFileSync(path.join(projectRoot, 'src', 'main.sely'), 'fn main() -> Unit:\n    return\n', 'utf8');
+  const invalidManifest = spawnSync(binary, [
+    'check',
+    projectRoot,
+    '--format=json',
+    '--color=never'
+  ], {
+    cwd: repositoryRoot,
+    encoding: 'utf8',
+    windowsHide: true,
+    shell: false
+  });
+  assert.equal(invalidManifest.error, undefined);
+  assert.equal(invalidManifest.status, 65);
+  assert.equal(invalidManifest.stdout, '');
+  const manifestPayload = JSON.parse(invalidManifest.stderr);
+  assert.equal(manifestPayload.diagnostics.length, 1);
+  assert.equal(manifestPayload.diagnostics[0].code, 'SEL-M001');
+  assert.match(manifestPayload.diagnostics[0].message, /invalid project manifest/u);
+  console.log('Seloryn VS Code CLI integration: 3 cases passed');
 } finally {
   fs.rmSync(temporaryRoot, { recursive: true, force: true });
 }

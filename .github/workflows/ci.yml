@@ -30,6 +30,8 @@ jobs:
           rustc --version
           cargo --version
           python --version
+      - name: Release script dependencies
+        run: python -m pip install --disable-pip-version-check --quiet -r scripts/release/requirements.txt
       - name: Verify earned version comparison
         run: python scripts/release/verify-version.py
       - name: Format
@@ -55,6 +57,8 @@ jobs:
         run: python tests/n3_tensor_probe.py
       - name: Public projects and bundle probe
         run: python tests/release_probe.py
+      - name: Independent project manifest probe
+        run: python tests/project_manifest_probe.py
       - name: Independent CPU MLP training proof
         run: python tests/mlp_training_probe.py
       - name: Independent Seloryn-authored training proof

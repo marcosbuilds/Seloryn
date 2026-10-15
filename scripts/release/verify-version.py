@@ -1,95 +1,192 @@
-"""Verify that the earned version is consistent across release surfaces."""
+"""Verify earned language and package versions against public evidence."""
 
 from __future__ import annotations
 
 import json
 import re
-import sys
+import subprocess
 from pathlib import Path
 from typing import NoReturn
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 and older supported developer hosts.
+    import tomli as tomllib
+
 
 ROOT = Path(__file__).resolve().parents[2]
+LANGUAGE_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{2}\Z")
+PACKAGE_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
 
 
 def fail(message: str) -> NoReturn:
     raise SystemExit(f"version verification failed: {message}")
 
 
-def field(text: str, pattern: str, label: str) -> str:
-    match = re.search(pattern, text, re.MULTILINE)
-    if not match:
-        fail(f"{label} is missing")
-    return match.group(1)
-
-
 def parse_language_version(value: str, label: str) -> tuple[int, int]:
-    if not re.fullmatch(r"(?:0|[1-9][0-9]*)\.[0-9]{2}", value):
+    if not LANGUAGE_PATTERN.fullmatch(value):
         fail(f"{label} is not canonical M.mm")
     major, minor = value.split(".")
     return int(major), int(minor)
 
 
-def main() -> None:
-    version_text = (ROOT / "VERSION.toml").read_text(encoding="utf-8")
-    current_language = field(version_text, r'^language = "([^"]+)"$', "current language version")
-    runtime_package = field(version_text, r'^runtime_package = "([^"]+)"$', "runtime package version")
-    extension_package = field(version_text, r'^extension_package = "([^"]+)"$', "extension package version")
-    previous_language = field(version_text, r'^previous_language = "([^"]+)"$', "previous language version")
-    previous_runtime = field(version_text, r'^previous_runtime_package = "([^"]+)"$', "previous runtime version")
-    previous_extension = field(version_text, r'^previous_extension_package = "([^"]+)"$', "previous extension version")
+def parse_package_version(value: str, label: str) -> tuple[int, int, int]:
+    if not PACKAGE_PATTERN.fullmatch(value):
+        fail(f"{label} is not canonical SemVer X.Y.Z")
+    major, minor, patch = value.split(".")
+    return int(major), int(minor), int(patch)
+
+
+def require_text(record: dict[str, object], key: str, label: str) -> str:
+    value = record.get(key)
+    if not isinstance(value, str) or not value:
+        fail(f"{label} is missing")
+    return value
+
+
+def require_evidence(root: Path, records: list[dict[str, object]], label: str) -> None:
+    resolved_root = root.resolve()
+    for record in records:
+        record_id = require_text(record, "id", f"{label} id")
+        evidence = require_text(record, "evidence", f"{label} {record_id} evidence")
+        for relative_path in (item.strip() for item in evidence.split(";")):
+            if not relative_path:
+                fail(f"{label} {record_id} contains an empty evidence path")
+            candidate_path = Path(relative_path)
+            if candidate_path.is_absolute() or ".." in candidate_path.parts:
+                fail(f"{label} {record_id} evidence path must stay inside the public repository: {relative_path}")
+            resolved_path = (root / candidate_path).resolve()
+            if resolved_root not in (resolved_path, *resolved_path.parents):
+                fail(f"{label} {record_id} evidence path escapes the public repository: {relative_path}")
+            if not resolved_path.exists():
+                fail(f"{label} {record_id} evidence path does not exist: {relative_path}")
+            tracked = subprocess.run(
+                ["git", "-C", str(root), "ls-files", "--", relative_path],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if tracked.returncode != 0 or not tracked.stdout.strip():
+                fail(f"{label} {record_id} evidence path is not tracked publicly: {relative_path}")
+
+
+def require_increasing(current: tuple[int, ...], previous: tuple[int, ...], label: str) -> None:
+    if current <= previous:
+        fail(f"{label} version must advance monotonically")
+
+
+def validate(root: Path = ROOT) -> None:
+    version_text = (root / "VERSION.toml").read_text(encoding="utf-8")
+    document = tomllib.loads(version_text)
+    current = document.get("current")
+    comparison = document.get("comparison")
+    language_gains = document.get("gains")
+    extension_gains = document.get("extension_gains")
+    if not isinstance(current, dict) or not isinstance(comparison, dict):
+        fail("VERSION.toml must define [current] and [comparison]")
+    if not isinstance(language_gains, list) or not language_gains:
+        fail("VERSION.toml must record at least one language gain")
+    if not isinstance(extension_gains, list) or not extension_gains:
+        fail("VERSION.toml must record at least one extension gain")
+
+    current_language = require_text(current, "language", "current language version")
+    runtime_package = require_text(current, "runtime_package", "runtime package version")
+    extension_package = require_text(current, "extension_package", "extension package version")
+    previous_language = require_text(comparison, "previous_language", "previous language version")
+    previous_runtime = require_text(comparison, "previous_runtime_package", "previous runtime version")
+    previous_extension = require_text(comparison, "previous_extension_package", "previous extension version")
     current_language_number = parse_language_version(current_language, "current language version")
     previous_language_number = parse_language_version(previous_language, "previous language version")
-    gain_ids = re.findall(r'^id = "([^"]+)"$', version_text, re.MULTILINE)
-    gain_languages = re.findall(r'^language = "([^"]+)"$', version_text, re.MULTILINE)
-    if not gain_ids:
-        fail("no earned gain is recorded")
-    gain_id = gain_ids[-1]
-    if not gain_languages or gain_languages[-1] != current_language:
-        fail("latest earned gain does not match current language version")
-    if len(set(gain_ids)) != len(gain_ids):
-        fail("earned gain ids must be unique")
+    current_runtime_number = parse_package_version(runtime_package, "current runtime version")
+    previous_runtime_number = parse_package_version(previous_runtime, "previous runtime version")
+    current_extension_number = parse_package_version(extension_package, "current extension version")
+    previous_extension_number = parse_package_version(previous_extension, "previous extension version")
 
-    cargo = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
-    if field(cargo, r'^version = "([^"]+)"$', "Cargo package version") != runtime_package:
-        fail("Cargo.toml does not match VERSION.toml")
-    if field(cargo, r'^language-version = "([^"]+)"$', "Cargo language version") != current_language:
-        fail("Cargo language metadata does not match VERSION.toml")
+    language_ids = [require_text(record, "id", "language gain id") for record in language_gains]
+    extension_ids = [require_text(record, "id", "extension gain id") for record in extension_gains]
+    if len(set(language_ids)) != len(language_ids):
+        fail("language gain ids must be unique")
+    if len(set(extension_ids)) != len(extension_ids):
+        fail("extension gain ids must be unique")
+    require_evidence(root, language_gains, "language gain")
+    require_evidence(root, extension_gains, "extension gain")
 
-    main = (ROOT / "src" / "main.rs").read_text(encoding="utf-8")
-    if field(main, r'^const LANGUAGE_VERSION: &str = "([^"]+)";', "CLI language version") != current_language:
-        fail("CLI language version does not match VERSION.toml")
+    expected_gain = (0, 1)
+    for record in language_gains:
+        gain_version = parse_language_version(
+            require_text(record, "language", "language gain version"),
+            "language gain version",
+        )
+        if gain_version != expected_gain:
+            fail("language gains must form an ordered one-credit sequence")
+        expected_gain = (gain_version[0] + (gain_version[1] + 1) // 100, (gain_version[1] + 1) % 100)
 
-    extension = json.loads((ROOT / "tooling" / "vscode" / "package.json").read_text(encoding="utf-8"))
-    if extension["version"] != extension_package:
-        fail("VS Code package version does not match VERSION.toml")
+    previous_extension_gain = None
+    for record in extension_gains:
+        extension_gain = parse_package_version(
+            require_text(record, "package", "extension gain package"),
+            "extension gain package",
+        )
+        if previous_extension_gain is not None and extension_gain <= previous_extension_gain:
+            fail("extension gains must advance monotonically")
+        previous_extension_gain = extension_gain
 
-    lock = (ROOT / "Cargo.lock").read_text(encoding="utf-8")
-    lock_block = lock.split('name = "seloryn"', 1)[1].split('\n\n', 1)[0]
-    if f'version = "{runtime_package}"' not in lock_block:
-        fail("Cargo.lock does not match VERSION.toml")
-
-    npm_lock = json.loads((ROOT / "tooling" / "vscode" / "package-lock.json").read_text(encoding="utf-8"))
-    if npm_lock["version"] != extension_package or npm_lock["packages"][""]["version"] != extension_package:
-        fail("package-lock.json does not match VERSION.toml")
-
-    if current_language == previous_language:
-        fail("current language version did not advance")
+    latest_language = language_gains[-1]
+    if require_text(latest_language, "language", "latest language gain version") != current_language:
+        fail("latest language gain does not match current language version")
     expected_language = (
         previous_language_number[0] + (previous_language_number[1] + 1) // 100,
         (previous_language_number[1] + 1) % 100,
     )
     if current_language_number != expected_language:
         fail("current language version must advance by exactly one accepted gain")
-    if runtime_package == previous_runtime:
-        fail("runtime package version did not advance")
-    if extension_package == previous_extension:
-        fail("extension package version did not advance")
+
+    require_increasing(current_runtime_number, previous_runtime_number, "runtime package")
+    latest_extension = extension_gains[-1]
+    if require_text(latest_extension, "package", "latest extension gain package") != extension_package:
+        fail("latest extension gain does not match current extension version")
+    if current_extension_number < previous_extension_number:
+        fail("extension package version must not move backwards")
+
+    cargo = (root / "Cargo.toml").read_text(encoding="utf-8")
+    cargo_package = re.search(r'^version = "([^"]+)"$', cargo, re.MULTILINE)
+    cargo_language = re.search(r'^language-version = "([^"]+)"$', cargo, re.MULTILINE)
+    if not cargo_package or cargo_package.group(1) != runtime_package:
+        fail("Cargo.toml does not match VERSION.toml")
+    if not cargo_language or cargo_language.group(1) != current_language:
+        fail("Cargo language metadata does not match VERSION.toml")
+
+    main = (root / "src" / "main.rs").read_text(encoding="utf-8")
+    cli_language = re.search(r'^(?:pub\(crate\) )?const LANGUAGE_VERSION: &str = "([^"]+)";', main, re.MULTILINE)
+    if not cli_language or cli_language.group(1) != current_language:
+        fail("CLI language version does not match VERSION.toml")
+
+    extension = json.loads((root / "tooling" / "vscode" / "package.json").read_text(encoding="utf-8"))
+    if extension["version"] != extension_package:
+        fail("VS Code package version does not match VERSION.toml")
+
+    lock = (root / "Cargo.lock").read_text(encoding="utf-8")
+    lock_block = lock.split('name = "seloryn"', 1)[1].split("\n\n", 1)[0]
+    if f'version = "{runtime_package}"' not in lock_block:
+        fail("Cargo.lock does not match VERSION.toml")
+
+    npm_lock = json.loads((root / "tooling" / "vscode" / "package-lock.json").read_text(encoding="utf-8"))
+    if npm_lock["version"] != extension_package or npm_lock["packages"][""]["version"] != extension_package:
+        fail("package-lock.json does not match VERSION.toml")
+
     print(
         f"Seloryn version comparison: {previous_language} -> {current_language}; "
         f"runtime {previous_runtime} -> {runtime_package}; "
-        f"extension {previous_extension} -> {extension_package}; gain={gain_id}"
+        f"extension {previous_extension} -> {extension_package}; "
+        f"language_gain={language_ids[-1]}; extension_gain={extension_ids[-1]}"
     )
+
+
+def main() -> None:
+    try:
+        validate()
+    except (OSError, tomllib.TOMLDecodeError, json.JSONDecodeError, KeyError, IndexError) as error:
+        fail(str(error))
 
 
 if __name__ == "__main__":
