@@ -1,10 +1,11 @@
 # Current capability status
 
-Seloryn `0.03` is a verified-preview language/runtime for a bounded `.sely`
-subset. It now includes an executable CPU MLP training profile in addition to
-the earlier scalar, project, tensor and autodiff gates. The status applies to
-the observed contracts below; it does not turn the whole runtime into a stable
-general-purpose ML platform.
+Seloryn `0.04` is a verified-preview language/runtime for a bounded `.sely`
+subset. It includes an executable CPU MLP training profile, hardened resume
+integrity and a real physical non-fallback GPU compute probe in addition to the earlier
+scalar, project, tensor and autodiff gates. The status applies to the observed
+contracts below; it does not turn the whole runtime into a stable general-
+purpose ML platform.
 
 ## What works today
 
@@ -15,9 +16,10 @@ general-purpose ML platform.
 | CPU `Tensor[F32]`/`Tensor[I64]`, broadcasting, reductions, matmul and stable numeric ops | Experimental implemented and tested | [`src/tensor`](../../src/tensor), [`tests/tensor_cpu.rs`](../../tests/tensor_cpu.rs) |
 | Bounded Tensor[F32] reverse-mode autodiff | Experimental implemented and tested | [`src/tensor_autograd.rs`](../../src/tensor_autograd.rs), [`tests/n3_tensor_probe.py`](../../tests/n3_tensor_probe.py) |
 | Two-layer CPU MLP training with mini-batches, ReLU backpropagation, SGD, evaluation and deterministic seeds | **Verified preview** | [`training.md`](../compute/training.md), [`examples/projects/mlp-training`](../../examples/projects/mlp-training), [`tests/mlp_training_probe.py`](../../tests/mlp_training_probe.py) |
-| Versioned checkpoint save/resume with dataset hashes and sampler state | **Verified preview** | [`src/runtime.rs`](../../src/runtime.rs), MLP black-box probe |
+| Versioned checkpoint save/resume with dataset, weight, sampler-state and complete-state hashes | **Verified preview** | [`src/runtime.rs`](../../src/runtime.rs), MLP black-box probe |
 | Human/JSON Lines terminal streaming with flush and stdout/stderr separation | **Verified preview for the CPU MLP profile** | [`src/main.rs`](../../src/main.rs), MLP black-box probe |
 | Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop | **Verified preview** | [`examples/projects/self-hosted-linear`](../../examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](../../tests/self_hosted_probe.py) |
+| Physical hardware adapter inventory and bounded WGSL compute/readback probe | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`tests/gpu_probe.py`](../../tests/gpu_probe.py) |
 | VS Code `.sely` highlighting, real snippets/completions, CLI diagnostics and Seloryn file icon | Verified editor preview | [`tooling/vscode`](../../tooling/vscode), packaged VSIX release |
 | Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
 
@@ -26,7 +28,7 @@ general-purpose ML platform.
 | Capability | State | Consequence |
 |---|---|---|
 | Public `Module`/`Parameter`/`Dataset` APIs and optimizer families | Not implemented | Seloryn can now own a bounded optimization loop, but the reusable object API is still not exposed |
-| GPU, distributed execution, mixed precision and memory sharding | Not implemented | only single-process CPU execution is supported |
+| GPU tensor/autodiff training, distributed execution, mixed precision and memory sharding | Not implemented | the GPU gate proves adapter selection and one compute/readback path, not model training |
 | Transformer/LLM training, tokenizers and serving | Not implemented | no model-scale or production-serving claim |
 | Runtime installer, registry, broad package ecosystem and stable ABI | Not implemented | use a built binary or the source checkout; the preview is not a stable distribution |
 | Full LSP and interactive VS Code training panel | Not implemented | the extension uses the CLI as source of truth; training is run through CLI/terminal |
@@ -41,6 +43,11 @@ multi-input gradients, bounded loop and parameter updates. The gain does not
 imply that GPU, distributed or general training promises are fulfilled; it
 demonstrates that model/loss/update orchestration can now be written in Seloryn
 rather than only selected through a native trainer.
+The `0.04` gain adds a non-degenerate seed path, a total sample-update budget,
+tamper-detecting sampler state for resumable MLP training, and a real physical
+non-fallback adapter inventory plus an 8-element WGSL compute/readback proof on
+the declared host. It does not claim GPU tensor training or universal backend
+availability.
 The public comparison remains honest: Seloryn's current differentiator is a
 single typed, bounded and observable workflow; broad productivity or
 performance superiority over established ML runtimes has not been proved.

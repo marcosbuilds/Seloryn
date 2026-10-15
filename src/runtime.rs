@@ -24,6 +24,7 @@ const MAX_LIST_ELEMENTS: usize = 1_000_000;
 const MAX_RENDER_VALUES: usize = 4096;
 const MAX_TRAINING_STEPS: i64 = 1_000_000;
 const MAX_TRAINING_UPDATES: usize = 10_000_000;
+const MAX_MLP_WORK_UNITS: usize = 100_000_000;
 const MAX_TRAINING_DATASET_BYTES: usize = 1_048_576;
 const MAX_TRAINING_SAMPLES: usize = 100_000;
 const MAX_CHECKPOINT_BYTES: usize = 1_048_576;
@@ -31,6 +32,8 @@ const MAX_TRAINING_INPUTS: usize = 64;
 const MAX_TRAINING_OUTPUTS: usize = 32;
 const MAX_TRAINING_HIDDEN: usize = 256;
 const MAX_TRAINING_PARAMETERS: usize = 1_000_000;
+const MLP_RNG_SEED_MIX: u64 = 0x9E37_79B9_7F4A_7C15;
+const MLP_RNG_NONZERO_FALLBACK: u64 = 0xD1B5_4A32_D192_ED03;
 const LINEAR_DEVICE: &str = "cpu";
 const LINEAR_DTYPE: &str = "f64";
 const LINEAR_OPTIMIZER: &str = "sgd";
@@ -2903,6 +2906,15 @@ fn train_mlp_json(
             train.inputs.len()
         ));
     }
+    let sample_updates = usize::try_from(steps)
+        .ok()
+        .and_then(|value| value.checked_mul(batch_size))
+        .ok_or_else(|| "MLP sample update count overflowed".to_owned())?;
+    if sample_updates > MAX_TRAINING_UPDATES {
+        return Err(format!(
+            "MLP sample updates exceed maximum {MAX_TRAINING_UPDATES}"
+        ));
+    }
     let hidden_size = usize::try_from(hidden_size)
         .map_err(|_| "training hidden_size must be positive".to_owned())?;
     if hidden_size == 0 || hidden_size > MAX_TRAINING_HIDDEN {
@@ -2920,6 +2932,14 @@ fn train_mlp_json(
     if parameter_count > MAX_TRAINING_PARAMETERS {
         return Err(format!(
             "MLP parameter count exceeds maximum {MAX_TRAINING_PARAMETERS}"
+        ));
+    }
+    let work_units = sample_updates
+        .checked_mul(parameter_count)
+        .ok_or_else(|| "MLP work unit count overflowed".to_owned())?;
+    if work_units > MAX_MLP_WORK_UNITS {
+        return Err(format!(
+            "MLP work units exceed maximum {MAX_MLP_WORK_UNITS}"
         ));
     }
     if !learning_rate.is_finite() || learning_rate <= 0.0 {
@@ -2943,8 +2963,13 @@ fn train_mlp_json(
         resumed_from = loaded.step;
         loaded
     } else {
-        let rng_state = seed as u64 ^ 0x9E37_79B9_7F4A_7C15;
-        let model = initialize_mlp(train.input_size, hidden_size, train.output_size, rng_state);
+        let mut rng_state = initial_mlp_rng_state(seed);
+        let model = initialize_mlp(
+            train.input_size,
+            hidden_size,
+            train.output_size,
+            &mut rng_state,
+        );
         let mut state = MlpState {
             model,
             step: 0,
@@ -3170,15 +3195,15 @@ fn initialize_mlp(
     input_size: usize,
     hidden_size: usize,
     output_size: usize,
-    mut rng_state: u64,
+    rng_state: &mut u64,
 ) -> MlpModel {
     let first_scale = (2.0 / input_size as f32).sqrt();
     let second_scale = (2.0 / hidden_size as f32).sqrt();
     let first_weights = (0..input_size * hidden_size)
-        .map(|_| (next_unit(&mut rng_state) * 2.0 - 1.0) * first_scale)
+        .map(|_| (next_unit(rng_state) * 2.0 - 1.0) * first_scale)
         .collect();
     let second_weights = (0..hidden_size * output_size)
-        .map(|_| (next_unit(&mut rng_state) * 2.0 - 1.0) * second_scale)
+        .map(|_| (next_unit(rng_state) * 2.0 - 1.0) * second_scale)
         .collect();
     MlpModel {
         input_size,
@@ -3326,7 +3351,7 @@ fn parse_mlp_checkpoint(
     let JsonValue::Object(values) = value else {
         return Err("MLP checkpoint root must be an object".to_owned());
     };
-    if !matches!(values.get("schema"), Some(JsonValue::String(value)) if value == "seloryn.training.checkpoint.v1")
+    if !matches!(values.get("schema"), Some(JsonValue::String(value)) if value == "seloryn.training.checkpoint.v2")
     {
         return Err("MLP checkpoint schema is unsupported".to_owned());
     }
@@ -3399,6 +3424,24 @@ fn parse_mlp_checkpoint(
         Some(JsonValue::Object(value)) => value,
         _ => return Err("MLP checkpoint data state is missing".to_owned()),
     };
+    let state_value = JsonValue::Object(std::collections::BTreeMap::from([
+        ("step".to_owned(), JsonValue::Number(step.to_string())),
+        (
+            "weights".to_owned(),
+            JsonValue::Object(model_values.clone()),
+        ),
+        ("data".to_owned(), JsonValue::Object(data.clone())),
+    ]));
+    let actual_state_hash = sha256_hex(json::encode(&state_value).as_bytes());
+    if !matches!(values.get("state_sha256"), Some(JsonValue::String(value)) if value == &actual_state_hash)
+    {
+        return Err("MLP checkpoint training state hash does not match the payload".to_owned());
+    }
+    let actual_data_hash = sha256_hex(json::encode(&JsonValue::Object(data.clone())).as_bytes());
+    if !matches!(values.get("data_sha256"), Some(JsonValue::String(value)) if value == &actual_data_hash)
+    {
+        return Err("MLP checkpoint data hash does not match the payload".to_owned());
+    }
     let order = json_usize_array(data, "order")?;
     if order.len() != train.inputs.len()
         || order.iter().any(|index| *index >= train.inputs.len())
@@ -3473,11 +3516,19 @@ fn encode_mlp_checkpoint(
         ),
     ]);
     let weights_value = JsonValue::Object(weights);
+    let data_value = JsonValue::Object(data);
     let weights_sha256 = sha256_hex(json::encode(&weights_value).as_bytes());
+    let data_sha256 = sha256_hex(json::encode(&data_value).as_bytes());
+    let state_value = JsonValue::Object(std::collections::BTreeMap::from([
+        ("step".to_owned(), JsonValue::Number(state.step.to_string())),
+        ("weights".to_owned(), weights_value.clone()),
+        ("data".to_owned(), data_value.clone()),
+    ]));
+    let state_sha256 = sha256_hex(json::encode(&state_value).as_bytes());
     let checkpoint = JsonValue::Object(std::collections::BTreeMap::from([
         (
             "schema".to_owned(),
-            JsonValue::String("seloryn.training.checkpoint.v1".to_owned()),
+            JsonValue::String("seloryn.training.checkpoint.v2".to_owned()),
         ),
         ("model".to_owned(), JsonValue::String("mlp".to_owned())),
         ("step".to_owned(), JsonValue::Number(state.step.to_string())),
@@ -3524,8 +3575,10 @@ fn encode_mlp_checkpoint(
             "weights_sha256".to_owned(),
             JsonValue::String(weights_sha256),
         ),
+        ("data_sha256".to_owned(), JsonValue::String(data_sha256)),
+        ("state_sha256".to_owned(), JsonValue::String(state_sha256)),
         ("weights".to_owned(), weights_value),
-        ("data".to_owned(), JsonValue::Object(data)),
+        ("data".to_owned(), data_value),
     ]));
     json::encode(&checkpoint)
 }
@@ -3707,6 +3760,15 @@ fn shuffle_order(order: &mut [usize], state: &mut u64) {
     }
 }
 
+fn initial_mlp_rng_state(seed: i64) -> u64 {
+    let state = (seed as u64) ^ MLP_RNG_SEED_MIX;
+    if state == 0 {
+        MLP_RNG_NONZERO_FALLBACK
+    } else {
+        state
+    }
+}
+
 fn next_u64(state: &mut u64) -> u64 {
     let mut value = *state;
     value ^= value << 13;
@@ -3884,6 +3946,7 @@ fn render_text(value: &str, remaining: &mut usize) -> String {
 mod tests {
     use super::{
         MAX_RENDER_VALUES, RuntimeError, Value, execute_ir_with_context, execute_with_output,
+        initial_mlp_rng_state, next_u64,
     };
     use crate::parser::parse;
     use crate::semantic::check;
@@ -4089,5 +4152,15 @@ mod tests {
         let rendered = values.render();
         assert!(rendered.contains("... (2 more)"));
         assert!(rendered.ends_with("... (1 more)]"));
+    }
+
+    #[test]
+    fn mlp_rng_cannot_lock_to_the_zero_state() {
+        let mut state = initial_mlp_rng_state(-7046029254386353131);
+        assert_ne!(state, 0);
+        let first = next_u64(&mut state);
+        assert_ne!(first, 0);
+        let second = next_u64(&mut state);
+        assert_ne!(second, first);
     }
 }

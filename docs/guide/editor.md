@@ -17,6 +17,9 @@ It provides:
 - saved-file diagnostics from the configured Seloryn CLI's structured JSON
   output;
 - opt-in inline ghost text through the VS Code Language Model API.
+- `Seloryn: Run CPU Training in Terminal`, `Seloryn: Inspect Hardware Devices`
+  and `Seloryn: Run GPU Compute Probe` commands, all delegated to the
+  configured CLI with explicit argument vectors.
 
 AI ghost text is disabled by default. Enabling it can send bounded active-file
 context to the configured VS Code model provider. When no provider exists, the
@@ -34,7 +37,7 @@ Build and install the local editor preview with:
 ```text
 npm ci --prefix tooling/vscode
 npm run package --prefix tooling/vscode
-code --install-extension tooling/vscode/seloryn-language-0.3.0.vsix
+code --install-extension tooling/vscode/seloryn-language-0.4.0.vsix
 ```
 
 In VS Code, choose `Seloryn File Icons` from `Preferences: File Icon Theme` to

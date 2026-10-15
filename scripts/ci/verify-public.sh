@@ -11,8 +11,10 @@ python3 tests/n1_probe.py
 python3 tests/n2_probe.py
 python3 tests/n3_probe.py
 python3 tests/n3_tensor_probe.py
-python3 tests/n3_tensor_probe.py
 python3 tests/release_probe.py
+python3 tests/mlp_training_probe.py
+python3 tests/self_hosted_probe.py
+python3 tests/gpu_probe.py
 ./target/release/seloryn run examples/tensors/linear-forward.sely
 ./target/release/seloryn run examples/tensors/tensor-reduce.sely
 set +e

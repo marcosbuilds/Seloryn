@@ -194,6 +194,33 @@ assert.deepEqual(extension.createTrainingTerminal(trainingVscode), {
 assert.deepEqual(trainingTerminalCalls[0].shellArgs, ['run', trainingProject, '--log=human']);
 assert.equal(trainingTerminalCalls[0].shellPath, 'seloryn-test');
 
+const hardwareTerminalCalls = [];
+const hardwareVscode = {
+  workspace: {
+    workspaceFolders: [{ uri: { fsPath: trainingProject } }],
+    getConfiguration: () => ({ get: (key, fallback) => key === 'cliPath' ? 'seloryn-test' : fallback })
+  },
+  window: {
+    createTerminal: (options) => {
+      hardwareTerminalCalls.push(options);
+      return { show: () => {} };
+    }
+  }
+};
+assert.deepEqual(extension.createHardwareTerminal(hardwareVscode, 'devices'), {
+  status: 'started',
+  command: 'devices',
+  cliPath: 'seloryn-test'
+});
+assert.deepEqual(hardwareTerminalCalls[0].shellArgs, ['devices', '--format=json']);
+assert.equal(hardwareTerminalCalls[0].shellPath, 'seloryn-test');
+assert.deepEqual(extension.createHardwareTerminal(hardwareVscode, 'gpu-probe'), {
+  status: 'started',
+  command: 'gpu-probe',
+  cliPath: 'seloryn-test'
+});
+assert.deepEqual(hardwareTerminalCalls[1].shellArgs, ['gpu-probe', '--format=json']);
+
 const prompt = extension.buildPrompt(completionDocument, completionPosition);
 assert.match(prompt, /Seloryn/u);
 assert.match(prompt, /<SELORYN_CURSOR>/u);

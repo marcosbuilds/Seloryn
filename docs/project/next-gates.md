@@ -1,6 +1,6 @@
 # Next executable gates
 
-Seloryn is currently `0.03`: a bounded verified-preview language and runtime for
+Seloryn is currently `0.04`: a bounded verified-preview language and runtime for
 AI development and integration. The next steps are executable gates, not a
 promise that every design proposal already exists.
 
@@ -17,6 +17,10 @@ promise that every design proposal already exists.
 - A Seloryn-authored project now defines a tensor objective, calls gradients
   for multiple parameters, iterates with `range` and performs SGD updates in
   `.sely`; the native backend supplies the bounded tensor/autodiff kernels.
+- MLP resume now authenticates sampler state as well as weights and enforces a
+  total sample-update budget. `devices` and `gpu-probe` provide a real
+  capability-aware hardware gate with synchronized WGSL readback, while model
+  training remains CPU-only.
 - Public CI exercises Linux, Windows and macOS, while independent CLI probes
   compare selected tensor results with external references.
 - The VS Code package provides `.sely` association, syntax highlighting,
@@ -47,7 +51,7 @@ promise that every design proposal already exists.
 
 ## Boundaries
 
-No current gate implies a package registry, unrestricted effects, GPU,
-distributed execution, general tensor autodiff, model serving, a full LSP or a
-stable language release. See [current status](status.md) for the observed
-implementation boundary.
+No current gate implies a package registry, unrestricted effects, GPU tensor
+training, distributed execution, general tensor autodiff, model serving, a
+full LSP or a stable language release. See [current status](status.md) for the
+observed implementation boundary.

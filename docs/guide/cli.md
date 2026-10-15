@@ -7,13 +7,15 @@ preview, not an installable stable release.
 ```text
 seloryn --help
 seloryn --version
+seloryn devices [--format=human|json]
+seloryn gpu-probe [--format=human|json]
 seloryn check <file.sely> [--format=human|json] [--quiet]
 seloryn run <file.sely> [--format=human|json] [--log=off|human|json]
 seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
 ```
 
-The preview version reports `0.03`, `package=0.3.0` and
+The preview version reports `0.04`, `package=0.4.0` and
 `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
@@ -70,6 +72,11 @@ target must canonicalize successfully inside its declared root. These
 capability checks are policy checks, not an OS sandbox, and this is experimental
 bundle evidence rather than an installer or supported release.
 
+`devices` reports the compiled hardware adapters as structured JSON or concise
+human output. `gpu-probe` is a bounded hardware smoke test: it requires a
+physical non-fallback adapter and validates a real compute dispatch/readback, but it
+does not move model training to the GPU.
+
 ## Future commands
 
 The following commands remain proposed and must not be treated as available:
@@ -80,7 +87,6 @@ seloryn fmt app.sely               # canonical formatter
 seloryn test                       # test runner, when implemented
 seloryn add package                # package tool, when implemented
 seloryn bench                      # benchmark harness, when implemented
-seloryn devices                    # verified accelerator inventory
 ```
 
 Formatting is deterministic and JSON diagnostics never mix with program stdout.

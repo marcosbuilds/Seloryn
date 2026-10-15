@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current status: language 0.03 / runtime package 0.3.0, verified-preview CPU training plus Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles.** Seloryn can validate and execute a bounded `.sely` subset through `check`, `run` and local project commands. GPU, distributed, registry, installer and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
+> **Current status: language 0.04 / runtime package 0.4.0, verified-preview CPU training plus hardened checkpoints, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles.** Seloryn also has a physical non-fallback hardware inventory and bounded GPU compute/readback probe; GPU tensor training, distributed, registry, installer and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
 
 > **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** This repository records only what is implemented and verified.
 
@@ -25,7 +25,7 @@ claim. If equivalent workloads do not show the proposed reduction in failures,
 integration drift or diagnostic cost, the architecture must be reconsidered
 instead of gaining features by default.
 
-| Capability | Availability in 0.03 | Evidence or boundary |
+| Capability | Availability in 0.04 | Evidence or boundary |
 |:--|:--|:--|
 | UTF-8 lexer, layout and parser subset | Implemented and tested | [`src/parser.rs`](src/parser.rs), parser tests |
 | Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | [`src/semantic.rs`](src/semantic.rs), semantic tests |
@@ -41,8 +41,9 @@ instead of gaining features by default.
 | Bounded CPU MLP training, mini-batches, evaluation, deterministic seed and checkpoint/resume | Verified preview | [`examples/projects/mlp-training`](examples/projects/mlp-training), [`tests/mlp_training_probe.py`](tests/mlp_training_probe.py); CPU/single-process only |
 | Opt-in human/JSON training event stream | Verified preview for MLP | `seloryn run ... --log=human|json`; flushed stderr JSONL, stdout remains the program result |
 | Seloryn-authored multi-input gradients, bounded `range` and SGD loop | Verified preview | [`examples/projects/self-hosted-linear`](examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](tests/self_hosted_probe.py); model/objective/update orchestration is `.sely` source |
+| Physical hardware inventory and non-fallback GPU compute/readback probe | Verified preview on the declared host; capability-aware elsewhere | [`src/gpu.rs`](src/gpu.rs), [`tests/gpu_probe.py`](tests/gpu_probe.py); this is not GPU tensor training |
 | `build`/`exec` `.selyapp` bundle path | Experimental | Deterministic bundle and clean terminal fixtures; not an installer |
-| HTTP, packages, GPU and distributed execution | Not implemented or verified | No supported release artifact exists |
+| HTTP, GPU tensor training, packages and distributed execution | Not implemented or verified | The GPU probe is a bounded hardware gate, not a training backend |
 | Local installer scripts | Development-only; Windows x64 lifecycle verified here | No public download, signing or cross-OS binary support |
 
 | AI development | AI integration | AI serving | Evidence |

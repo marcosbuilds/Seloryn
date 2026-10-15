@@ -28,6 +28,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'N3b tensor independent CLI verification failed' }
     & python tests/release_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Public project and bundle verification failed' }
+    & python tests/mlp_training_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'CPU MLP independent verification failed' }
+    & python tests/self_hosted_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Seloryn-authored training verification failed' }
+    & python tests/gpu_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'GPU compute verification failed' }
     & npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'VS Code packaging dependencies failed to install' }
     & npm run package --prefix tooling/vscode

@@ -55,6 +55,12 @@ jobs:
         run: python tests/n3_tensor_probe.py
       - name: Public projects and bundle probe
         run: python tests/release_probe.py
+      - name: Independent CPU MLP training proof
+        run: python tests/mlp_training_probe.py
+      - name: Independent Seloryn-authored training proof
+        run: python tests/self_hosted_probe.py
+      - name: GPU compute probe when an adapter exists
+        run: python tests/gpu_probe.py
       - name: Install VS Code packaging dependencies
         run: npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
       - name: Build deterministic VSIX preview

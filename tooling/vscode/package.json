@@ -1,8 +1,8 @@
 {
   "name": "seloryn-language",
   "displayName": "Seloryn Language",
-  "description": "Seloryn .sely tooling with syntax highlighting, real code completions, diagnostics and CPU training workflows.",
-  "version": "0.3.0",
+  "description": "Seloryn .sely tooling with syntax highlighting, real code completions, diagnostics, CPU training and hardware probes.",
+  "version": "0.4.0",
   "publisher": "seloryn",
   "icon": "./assets/seloryn-icon.png",
   "repository": {
@@ -27,7 +27,9 @@
   "activationEvents": [
     "onLanguage:seloryn",
     "onCommand:seloryn.toggleAiGhostText",
-    "onCommand:seloryn.runTraining"
+    "onCommand:seloryn.runTraining",
+    "onCommand:seloryn.inspectDevices",
+    "onCommand:seloryn.runGpuProbe"
   ],
   "contributes": {
     "languages": [
@@ -65,6 +67,14 @@
       {
         "command": "seloryn.runTraining",
         "title": "Seloryn: Run CPU Training in Terminal"
+      },
+      {
+        "command": "seloryn.inspectDevices",
+        "title": "Seloryn: Inspect Hardware Devices"
+      },
+      {
+        "command": "seloryn.runGpuProbe",
+        "title": "Seloryn: Run GPU Compute Probe"
       }
     ],
     "configuration": {

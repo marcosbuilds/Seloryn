@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.03 currently provides a verified-preview CPU MLP profile plus a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. It also includes an experimental syntax/semantic checker, deterministic core IR, pure interpreter, local project modules, bounded JSON capability, Tensor[F32] reverse-mode autodiff and `.selyapp` bundles. There is no GPU/distributed backend, package registry, hosted API, stable ABI or supported runtime installer; the preview is used from a built binary or source checkout.
+**Availability:** Seloryn 0.04 currently provides a verified-preview CPU MLP profile plus a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. It also includes a real hardware inventory and bounded GPU compute/readback probe; this does not yet enable GPU model training. There is no distributed backend, package registry, hosted API, stable ABI or supported runtime installer; the preview is used from a built binary or source checkout.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 
@@ -11,6 +11,8 @@ When built from the repository, the native CLI accepts:
 ```text
 seloryn --help
 seloryn --version
+seloryn devices --format=json
+seloryn gpu-probe --format=json
 seloryn check example.sely
 seloryn run example.sely
 seloryn check project-directory
@@ -36,10 +38,10 @@ stdout.
 ## What's not yet available
 
 - No package registry, external dependency resolver or broad standard library runtime.
-- No GPU, distributed or symbolic-shape execution; N1/N2 support only bounded CPU tensors.
+- No GPU tensor/autodiff training, distributed or symbolic-shape execution; N1/N2 and MLP training remain bounded CPU contracts.
 - No HTTP, process or unrestricted file/package runtime; only bounded standard-input JSON and root-confined project JSON reads are available.
 - No public `Module`/`Parameter`/`Dataset` framework, model loading or production model serving; the verified training profiles remain bounded CPU contracts.
-- No GPU, distributed backend, supported installer or supported release target; local installer scripts are not a release.
+- No distributed backend, supported installer or supported release target; local installer scripts are not a release. `gpu-probe` is hardware evidence, not GPU training.
 
 The current capability limits are recorded in the [status page](../project/status.md) and the [tensor reference](../compute/tensors.md).
 
@@ -51,7 +53,7 @@ From a built development binary, the current evidence path is:
    development Rust toolchain and the required `rustfmt`/`clippy` components.
 2. Run `cargo test --all-targets --locked` from the checkout.
 3. Save a UTF-8 `.sely` source file and use `cargo run -- check`, followed by `cargo run -- run`.
-4. Use only the documented CPU tensor subset until a separately verified backend exists.
+4. Use the documented CPU tensor/training subset; run `devices` and `gpu-probe` to inspect hardware evidence without assuming GPU training support.
 
 The broader commands remain planned; the currently executable subset is:
 

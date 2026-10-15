@@ -8,6 +8,7 @@ Language versions use **two numeric components** `M.mm`, where `mm` is always tw
 | 1 | `0.01` |
 | 2 | `0.02` |
 | 3 | `0.03` |
+| 4 | `0.04` |
 | 12 | `0.12` |
 | 99 | `0.99` |
 | 100 | `1.00` |
@@ -23,9 +24,9 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
-| Language capability | `0.02` | `0.03` | N5 Seloryn-authored multi-input gradients, bounded range and SGD loop |
-| Runtime package | `0.2.0` | `0.3.0` | package identity follows the accepted gain |
-| VS Code extension | `0.2.0` | `0.3.0` | extension completions expose gradients, range and the self-hosted workflow |
+| Language capability | `0.03` | `0.04` | N6 hardened CPU training contracts plus a physical-host GPU compute/readback probe |
+| Runtime package | `0.3.0` | `0.4.0` | package identity follows the accepted gain |
+| VS Code extension | `0.3.0` | `0.4.0` | extension exposes CPU training, hardware inventory and GPU compute probe commands |
 
 The comparison is intentionally visible: a new commit alone cannot advance
 the language version. The N3B gain has executable source, negative behavior,

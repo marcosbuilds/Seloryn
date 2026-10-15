@@ -3,6 +3,7 @@
 mod autograd;
 mod builtins;
 mod diagnostic;
+mod gpu;
 mod ir;
 mod json;
 mod lexer;
@@ -21,7 +22,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-const LANGUAGE_VERSION: &str = "0.03";
+const LANGUAGE_VERSION: &str = "0.04";
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
 const EXIT_OK: u8 = 0;
@@ -29,7 +30,7 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored and CPU MLP training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; when enabled, training progress is streamed and flushed to stderr.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\nThe verified-preview runtime is CPU-only and has no GPU, distributed or installer support.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn check <file.sely> [--format=human|json] [--quiet]\n  seloryn run <file.sely> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored and CPU MLP training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; when enabled, training progress is streamed and flushed to stderr.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\nCPU training remains the verified path; GPU probing is available, but GPU training, distributed execution and installer support remain unavailable.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -73,6 +74,12 @@ impl Default for Options {
 enum Action {
     Help,
     Version,
+    Devices {
+        format: OutputFormat,
+    },
+    GpuProbe {
+        format: OutputFormat,
+    },
     Check {
         path: OsString,
         options: Options,
@@ -103,6 +110,8 @@ fn run(args: &[OsString]) -> u8 {
         Action::Version => write_stdout(&format!(
             "seloryn {LANGUAGE_VERSION} package={PACKAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=verified-preview\n"
         )),
+        Action::Devices { format } => devices(format),
+        Action::GpuProbe { format } => gpu_probe(format),
         Action::Check { path, options } => check_path(PathBuf::from(path), options),
         Action::Run { path, options } => run_path(PathBuf::from(path), options),
         Action::Build {
@@ -126,11 +135,47 @@ fn classify(args: &[OsString]) -> Action {
         [] => Action::Help,
         [argument] if argument == "--help" || argument == "-h" => Action::Help,
         [argument] if argument == "--version" => Action::Version,
+        [command, rest @ ..] if command == "devices" => parse_device_command("devices", rest),
+        [command, rest @ ..] if command == "gpu-probe" => parse_device_command("gpu-probe", rest),
         [command, rest @ ..] if command == "check" => parse_command("check", rest),
         [command, rest @ ..] if command == "run" => parse_command("run", rest),
         [command, rest @ ..] if command == "build" => parse_build(rest),
         [command, rest @ ..] if command == "exec" => parse_exec(rest),
         _ => unsupported_arguments(args),
+    }
+}
+
+fn parse_device_command(command: &str, args: &[OsString]) -> Action {
+    let mut format = OutputFormat::Human;
+    let mut index = 0;
+    while index < args.len() {
+        let argument = &args[index];
+        if argument == "--format" {
+            let Some(value) = args.get(index + 1) else {
+                return unsupported_arguments(args);
+            };
+            let Some(parsed) = parse_format(value) else {
+                return unsupported_arguments(args);
+            };
+            format = parsed;
+            index += 1;
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--format="))
+        {
+            let Some(parsed) = parse_format_text(value) else {
+                return unsupported_arguments(args);
+            };
+            format = parsed;
+        } else {
+            return unsupported_arguments(args);
+        }
+        index += 1;
+    }
+    match command {
+        "devices" => Action::Devices { format },
+        "gpu-probe" => Action::GpuProbe { format },
+        _ => Action::Unsupported(command.to_owned()),
     }
 }
 
@@ -998,6 +1043,147 @@ fn check_path(path: PathBuf, options: Options) -> u8 {
     write_diagnostics(&path, &source, &parsed.diagnostics, options)
 }
 
+fn devices(format: OutputFormat) -> u8 {
+    let adapters = gpu::enumerate_adapters();
+    match format {
+        OutputFormat::Human => {
+            if adapters.is_empty() {
+                return write_stdout("seloryn devices count=0\n");
+            }
+            let output = adapters
+                .iter()
+                .enumerate()
+                .map(|(index, adapter)| {
+                    format!(
+                        "seloryn device index={index} type={} backend={} name={} vendor=0x{:08x} device=0x{:08x} driver={} driver_info={}\n",
+                        adapter.device_type,
+                        adapter.backend,
+                        json::encode(&json::JsonValue::String(adapter.name.clone())),
+                        adapter.vendor,
+                        adapter.device,
+                        json::encode(&json::JsonValue::String(adapter.driver.clone())),
+                        json::encode(&json::JsonValue::String(adapter.driver_info.clone()))
+                    )
+                })
+                .collect::<String>();
+            write_stdout(&output)
+        }
+        OutputFormat::Json => {
+            let result = json::JsonValue::Object(BTreeMap::from([
+                (
+                    "devices".to_owned(),
+                    json::JsonValue::Array(adapters.iter().map(adapter_json).collect()),
+                ),
+                (
+                    "count".to_owned(),
+                    json::JsonValue::Number(adapters.len().to_string()),
+                ),
+            ]));
+            write_stdout(&format!("{}\n", json::encode(&result)))
+        }
+    }
+}
+
+fn gpu_probe(format: OutputFormat) -> u8 {
+    match gpu::run_probe() {
+        Ok(report) => {
+            let result = probe_json(&report);
+            match format {
+                OutputFormat::Human => write_stdout(&format!(
+                    "seloryn gpu-probe schema=1 device={} backend={} elements={} max_abs_error={:.9e} result={}\n",
+                    json::encode(&json::JsonValue::String(report.adapter.name)),
+                    report.adapter.backend,
+                    report.elements,
+                    report.max_abs_error,
+                    json::encode(result.get("result").expect("probe result"))
+                )),
+                OutputFormat::Json => write_stdout(&format!(
+                    "{}\n",
+                    json::encode(&json::JsonValue::Object(result))
+                )),
+            }
+        }
+        Err(error) => match format {
+            OutputFormat::Human => write_data_stderr(&format!(
+                "SEL-GPU001 GPU probe unavailable or failed: {}\n",
+                error.message
+            )),
+            OutputFormat::Json => write_data_stderr(&format!(
+                "{}\n",
+                json::encode(&json::JsonValue::Object(BTreeMap::from([
+                    (
+                        "code".to_owned(),
+                        json::JsonValue::String("SEL-GPU001".to_owned()),
+                    ),
+                    ("message".to_owned(), json::JsonValue::String(error.message),),
+                ])))
+            )),
+        },
+    }
+}
+
+fn adapter_json(adapter: &gpu::AdapterInfo) -> json::JsonValue {
+    json::JsonValue::Object(BTreeMap::from([
+        (
+            "name".to_owned(),
+            json::JsonValue::String(adapter.name.clone()),
+        ),
+        (
+            "vendor".to_owned(),
+            json::JsonValue::Number(adapter.vendor.to_string()),
+        ),
+        (
+            "device".to_owned(),
+            json::JsonValue::Number(adapter.device.to_string()),
+        ),
+        (
+            "device_type".to_owned(),
+            json::JsonValue::String(adapter.device_type.clone()),
+        ),
+        (
+            "backend".to_owned(),
+            json::JsonValue::String(adapter.backend.clone()),
+        ),
+        (
+            "driver".to_owned(),
+            json::JsonValue::String(adapter.driver.clone()),
+        ),
+        (
+            "driver_info".to_owned(),
+            json::JsonValue::String(adapter.driver_info.clone()),
+        ),
+    ]))
+}
+
+fn probe_json(report: &gpu::ProbeReport) -> BTreeMap<String, json::JsonValue> {
+    BTreeMap::from([
+        ("schema".to_owned(), json::JsonValue::Number("1".to_owned())),
+        (
+            "event".to_owned(),
+            json::JsonValue::String("gpu.probe".to_owned()),
+        ),
+        ("adapter".to_owned(), adapter_json(&report.adapter)),
+        (
+            "elements".to_owned(),
+            json::JsonValue::Number(report.elements.to_string()),
+        ),
+        (
+            "max_abs_error".to_owned(),
+            json::JsonValue::Number(format!("{:.9e}", report.max_abs_error)),
+        ),
+        (
+            "result".to_owned(),
+            json::JsonValue::Array(
+                report
+                    .result
+                    .iter()
+                    .map(|value| json::JsonValue::Number(format!("{value:.9e}")))
+                    .collect(),
+            ),
+        ),
+    ])
+}
+
 fn run_path(path: PathBuf, options: Options) -> u8 {
     if path.is_dir() {
         return run_project_path(&path, options);
@@ -1623,6 +1809,26 @@ mod tests {
     }
 
     #[test]
+    fn device_commands_accept_only_the_format_option() {
+        assert!(matches!(
+            classify(&[OsString::from("devices"), OsString::from("--format=json")]),
+            Action::Devices { .. }
+        ));
+        assert!(matches!(
+            classify(&[
+                OsString::from("gpu-probe"),
+                OsString::from("--format"),
+                OsString::from("human")
+            ]),
+            Action::GpuProbe { .. }
+        ));
+        assert!(matches!(
+            classify(&[OsString::from("gpu-probe"), OsString::from("--log=json")]),
+            Action::Unsupported(_)
+        ));
+    }
+
+    #[test]
     fn unsupported_unicode_argument_remains_visible() {
         let action = classify(&[OsString::from("入口")]);
         match action {
@@ -1630,7 +1836,11 @@ mod tests {
             Action::Help | Action::Version | Action::Check { .. } => {
                 panic!("expected unsupported action")
             }
-            Action::Run { .. } | Action::Build { .. } | Action::Exec { .. } => {
+            Action::Devices { .. }
+            | Action::GpuProbe { .. }
+            | Action::Run { .. }
+            | Action::Build { .. }
+            | Action::Exec { .. } => {
                 panic!("expected unsupported action")
             }
         }

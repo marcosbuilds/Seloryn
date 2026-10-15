@@ -2,15 +2,15 @@
 # The language version is a capability count (M.mm), not a decimal float.
 
 [current]
-language = "0.03"
-runtime_package = "0.3.0"
-extension_package = "0.3.0"
+language = "0.04"
+runtime_package = "0.4.0"
+extension_package = "0.4.0"
 channel = "verified-preview"
 
 [comparison]
-previous_language = "0.02"
-previous_runtime_package = "0.2.0"
-previous_extension_package = "0.2.0"
+previous_language = "0.03"
+previous_runtime_package = "0.3.0"
+previous_extension_package = "0.3.0"
 
 [[gains]]
 id = "N3B-TENSOR-AUTODIFF"
@@ -29,3 +29,9 @@ id = "N5-SELF-HOSTED-OPTIMIZATION"
 language = "0.03"
 summary = "Seloryn-authored tensor objective, multi-input gradients, bounded range and SGD loop"
 evidence = "src/tensor_autograd.rs; examples/projects/self-hosted-linear; tests/self_hosted_probe.py"
+
+[[gains]]
+id = "N6-RELIABLE-TRAINING-AND-GPU-PROBE"
+language = "0.04"
+summary = "Hardened CPU MLP resume/training evidence plus physical-host non-fallback GPU compute/readback probe"
+evidence = "src/runtime.rs; src/gpu.rs; tests/mlp_training_probe.py; tests/gpu_probe.py; tooling/vscode"

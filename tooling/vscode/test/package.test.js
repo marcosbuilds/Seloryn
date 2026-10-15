@@ -12,14 +12,18 @@ const pngPath = path.join(root, manifest.icon);
 const png = fs.readFileSync(pngPath);
 const svg = fs.readFileSync(path.join(root, 'assets', 'seloryn-icon-source.svg'), 'utf8');
 
-assert.equal(manifest.version, '0.3.0');
+assert.equal(manifest.version, '0.4.0');
 // VSCE rejects SVG files as the extension manifest icon. The PNG is the
 // marketplace-compatible render of the canonical Seloryn SVG source.
 assert.equal(manifest.icon, './assets/seloryn-icon.png');
 assert.equal(manifest.contributes.iconThemes.length, 1);
 assert.equal(manifest.contributes.iconThemes[0].id, 'seloryn-file-icons');
 assert.ok(manifest.contributes.commands.some((command) => command.command === 'seloryn.runTraining'));
+assert.ok(manifest.contributes.commands.some((command) => command.command === 'seloryn.inspectDevices'));
+assert.ok(manifest.contributes.commands.some((command) => command.command === 'seloryn.runGpuProbe'));
 assert.ok(manifest.activationEvents.includes('onCommand:seloryn.runTraining'));
+assert.ok(manifest.activationEvents.includes('onCommand:seloryn.inspectDevices'));
+assert.ok(manifest.activationEvents.includes('onCommand:seloryn.runGpuProbe'));
 assert.equal(iconTheme.fileExtensions.sely, '_seloryn');
 assert.equal(iconTheme.languageIds.seloryn, '_seloryn');
 assert.equal(iconTheme.iconDefinitions._seloryn.iconPath, '../assets/seloryn-icon-source.svg');

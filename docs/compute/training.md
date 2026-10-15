@@ -1,6 +1,6 @@
 # Model training
 
-Seloryn `0.03` contains executable CPU training profiles, including a
+Seloryn `0.04` contains executable CPU training profiles, including a
 two-layer `F32` MLP with ReLU hidden activation, mean-squared error, SGD,
 deterministic mini-batches, holdout evaluation and resumable checkpoints. This
 is a verified preview of a small training workflow, not a general neural
@@ -42,7 +42,8 @@ The datasets are bounded JSON objects with uniform rows:
 ```
 
 The runtime validates dimensions, finite `F32` values, sample count, batch
-size, hidden width and parameter budget before starting. Each update selects a
+size, hidden width, parameter budget, total sample-update budget and a
+sample-update × parameter work budget before starting. Each update selects a
 deterministic mini-batch from a seeded shuffle order, computes forward and
 backward passes for both dense layers, averages MSE gradients over the batch,
 and applies SGD. `steps` means optimizer updates, not a hidden wall-clock
@@ -65,18 +66,36 @@ deliberately small so it can run in local development and CI.
 
 The project must grant `write = ["checkpoints"]` in `seloryn.toml`. A
 checkpoint uses the independent storage schema
-`seloryn.training.checkpoint.v1` and contains:
+`seloryn.training.checkpoint.v2` and contains:
 
 - model weights and biases with their dimensions and `F32` values;
 - SGD configuration and the completed update step;
 - seed, deterministic sampler order, cursor, epoch and RNG state;
 - SHA-256 hashes of the exact train and test JSON inputs.
+- SHA-256 hashes of the canonical weights, sampler-state payload and complete
+  training state (including the completed step).
 
 Writes are flushed and synced to a temporary file before replacement. A
 malformed checkpoint, dataset-hash mismatch, seed mismatch, shape mismatch or
 hyperparameter mismatch fails with a diagnostic rather than silently
 restarting. The checkpoint is intentionally local and bounded; it is not a
 portable distributed format.
+
+## Hardware evidence boundary
+
+`seloryn devices --format=json` enumerates adapters exposed by the compiled
+platform backend. `seloryn gpu-probe --format=json` selects a high-performance
+physical non-fallback adapter, submits a bounded WGSL compute shader,
+synchronizes the device with a finite 30-second wait and verifies the readback
+against an exact reference. The independent
+[`gpu_probe.py`](../../tests/gpu_probe.py) accepts a capability-aware skip on a
+host with no physical non-CPU adapter; when an adapter is reported, the shader result
+must pass with maximum absolute error at most `1e-6`.
+
+This is deliberately narrower than GPU training. The current `Tensor`,
+reverse-mode autodiff tape and `train_mlp` contracts remain CPU-only. GPU
+training still requires device-resident tensor storage, backend parity,
+determinism policy, memory limits and an independent model-training proof.
 
 ## Streaming events
 
@@ -97,8 +116,8 @@ canonical stream.
 
 ## What remains outside this profile
 
-The implementation is CPU-only, single-process and bounded. It does not claim
-GPU execution, distributed collectives, AdamW, gradient accumulation, mixed
+The training implementation is CPU-only, single-process and bounded. It does
+not claim GPU tensor execution, distributed collectives, AdamW, gradient accumulation, mixed
 precision, model serving, a general `Dataset`/`Module` API or transformer/LLM
 training. Those capabilities require separate numerical, reproducibility and
 platform evidence. The previous `training.train_linear` fixture remains

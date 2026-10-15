@@ -1,9 +1,11 @@
 # Tensors
 
-**Current availability (`0.03`):** Seloryn has an experimental N1/N2 CPU
+**Current availability (`0.04`):** Seloryn has an experimental N1/N2 CPU
 tensor runtime. It allocates owned, bounded buffers for `Tensor[F32]` and
-`Tensor[I64]`; N2 adds a small pure numeric closure needed before autograd. It
-does not use a GPU, perform training or expose arbitrary views or slicing.
+`Tensor[I64]`; N2 adds a small pure numeric closure needed before autograd. The
+separate `gpu-probe` command exercises one hardware compute/readback path, but
+the language tensor runtime itself remains CPU-only and does not expose device
+movement.
 
 ## Verified language bridge
 
