@@ -7,7 +7,15 @@
 
 > **Current status: language 0.05 / runtime package 0.5.0, verified-preview CPU training plus hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles.** Seloryn also has a physical non-fallback hardware inventory and bounded GPU compute/readback probe; GPU tensor training, distributed, registry, installer and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
 
-> **No performance claims, compatibility badges, release downloads or training benchmarks are published until independently measured.** This repository records only what is implemented and verified.
+> **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Public preview artifacts are now available, but they carry the exact platform, version and boundary claims documented below.
+
+## Public preview artifacts
+
+- [Seloryn runtime 0.5.0 / language 0.05](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.05): Windows x64, Linux x64 and macOS arm64 archives with SHA-256 checksums.
+- [Seloryn VS Code extension 0.4.0](https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.4.0): editor preview with syntax highlighting, completions, CLI diagnostics and `.sely` file icons.
+
+These are verified previews, not a stable ABI or a claim of GPU tensor training,
+distributed execution, package registry, HTTP runtime or a general model framework.
 
 ![Seloryn architecture](assets/architecture-flow.png)
 
