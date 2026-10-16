@@ -1,0 +1,13 @@
+from json import read_file, get, as_f64_list
+
+fn total(values: List[F64]) -> F64:
+    var result: F64 = 0.0
+    for value in values:
+        result = result + value
+    return result
+
+fn main() -> Result[F64, JsonIoError]:
+    let document: Json = read_file("data/amounts.json")?
+    let raw: Json = get(document, ["amounts"])?
+    let amounts: List[F64] = as_f64_list(raw)?
+    return Ok(total(amounts))

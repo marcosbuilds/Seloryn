@@ -22,7 +22,7 @@ The version advances only when an independently accepted, evidenced, user-releva
 The language capability counter is the release-line authority. For a language
 version `M.mm`, runtime and extension packages must use the same SemVer
 major/minor base `M.m`; the package patch may only change when that package has
-its own evidenced gain. For example, language `0.07` authorizes the `0.7.x`
+its own evidenced gain. For example, language `0.08` authorizes the `0.8.x`
 runtime and extension line. A package cannot jump ahead of the language line,
 and a package update cannot be justified by a commit count, documentation-only
 edit or an unproven feature. Runtime patch releases remain blocked until a
@@ -58,14 +58,14 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
-| Language capability | `0.06` | `0.07` | N9 identity-bearing replay/authenticated receipts plus explicit GPU linear training |
-| Runtime package | `0.6.0` | `0.7.0` | package identity follows the accepted runtime reliability and GPU gain |
-| VS Code extension | `0.4.0` | `0.7.0` | canonical public symbol and strict language-based release line, with its own extension evidence |
+| Language capability | `0.07` | `0.08` | N10 typed JSON number-array ingestion into bounded lists |
+| Runtime package | `0.7.0` | `0.8.0` | package identity follows the accepted data-ingestion gain |
+| VS Code extension | `0.7.0` | `0.8.0` | completions expose the new JSON list conversion on the language line |
 
 The comparison is intentionally visible: a new commit alone cannot advance
 the language version. N3B remains the historical reason for `0.01`; N6 is the
 historical `0.04` gain, N7 is the `0.05` reliability gain, N8 is the `0.06`
-streaming/reliability gain and N9 is the current `0.07` identity/replay/GPU
+streaming/reliability gain and N9 was the `0.07` identity/replay/GPU
 gain. The extension ledger is checked separately
 because an editor patch must carry its own evidence while remaining compatible
 with the language line.

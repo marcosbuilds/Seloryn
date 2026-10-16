@@ -36,6 +36,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'LSP integration verification failed' }
     & python tests/project_manifest_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Project manifest verification failed' }
+    & python tests/json_array_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Typed JSON array verification failed' }
     & python tests/mlp_training_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'CPU MLP independent verification failed' }
     & python tests/streaming_v2_probe.py

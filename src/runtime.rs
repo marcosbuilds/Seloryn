@@ -1371,6 +1371,39 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                         Ok,
                     )
             }
+            "as_i64_list" | "as_f64_list" => {
+                let Some(Value::Json(JsonValue::Array(values))) = values.first() else {
+                    return Ok(json_error_result(format!("{name} requires a JSON array")));
+                };
+                if values.len() > MAX_LIST_ELEMENTS {
+                    return Ok(json_error_result(format!(
+                        "{name} exceeds the list element limit {MAX_LIST_ELEMENTS}"
+                    )));
+                }
+                let mut converted = Vec::with_capacity(values.len());
+                for value in values {
+                    let JsonValue::Number(number) = value else {
+                        return Ok(json_error_result(format!(
+                            "{name} requires an array of numbers"
+                        )));
+                    };
+                    let converted_value = if name == "as_i64_list" {
+                        number.parse::<i64>().ok().map(Value::I64)
+                    } else {
+                        number.parse::<f64>().ok().map(Value::F64)
+                    };
+                    let Some(converted_value) = converted_value else {
+                        return Ok(json_error_result(format!(
+                            "{name} received an incompatible JSON number"
+                        )));
+                    };
+                    converted.push(converted_value);
+                }
+                Ok(Value::Result {
+                    ok: true,
+                    value: Box::new(Value::List(converted)),
+                })
+            }
             "ModelRequest" => {
                 let [
                     Value::Text(model),

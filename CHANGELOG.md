@@ -17,6 +17,13 @@ not a promise that GitHub publication already happened.
   schema, language version and runtime package so editor integrations can
   reject stale or incompatible output.
 
+## [0.08] — local candidate, 2026-10-16
+
+- Bounded JSON number arrays can be converted to typed `List[I64]` or
+  `List[F64]` values and consumed by normal Seloryn iteration.
+- The candidate runtime, extension and language versions are coordinated as
+  `0.8.0`, `0.8.0` and `0.08`; public publication remains pending.
+
 ## [0.07] — 2026-10-16
 
 - Identity-bearing JSON2 receipts with replay verification, structured path
@@ -41,4 +48,5 @@ not a promise that GitHub publication already happened.
 - `vscode-v0.4.0`, `vscode-v0.3.0`, `vscode-v0.2.0` and `vscode-v0.1.0`
   remain preserved as prerelease history. They are not relabeled to hide
   their earlier compatibility lines; the current local candidate is
-  `vscode-v0.7.0` and still needs explicit publication authorization.
+  `vscode-v0.7.0` and still needs explicit publication authorization. The
+  current local candidate is `vscode-v0.8.0`.

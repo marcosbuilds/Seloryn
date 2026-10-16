@@ -1,6 +1,6 @@
 # Current capability status
 
-Seloryn `0.07` is a verified-preview language/runtime for a bounded `.sely`
+Seloryn `0.08` is a verified-preview language/runtime for a bounded `.sely`
 subset. It includes an executable CPU MLP training profile, hardened resume
 integrity, a real physical non-fallback GPU compute probe and a closed GPU
 linear-training profile in addition to the earlier
@@ -23,6 +23,7 @@ purpose ML platform.
 | Physical hardware adapter inventory and bounded WGSL compute/readback probe | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`tests/gpu_probe.py`](../../tests/gpu_probe.py) |
 | Explicit `train_linear_gpu` scalar F32 profile with device-resident parameters and one final readback | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`examples/projects/gpu-linear-training`](../../examples/projects/gpu-linear-training), [`tests/gpu_training_probe.py`](../../tests/gpu_training_probe.py) |
 | JSON2 program/manifest/dataset/checkpoint/result identity, replay helper, structured path redaction and optional HMAC authentication | **Verified preview for bounded training receipts** | [`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py) |
+| Bounded JSON number arrays converted to typed `List[I64]` / `List[F64]` | **Verified language gain** | [`examples/projects/json-array-pipeline`](../../examples/projects/json-array-pipeline), [`tests/json_array_probe.py`](../../tests/json_array_probe.py) |
 | VS Code `.sely` highlighting, real snippets/completions, CLI diagnostics and canonical Seloryn file icon | Verified editor preview on the `0.7.x` language line | [`tooling/vscode`](../../tooling/vscode); GitHub release publication pending |
 | `seloryn lsp --stdio` full-document diagnostics, completion, definition and document symbols | **Initial LSP v1 verified locally** | [`src/lsp.rs`](../../src/lsp.rs), [`tests/lsp_probe.py`](../../tests/lsp_probe.py); full extension client and incremental parsing remain outside this gate |
 | Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
@@ -73,3 +74,7 @@ The public comparison remains honest: Seloryn's current differentiator is a
 single typed, bounded and observable workflow with an independently verifiable
 training receipt. Broad productivity, security-authenticity or performance
 superiority over established ML runtimes has not been proved.
+The `0.08` gain removes one concrete data-ingestion blocker by converting
+bounded JSON numeric arrays into typed lists that ordinary Seloryn loops can
+consume; it does not create a general dataframe, package registry or model
+loading API.

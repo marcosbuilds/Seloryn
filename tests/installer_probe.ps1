@@ -9,11 +9,11 @@ $installRoot = Join-Path ([IO.Path]::GetTempPath()) ("seloryn-installer-probe-{0
 try {
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer `
         -Action Install -BinaryPath $binary -InstallRoot $installRoot `
-        -ExpectedLanguageVersion '0.07' -ExpectedRuntimeVersion '0.7.0' | Out-Null
+        -ExpectedLanguageVersion '0.08' -ExpectedRuntimeVersion '0.8.0' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'initial installer invocation failed' }
     $manifestPath = Join-Path $installRoot 'seloryn-install.json'
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    if ($manifest.language_version -ne '0.07' -or $manifest.runtime_package -ne '0.7.0') {
+    if ($manifest.language_version -ne '0.08' -or $manifest.runtime_package -ne '0.8.0') {
         throw 'installer manifest did not persist the binary compatibility line'
     }
 

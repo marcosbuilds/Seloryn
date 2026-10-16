@@ -1,0 +1,8 @@
+[package]
+name = "json-array-pipeline"
+language = "0.00"
+source_root = "src"
+entry = "json-array-pipeline-entry.sely"
+
+[capabilities]
+read = ["data"]

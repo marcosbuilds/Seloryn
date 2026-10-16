@@ -80,6 +80,8 @@ const STANDARD_FUNCTIONS = Object.freeze([
   ['as_f32', 'as_f32(value)', 'Convert a Json number to F32'],
   ['as_f64', 'as_f64(value)', 'Convert a Json number to F64'],
   ['as_bool', 'as_bool(value)', 'Convert a Json boolean'],
+  ['as_i64_list', 'as_i64_list(value)', 'Convert a JSON number array to List[I64]'],
+  ['as_f64_list', 'as_f64_list(value)', 'Convert a JSON number array to List[F64]'],
   ['ModelRequest', 'ModelRequest(model, prompt, max_output_tokens, seed)', 'Create the model request fixture'],
   ['ModelResponse', 'ModelResponse(status, text)', 'Create the model response fixture'],
   ['fixture_provider', 'fixture_provider(request)', 'Call the deterministic model fixture'],

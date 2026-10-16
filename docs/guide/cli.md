@@ -16,7 +16,7 @@ seloryn exec <bundle.selyapp|directory>
 seloryn lsp --stdio
 ```
 
-The preview version reports `0.07`, `package=0.7.0` and
+The preview version reports `0.08`, `package=0.8.0` and
 `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,

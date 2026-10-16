@@ -2,15 +2,15 @@
 # The language version is a capability count (M.mm), not a decimal float.
 
 [current]
-language = "0.07"
-runtime_package = "0.7.0"
-extension_package = "0.7.0"
+language = "0.08"
+runtime_package = "0.8.0"
+extension_package = "0.8.0"
 channel = "verified-preview"
 
 [comparison]
-previous_language = "0.06"
-previous_runtime_package = "0.6.0"
-previous_extension_package = "0.4.0"
+previous_language = "0.07"
+previous_runtime_package = "0.7.0"
+previous_extension_package = "0.7.0"
 
 [[gains]]
 id = "N3B-TENSOR-AUTODIFF"
@@ -88,3 +88,16 @@ language = "0.07"
 package = "0.7.0"
 summary = "The extension package, language id and .sely file icon use the canonical public Seloryn symbol and the release line follows language compatibility"
 evidence = "assets/seloryn-symbol.svg; tooling/vscode/assets/seloryn-icon-source.svg; tooling/vscode/assets/seloryn-icon.png; tooling/vscode/icons/seloryn-file-icon-theme.json; tooling/vscode/test/package.test.js; docs/project/versions.md"
+
+[[gains]]
+id = "N10-JSON-TYPED-ARRAY-INGESTION"
+language = "0.08"
+summary = "Bounded JSON number arrays convert to typed List[I64] or List[F64] values for real Seloryn iteration"
+evidence = "src/runtime.rs; src/semantic.rs; examples/projects/json-array-pipeline; tests/json_array_probe.py; docs/releases/runtime-0.08.md"
+
+[[extension_gains]]
+id = "EXT-N10-JSON-TYPED-ARRAY-INGESTION"
+language = "0.08"
+package = "0.8.0"
+summary = "Editor completions expose typed JSON array ingestion on the language 0.08 compatibility line"
+evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.8.0.md"

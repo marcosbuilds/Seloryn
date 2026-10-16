@@ -1467,6 +1467,18 @@ impl<'a> Checker<'a> {
                 };
                 result(value)
             }
+            "as_i64_list" | "as_f64_list" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(value, &Type::Json, "JSON value");
+                }
+                let value = if name == "as_i64_list" {
+                    Type::I64
+                } else {
+                    Type::F64
+                };
+                result(Type::List(Box::new(value)))
+            }
             "ModelRequest" => {
                 self.check_standard_arity(name, arguments, 4, span);
                 Type::ModelRequest
@@ -1983,6 +1995,8 @@ fn is_supported_standard_directive(text: &str) -> bool {
             "as_f32",
             "as_f64",
             "as_bool",
+            "as_i64_list",
+            "as_f64_list",
         ]
         .as_slice(),
         "models" => [

@@ -1,6 +1,6 @@
 # Next executable gates
 
-Seloryn is currently `0.07`: a bounded verified-preview language and runtime for
+Seloryn is currently `0.08`: a bounded verified-preview language and runtime for
 AI development and integration. The next steps are executable gates, not a
 promise that every design proposal already exists.
 
@@ -40,11 +40,14 @@ promise that every design proposal already exists.
 - `train_linear_gpu` is an explicit scalar F32 GPU profile: the shader updates
   device-resident parameters and performs one final readback. It fails without
   a physical adapter and never silently falls back to CPU.
+- Bounded JSON numeric arrays now convert to typed lists through
+  `json.as_i64_list` and `json.as_f64_list`, with positive and negative
+  black-box evidence in `json_array_probe.py`.
 
 ## Next gates
 
-1. **Editor distribution — completed locally:** the `0.7.0` package is on the
-   same compatibility line as language `0.07` and runtime `0.7.0`. It contains
+1. **Editor distribution — completed locally:** the `0.8.0` package is on the
+   same compatibility line as language `0.08` and runtime `0.8.0`. It contains
    a deterministic self-contained VSIX, the canonical Seloryn symbol and the
    optional `.sely` file-icon theme. A real VS Code host still needs an
    interactive rendering check; that is a validation task, not an unbuilt
