@@ -9,6 +9,9 @@
 
 > **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Local preview artifacts are generated and validated, but they carry the exact platform, version and boundary claims documented below; GitHub publication remains explicit and separate.
 
+The first reviewed comparative result for the intended CPU-first tabular niche
+is documented in [the production-niche benchmark](docs/benchmarks/production-niche-v2.md).
+
 ## Public preview artifacts
 
 - [Seloryn runtime 0.7.0 / language 0.07](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07): the last published runtime line.
