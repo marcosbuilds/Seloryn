@@ -25,6 +25,7 @@ purpose ML platform.
 | JSON2 program/manifest/dataset/checkpoint/result identity, replay helper, structured path redaction and optional HMAC authentication | **Verified preview for bounded training receipts** | [`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py) |
 | Bounded JSON number arrays converted to typed `List[I64]` / `List[F64]` | **Verified language gain** | [`examples/projects/json-array-pipeline`](../../examples/projects/json-array-pipeline), [`tests/json_array_probe.py`](../../tests/json_array_probe.py) |
 | Hash-validated bounded CPU MLP checkpoint batch inference | **Verified language gain** | [`examples/projects/mlp-inference`](../../examples/projects/mlp-inference), [`tests/mlp_inference_probe.py`](../../tests/mlp_inference_probe.py); no general model loader or serving |
+| Read-only `doctor` project diagnostics and transactional `init` project templates | **Verified runtime patch** | [`src/workspace.rs`](../../src/workspace.rs), [`tests/workspace_probe.py`](../../tests/workspace_probe.py); reports `production_ready=false` while ABI remains unstable |
 | VS Code `.sely` highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and canonical Seloryn file icon | **Verified editor preview on the `0.09` language line** | [`tooling/vscode`](../../tooling/vscode); headless transport/controller tests and GitHub release publication pending |
 | `seloryn lsp --stdio` full-document diagnostics, completion, definition and document symbols | **Initial LSP v1 verified locally and wired to VS Code** | [`src/lsp.rs`](../../src/lsp.rs), [`tooling/vscode/lsp-client.js`](../../tooling/vscode/lsp-client.js), [`tests/lsp_probe.py`](../../tests/lsp_probe.py); indexed analysis and incremental parsing remain outside this gate |
 | Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
@@ -83,3 +84,7 @@ The `0.09` gain adds a bounded CPU MLP batch-inference path that validates the
 checkpoint's model weights/state hashes and input dimensions before producing
 deterministic predictions. It does not create a general model format, serving
 runtime, registry or GPU inference backend.
+The runtime-only `0.9.1` patch adds read-only project diagnosis and
+no-overwrite transactional initialization. These commands improve adoption and
+failure visibility but deliberately do not convert the verified-preview channel
+or unstable ABI into a production-ready claim.

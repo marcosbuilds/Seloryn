@@ -248,7 +248,7 @@ const diagnosticDocument = documentFor('🙂\nfn main() -> Unit:\n    return\n')
 const diagnosticPayload = JSON.stringify({
   schema: 'seloryn.analysis.v1',
   language_version: '0.09',
-  runtime_package: '0.9.0',
+  runtime_package: '0.9.1',
   diagnostics: [{
     code: 'SEL-P001',
     severity: 'error',
@@ -330,7 +330,7 @@ const diagnosticVscode = {
   const unicodePayload = JSON.stringify({
     schema: 'seloryn.analysis.v1',
   language_version: '0.09',
-  runtime_package: '0.9.0',
+  runtime_package: '0.9.1',
     diagnostics: [{
       code: 'SEL-P001',
       severity: 'error',

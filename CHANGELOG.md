@@ -20,6 +20,14 @@ not a promise that GitHub publication already happened.
   unsaved diagnostics, completion and definition by default, while retaining
   the saved-file CLI bridge as an explicit fallback.
 
+## [0.9.1] — local runtime patch, 2026-10-16
+
+- Added read-only `seloryn doctor` project diagnostics with stable JSON output.
+- Added transactional `seloryn init` minimal and tabular-MLP templates with
+  no-overwrite protection and generated-project validation.
+- Kept the language at `0.09` and the extension at `0.9.0`; this is an explicit
+  runtime-only gain under the stricter version ledger.
+
 ## [0.09] — local candidate, 2026-10-16
 
 - `training.predict_mlp` loads a hash-validated bounded CPU MLP checkpoint and

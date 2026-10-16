@@ -9,6 +9,8 @@ seloryn --help
 seloryn --version
 seloryn devices [--format=human|json]
 seloryn gpu-probe [--format=human|json]
+seloryn doctor [project] [--format=human|json]
+seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]
 seloryn check <file.sely|project> [--format=human|json] [--quiet]
 seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]
 seloryn build <project> --profile debug|release --output <directory>
@@ -16,7 +18,7 @@ seloryn exec <bundle.selyapp|directory>
 seloryn lsp --stdio
 ```
 
-The preview version reports `0.09`, `package=0.9.0` and
+The preview version reports `0.09`, `package=0.9.1` and
 `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
@@ -94,12 +96,19 @@ does not move general model training to the GPU. A `.sely` project can explicitl
 import `train_linear_gpu` for the closed scalar F32 proof profile; it never
 silently falls back to CPU.
 
+`doctor [project]` performs read-only manifest, source graph, capability and
+semantic validation without executing project code. It emits the stable
+`seloryn.doctor.v1` JSON envelope and explicitly reports the current
+`verified-preview` channel, unstable ABI and `production_ready=false`.
+`init <directory>` creates a validated project atomically and refuses to
+overwrite an existing path. The default `minimal` template and the
+`tabular-mlp` starter both emit a stable `seloryn.init.v1` report.
+
 ## Future commands
 
 The following commands remain proposed and must not be treated as available:
 
 ```text
-seloryn doctor                     # runtime, platform and capabilities
 seloryn fmt app.sely               # canonical formatter
 seloryn test                       # test runner, when implemented
 seloryn add package                # package tool, when implemented
@@ -113,7 +122,7 @@ must behave consistently in CMD and PowerShell (including empty arguments,
 Unicode names and paths with spaces). Passing program arguments after `--`
 remains outside E4.
 
-Every command advertises itself only when its implementation and tests are accepted. `seloryn doctor` must report `unsupported` instead of silently pretending a GPU backend works.
+Every command advertises itself only when its implementation and tests are accepted. `doctor` is intentionally read-only and does not probe or pretend that a GPU backend, registry, ABI or serving system is production-ready.
 
 ### Training event stream v1
 

@@ -47,11 +47,14 @@ promise that every design proposal already exists.
   the independent inference probe checks deterministic predictions, checkpoint
   and input hashes, JSON2 receipt verification and invalid dimensions/hash
   rejection.
+- `doctor` now performs read-only project and semantic validation, while
+  `init` creates validated minimal or tabular-MLP projects transactionally and
+  refuses overwrite; both have stable JSON contracts and independent probes.
 
 ## Next gates
 
 1. **Editor distribution — completed locally:** the `0.9.0` package is on the
-   same compatibility line as language `0.09` and runtime `0.9.0`. It contains
+   same compatibility line as language `0.09` and runtime `0.9.1`. It contains
    a deterministic self-contained VSIX, the canonical Seloryn symbol and the
    optional `.sely` file-icon theme. A real VS Code host still needs an
    interactive rendering check; that is a validation task, not an unbuilt

@@ -87,12 +87,15 @@ def validate(root: Path = ROOT) -> None:
     comparison = document.get("comparison")
     language_gains = document.get("gains")
     extension_gains = document.get("extension_gains")
+    runtime_gains = document.get("runtime_gains", [])
     if not isinstance(current, dict) or not isinstance(comparison, dict):
         fail("VERSION.toml must define [current] and [comparison]")
     if not isinstance(language_gains, list) or not language_gains:
         fail("VERSION.toml must record at least one language gain")
     if not isinstance(extension_gains, list) or not extension_gains:
         fail("VERSION.toml must record at least one extension gain")
+    if not isinstance(runtime_gains, list):
+        fail("VERSION.toml runtime_gains must be an array")
 
     current_language = require_text(current, "language", "current language version")
     runtime_package = require_text(current, "runtime_package", "runtime package version")
@@ -110,7 +113,7 @@ def validate(root: Path = ROOT) -> None:
     language_package_base = package_base_for_language(current_language_number)
     if current_runtime_number[:2] != language_package_base:
         fail("runtime package major/minor must follow the current language version")
-    if current_runtime_number[2] != 0:
+    if current_runtime_number[2] != 0 and not runtime_gains:
         fail("runtime package patch updates require an explicit runtime gain ledger")
     if current_extension_number[:2] != language_package_base:
         fail("extension package major/minor must follow the current language version")
@@ -123,6 +126,11 @@ def validate(root: Path = ROOT) -> None:
         fail("extension gain ids must be unique")
     require_evidence(root, language_gains, "language gain")
     require_evidence(root, extension_gains, "extension gain")
+    if runtime_gains:
+        runtime_ids = [require_text(record, "id", "runtime gain id") for record in runtime_gains]
+        if len(set(runtime_ids)) != len(runtime_ids):
+            fail("runtime gain ids must be unique")
+        require_evidence(root, runtime_gains, "runtime gain")
 
     expected_gain = (0, 1)
     for record in language_gains:
@@ -152,6 +160,26 @@ def validate(root: Path = ROOT) -> None:
             fail("extension gains must advance monotonically")
         previous_extension_gain = extension_gain
 
+    previous_runtime_gain = None
+    for record in runtime_gains:
+        runtime_language = parse_language_version(
+            require_text(record, "language", "runtime gain language"),
+            "runtime gain language",
+        )
+        runtime_gain = parse_package_version(
+            require_text(record, "package", "runtime gain package"),
+            "runtime gain package",
+        )
+        if runtime_language != current_language_number:
+            fail("runtime gain must target the current language compatibility line")
+        if runtime_gain[:2] != language_package_base:
+            fail("runtime gain package must follow its language compatibility line")
+        if runtime_gain[2] == 0:
+            fail("runtime gain package must be a patch update")
+        if previous_runtime_gain is not None and runtime_gain <= previous_runtime_gain:
+            fail("runtime gains must advance monotonically")
+        previous_runtime_gain = runtime_gain
+
     latest_language = language_gains[-1]
     if require_text(latest_language, "language", "latest language gain version") != current_language:
         fail("latest language gain does not match current language version")
@@ -159,8 +187,13 @@ def validate(root: Path = ROOT) -> None:
         previous_language_number[0] + (previous_language_number[1] + 1) // 100,
         (previous_language_number[1] + 1) % 100,
     )
-    if current_language_number != expected_language:
+    if current_language_number == previous_language_number:
+        if current_runtime_number[2] == 0 or previous_runtime_gain != current_runtime_number:
+            fail("same-language runtime updates require a matching runtime gain ledger")
+    elif current_language_number != expected_language:
         fail("current language version must advance by exactly one accepted gain")
+    elif runtime_gains:
+        fail("language gains and runtime-only patch gains cannot be mixed")
 
     require_increasing(current_runtime_number, previous_runtime_number, "runtime package")
     latest_extension = extension_gains[-1]

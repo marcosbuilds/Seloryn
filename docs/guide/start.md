@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.09 currently provides a verified-preview CPU MLP profile, hash-validated batch inference, identity-bearing replayable training receipts, typed JSON number-array ingestion, a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. Project manifests are parsed strictly and future language versions are rejected before execution. It also includes a real hardware inventory, bounded GPU compute/readback probe and an explicit scalar F32 `train_linear_gpu` profile; general GPU tensor/MLP training is not enabled. There is no distributed backend, package registry, hosted API, stable ABI or published runtime installer; the preview candidate is staged locally and the public runtime remains 0.07.
+**Availability:** Seloryn 0.09 currently provides a verified-preview CPU MLP profile, hash-validated batch inference, read-only `doctor` project diagnostics, transactional `init` templates, identity-bearing replayable training receipts, typed JSON number-array ingestion, a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. Project manifests are parsed strictly and future language versions are rejected before execution. It also includes a real hardware inventory, bounded GPU compute/readback probe and an explicit scalar F32 `train_linear_gpu` profile; general GPU tensor/MLP training is not enabled. There is no distributed backend, package registry, hosted API, stable ABI or published runtime installer; the preview candidate is staged locally and the public runtime remains 0.07.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 
@@ -13,6 +13,8 @@ seloryn --help
 seloryn --version
 seloryn devices --format=json
 seloryn gpu-probe --format=json
+seloryn doctor project-directory --format=json
+seloryn init new-project --template=minimal
 seloryn check example.sely
 seloryn run example.sely
 seloryn check project-directory
@@ -44,6 +46,11 @@ stdout.
 - No distributed backend, supported installer or supported release target; local installer scripts are not a release. `gpu-probe` is hardware evidence, while `train_linear_gpu` is the separate closed scalar F32 training proof; neither implies general GPU tensor/MLP training.
 
 The current capability limits are recorded in the [status page](../project/status.md) and the [tensor reference](../compute/tensors.md).
+
+Use `doctor` before execution when integrating a project into automation. It
+performs no project execution, network access or GPU dispatch. Use `init` to
+create a minimal or tabular-MLP layout that already follows the manifest,
+capability and source-root rules; it refuses to overwrite an existing path.
 
 ## Development run
 

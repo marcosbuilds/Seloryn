@@ -51,7 +51,7 @@ def main() -> int:
         assert manifest["schema"] == 1
         assert manifest["channel"] == "verified-preview"
         assert manifest["language_version"] == "0.09"
-        assert manifest["runtime_package"] == "0.9.0"
+        assert manifest["runtime_package"] == "0.9.1"
         assert manifest["extension_package"] == "0.9.0"
         assert manifest["abi"] == "unstable"
         assert len(manifest["artifacts"]) == 2
@@ -62,11 +62,11 @@ def main() -> int:
             assert artifact.is_file()
             assert item["sha256"] == digest(artifact)
             assert item["bytes"] == artifact.stat().st_size
-        runtime = output / "seloryn-runtime-0.9.0-windows-x64.zip"
+        runtime = output / "seloryn-runtime-0.9.1-windows-x64.zip"
         with zipfile.ZipFile(runtime) as archive:
             runtime_manifest = json.loads(archive.read("runtime-manifest.json"))
             assert runtime_manifest["language_version"] == "0.09"
-            assert runtime_manifest["runtime_package"] == "0.9.0"
+            assert runtime_manifest["runtime_package"] == "0.9.1"
             assert runtime_manifest["channel"] == "verified-preview"
         with zipfile.ZipFile(output / "seloryn-language-0.9.0.vsix") as archive:
             package = json.loads(archive.read("extension/package.json"))

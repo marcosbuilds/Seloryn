@@ -12,5 +12,7 @@ capabilities; they are not packages published to a registry.
   optimizer or model framework.
 - `mlp-training/` trains a real bounded two-layer CPU MLP with mini-batches,
   evaluation, checkpoint/resume and flushed terminal events.
+- `mlp-inference/` consumes a hash-validated MLP checkpoint with deterministic
+  batch predictions; copy a checkpoint from `mlp-training/` before execution.
 - `evaluation-pipeline/` combines local modules, JSON validation, typed
   decisions and bounded CPU tensor metrics in one executable project.

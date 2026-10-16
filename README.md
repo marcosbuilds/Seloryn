@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current local candidate: language 0.09 / runtime package 0.9.0, verified-preview CPU training, hash-validated batch inference, identity-bearing replay receipts, typed JSON-array ingestion and an explicit device-resident GPU linear-training profile.** The release also retains hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles. GPU tensor/MLP training, distributed, registry, installer publication and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
+> **Current local candidate: language 0.09 / runtime package 0.9.1, verified-preview CPU training, hash-validated batch inference, read-only `doctor` diagnostics and transactional `init` templates.** The release also retains identity-bearing replay receipts, typed JSON-array ingestion, an explicit device-resident GPU linear-training profile, hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles. GPU tensor/MLP training, distributed, registry, installer publication and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
 
 > **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Local preview artifacts are generated and validated, but they carry the exact platform, version and boundary claims documented below; GitHub publication remains explicit and separate.
 

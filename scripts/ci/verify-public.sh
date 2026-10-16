@@ -20,6 +20,7 @@ python3 tests/project_manifest_probe.py
 python3 tests/json_array_probe.py
 python3 tests/mlp_training_probe.py
 python3 tests/mlp_inference_probe.py
+python3 tests/workspace_probe.py
 python3 tests/streaming_v2_probe.py
 python3 tests/self_hosted_probe.py
 python3 tests/gpu_probe.py

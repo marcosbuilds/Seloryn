@@ -30,6 +30,7 @@ def main() -> int:
     assert MODULE.package_base_for_language((1, 0)) == (1, 0)
     assert MODULE.parse_package_version("0.4.0", "current") == (0, 4, 0)
     assert MODULE.parse_package_version("1.12.3", "current") == (1, 12, 3)
+    assert MODULE.validate(ROOT) is None
     expect_failure(MODULE.parse_package_version, "0.4", "short package")
     expect_failure(MODULE.parse_package_version, "0.4.0-beta", "pre-release package")
     expect_failure(MODULE.require_increasing, (0, 1, 0), (0, 1, 0), "extension package")

@@ -14,6 +14,7 @@ mod runtime;
 mod semantic;
 mod tensor;
 mod tensor_autograd;
+mod workspace;
 
 use std::collections::BTreeMap;
 use std::env;
@@ -35,15 +36,15 @@ use sha2::{Digest, Sha256};
 pub(crate) const LANGUAGE_VERSION: &str = "0.09";
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
-const EXIT_OK: u8 = 0;
+pub(crate) const EXIT_OK: u8 = 0;
 const EXIT_USAGE: u8 = 64;
-const EXIT_DATA: u8 = 65;
-const EXIT_IO: u8 = 74;
+pub(crate) const EXIT_DATA: u8 = 65;
+pub(crate) const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `train_linear_gpu` in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn doctor [project] [--format=human|json]\n  seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`doctor` performs read-only project validation and reports production blockers; it never executes project code.\n`init` creates a validated project skeleton without overwriting an existing path.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `train_linear_gpu` in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum OutputFormat {
+pub(crate) enum OutputFormat {
     Human,
     Json,
 }
@@ -92,6 +93,16 @@ enum Action {
     GpuProbe {
         format: OutputFormat,
     },
+    Doctor {
+        path: OsString,
+        format: OutputFormat,
+    },
+    Init {
+        path: OsString,
+        template: workspace::InitTemplate,
+        name: Option<OsString>,
+        format: OutputFormat,
+    },
     Check {
         path: OsString,
         options: Options,
@@ -127,6 +138,13 @@ fn run(args: &[OsString]) -> u8 {
         )),
         Action::Devices { format } => devices(format),
         Action::GpuProbe { format } => gpu_probe(format),
+        Action::Doctor { path, format } => workspace::doctor(&PathBuf::from(path), format),
+        Action::Init {
+            path,
+            template,
+            name,
+            format,
+        } => workspace::init(&PathBuf::from(path), template, name.as_deref(), format),
         Action::Check { path, options } => check_path(PathBuf::from(path), options),
         Action::Run { path, options } => run_path(PathBuf::from(path), options),
         Action::Build {
@@ -153,12 +171,119 @@ fn classify(args: &[OsString]) -> Action {
         [argument] if argument == "--version" => Action::Version,
         [command, rest @ ..] if command == "devices" => parse_device_command("devices", rest),
         [command, rest @ ..] if command == "gpu-probe" => parse_device_command("gpu-probe", rest),
+        [command, rest @ ..] if command == "doctor" => parse_doctor(rest),
+        [command, rest @ ..] if command == "init" => parse_init(rest),
         [command, rest @ ..] if command == "check" => parse_command("check", rest),
         [command, rest @ ..] if command == "run" => parse_command("run", rest),
         [command, rest @ ..] if command == "build" => parse_build(rest),
         [command, rest @ ..] if command == "exec" => parse_exec(rest),
         [command, rest @ ..] if command == "lsp" => parse_lsp(rest),
         _ => unsupported_arguments(args),
+    }
+}
+
+fn parse_doctor(args: &[OsString]) -> Action {
+    let mut path = None;
+    let mut format = OutputFormat::Human;
+    let mut index = 0;
+    while index < args.len() {
+        let argument = &args[index];
+        if argument == "--format" {
+            let Some(value) = args.get(index + 1) else {
+                return unsupported_arguments(args);
+            };
+            let Some(parsed) = parse_format(value) else {
+                return unsupported_arguments(args);
+            };
+            format = parsed;
+            index += 1;
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--format="))
+        {
+            let Some(parsed) = parse_format_text(value) else {
+                return unsupported_arguments(args);
+            };
+            format = parsed;
+        } else if argument
+            .to_str()
+            .is_some_and(|value| value.starts_with('-'))
+            || path.replace(argument.clone()).is_some()
+        {
+            return unsupported_arguments(args);
+        }
+        index += 1;
+    }
+    Action::Doctor {
+        path: path.unwrap_or_else(|| OsString::from(".")),
+        format,
+    }
+}
+
+fn parse_init(args: &[OsString]) -> Action {
+    let mut path = None;
+    let mut template = workspace::InitTemplate::Minimal;
+    let mut name = None;
+    let mut format = OutputFormat::Human;
+    let mut index = 0;
+    while index < args.len() {
+        let argument = &args[index];
+        if argument == "--template" || argument == "--name" || argument == "--format" {
+            let Some(value) = args.get(index + 1) else {
+                return unsupported_arguments(args);
+            };
+            if argument == "--template" {
+                let Some(parsed) = workspace::parse_template(value) else {
+                    return unsupported_arguments(args);
+                };
+                template = parsed;
+            } else if argument == "--name" {
+                name = Some(value.clone());
+            } else {
+                let Some(parsed) = parse_format(value) else {
+                    return unsupported_arguments(args);
+                };
+                format = parsed;
+            }
+            index += 1;
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--template="))
+        {
+            let Some(parsed) = workspace::parse_template_text(value) else {
+                return unsupported_arguments(args);
+            };
+            template = parsed;
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--name="))
+        {
+            name = Some(OsString::from(value));
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--format="))
+        {
+            let Some(parsed) = parse_format_text(value) else {
+                return unsupported_arguments(args);
+            };
+            format = parsed;
+        } else if argument
+            .to_str()
+            .is_some_and(|value| value.starts_with('-'))
+            || path.replace(argument.clone()).is_some()
+        {
+            return unsupported_arguments(args);
+        }
+        index += 1;
+    }
+    let Some(path) = path else {
+        return unsupported_arguments(args);
+    };
+    Action::Init {
+        path,
+        template,
+        name,
+        format,
     }
 }
 
@@ -2689,6 +2814,19 @@ mod tests {
             classify(&[OsString::from("exec"), OsString::from("app.selyapp")]),
             Action::Exec { .. }
         ));
+        assert!(matches!(
+            classify(&[OsString::from("doctor"), OsString::from("project")]),
+            Action::Doctor { .. }
+        ));
+        assert!(matches!(
+            classify(&[
+                OsString::from("init"),
+                OsString::from("project"),
+                OsString::from("--template=tabular-mlp"),
+                OsString::from("--format=json"),
+            ]),
+            Action::Init { .. }
+        ));
     }
 
     #[test]
@@ -2721,6 +2859,8 @@ mod tests {
             }
             Action::Devices { .. }
             | Action::GpuProbe { .. }
+            | Action::Doctor { .. }
+            | Action::Init { .. }
             | Action::Run { .. }
             | Action::Build { .. }
             | Action::Exec { .. }
