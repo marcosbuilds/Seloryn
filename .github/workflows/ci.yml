@@ -67,6 +67,8 @@ jobs:
         run: python tests/self_hosted_probe.py
       - name: GPU compute probe when an adapter exists
         run: python tests/gpu_probe.py
+      - name: GPU linear training proof when an adapter exists
+        run: python tests/gpu_training_probe.py
       - name: Install VS Code packaging dependencies
         run: npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
       - name: Build deterministic VSIX preview

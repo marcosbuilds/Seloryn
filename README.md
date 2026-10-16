@@ -5,17 +5,18 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current status: language 0.06 / runtime package 0.6.0, verified-preview CPU training plus hash-chained training receipts, hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles.** Seloryn also has a physical non-fallback hardware inventory and bounded GPU compute/readback probe; GPU tensor training, distributed, registry, installer and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
+> **Current status: language 0.07 / runtime package 0.7.0, verified-preview CPU training plus identity-bearing replay receipts and an explicit device-resident GPU linear-training profile.** The release also retains hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles. GPU tensor/MLP training, distributed, registry, installer and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
 
 > **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Public preview artifacts are now available, but they carry the exact platform, version and boundary claims documented below.
 
 ## Public preview artifacts
 
-- [Seloryn runtime 0.6.0 / language 0.06](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.06): Windows x64, Linux x64 and macOS arm64 archives with SHA-256 checksums.
+- [Seloryn runtime 0.7.0 / language 0.07](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07): Windows x64, Linux x64 and macOS arm64 archives with SHA-256 checksums.
 - [Seloryn VS Code extension 0.4.0](https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.4.0): editor preview with syntax highlighting, completions, CLI diagnostics and `.sely` file icons.
 
-These are verified previews, not a stable ABI or a claim of GPU tensor training,
-distributed execution, package registry, HTTP runtime or a general model framework.
+These are verified previews, not a stable ABI or a claim of GPU tensor/MLP
+training, distributed execution, package registry, HTTP runtime or a general
+model framework.
 
 ![Seloryn architecture](assets/architecture-flow.png)
 
@@ -33,7 +34,7 @@ claim. If equivalent workloads do not show the proposed reduction in failures,
 integration drift or diagnostic cost, the architecture must be reconsidered
 instead of gaining features by default.
 
-| Capability | Availability in 0.06 | Evidence or boundary |
+| Capability | Availability in 0.07 | Evidence or boundary |
 |:--|:--|:--|
 | UTF-8 lexer, layout and parser subset | Implemented and tested | [`src/parser.rs`](src/parser.rs), parser tests |
 | Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | [`src/semantic.rs`](src/semantic.rs), semantic tests |
@@ -47,11 +48,11 @@ instead of gaining features by default.
 | JSON read/parse/encode/get and bounded file capability | Experimental implemented | JSON project fixtures; paths remain root-confined |
 | Scalar and Tensor[F32] reverse-mode tapes and finite-difference gradient check | Experimental implemented, narrow | [`examples/autograd`](examples/autograd), [`tests/n3_tensor_probe.py`](tests/n3_tensor_probe.py) |
 | Bounded CPU MLP training, mini-batches, evaluation, deterministic seed and checkpoint/resume | Verified preview | [`examples/projects/mlp-training`](examples/projects/mlp-training), [`tests/mlp_training_probe.py`](tests/mlp_training_probe.py); CPU/single-process only |
-| Opt-in human/JSON/JSON2 training event stream | Verified preview for CPU training | `seloryn run ... --log=human|json|json2`; v1 compatibility plus a hash-chained v2 receipt, flushed stderr, stdout remains the program result; [`verify-event-chain.py`](scripts/streaming/verify-event-chain.py) and [`streaming_v2_probe.py`](tests/streaming_v2_probe.py) |
+| Opt-in human/JSON/JSON2 training event stream | Verified preview for CPU and bounded GPU-linear training | `seloryn run ... --log=human|json|json2`; JSON2 carries program/manifest/dataset/checkpoint/result identity, structured path redaction, replay verification and flushed stderr; [`verify-event-chain.py`](scripts/streaming/verify-event-chain.py), [`replay-receipt.py`](scripts/streaming/replay-receipt.py) and [`streaming_v2_probe.py`](tests/streaming_v2_probe.py) |
 | Seloryn-authored multi-input gradients, bounded `range` and SGD loop | Verified preview | [`examples/projects/self-hosted-linear`](examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](tests/self_hosted_probe.py); model/objective/update orchestration is `.sely` source |
-| Physical hardware inventory and non-fallback GPU compute/readback probe | Verified preview on the declared host; capability-aware elsewhere | [`src/gpu.rs`](src/gpu.rs), [`tests/gpu_probe.py`](tests/gpu_probe.py); this is not GPU tensor training |
+| Physical hardware inventory, non-fallback GPU compute/readback probe and explicit GPU linear training | Verified preview on the declared host; capability-aware elsewhere | [`src/gpu.rs`](src/gpu.rs), [`tests/gpu_probe.py`](tests/gpu_probe.py), [`tests/gpu_training_probe.py`](tests/gpu_training_probe.py); the GPU trainer is scalar F32 linear only, device-resident parameters, one final readback, no silent CPU fallback |
 | `build`/`exec` `.selyapp` bundle path | Experimental | Deterministic bundle and clean terminal fixtures; not an installer |
-| HTTP, GPU tensor training, packages and distributed execution | Not implemented or verified | The GPU probe is a bounded hardware gate, not a training backend |
+| HTTP, general GPU tensor/MLP training, packages and distributed execution | Not implemented or verified | `train_linear_gpu` is a closed proof profile, not a general GPU tensor backend |
 | Local installer scripts | Development-only; Windows x64 lifecycle verified here | No public download, signing or cross-OS binary support |
 
 | AI development | AI integration | AI serving | Evidence |

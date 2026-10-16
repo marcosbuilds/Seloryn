@@ -1,8 +1,9 @@
 # Current capability status
 
-Seloryn `0.06` is a verified-preview language/runtime for a bounded `.sely`
+Seloryn `0.07` is a verified-preview language/runtime for a bounded `.sely`
 subset. It includes an executable CPU MLP training profile, hardened resume
-integrity and a real physical non-fallback GPU compute probe in addition to the earlier
+integrity, a real physical non-fallback GPU compute probe and a closed GPU
+linear-training profile in addition to the earlier
 scalar, project, tensor and autodiff gates. The status applies to the observed
 contracts below; it does not turn the whole runtime into a stable general-
 purpose ML platform.
@@ -17,9 +18,11 @@ purpose ML platform.
 | Bounded Tensor[F32] reverse-mode autodiff | Experimental implemented and tested | [`src/tensor_autograd.rs`](../../src/tensor_autograd.rs), [`tests/n3_tensor_probe.py`](../../tests/n3_tensor_probe.py) |
 | Two-layer CPU MLP training with mini-batches, ReLU backpropagation, SGD, evaluation and deterministic seeds | **Verified preview** | [`training.md`](../compute/training.md), [`examples/projects/mlp-training`](../../examples/projects/mlp-training), [`tests/mlp_training_probe.py`](../../tests/mlp_training_probe.py) |
 | Versioned checkpoint save/resume with dataset, weight, sampler-state and complete-state hashes | **Verified preview** | [`src/runtime.rs`](../../src/runtime.rs), MLP black-box probe |
-| Human/JSON/JSON2 terminal streaming with flush and stdout/stderr separation | **Verified preview for CPU training; JSON2 chain independently verified** | [`src/main.rs`](../../src/main.rs), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py) |
+| Human/JSON/JSON2 terminal streaming with flush, identity and stdout/stderr separation | **Verified preview for bounded CPU/GPU-linear training; JSON2 chain and replay independently verified** | [`src/main.rs`](../../src/main.rs), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py), [`replay-receipt.py`](../../scripts/streaming/replay-receipt.py) |
 | Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop | **Verified preview** | [`examples/projects/self-hosted-linear`](../../examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](../../tests/self_hosted_probe.py) |
 | Physical hardware adapter inventory and bounded WGSL compute/readback probe | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`tests/gpu_probe.py`](../../tests/gpu_probe.py) |
+| Explicit `train_linear_gpu` scalar F32 profile with device-resident parameters and one final readback | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`examples/projects/gpu-linear-training`](../../examples/projects/gpu-linear-training), [`tests/gpu_training_probe.py`](../../tests/gpu_training_probe.py) |
+| JSON2 program/manifest/dataset/checkpoint/result identity, replay helper, structured path redaction and optional HMAC authentication | **Verified preview for bounded training receipts** | [`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py) |
 | VS Code `.sely` highlighting, real snippets/completions, CLI diagnostics and Seloryn file icon | Verified editor preview | [`tooling/vscode`](../../tooling/vscode), [public 0.4.0 VSIX release](https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.4.0) |
 | Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
 | Strict `seloryn.toml` parsing and runtime-language compatibility rejection | **Verified preview** | [`src/project.rs`](../../src/project.rs), [`tests/project_manifest_probe.py`](../../tests/project_manifest_probe.py), CLI and VS Code integration fixtures |
@@ -29,11 +32,11 @@ purpose ML platform.
 | Capability | State | Consequence |
 |---|---|---|
 | Public `Module`/`Parameter`/`Dataset` APIs and optimizer families | Not implemented | Seloryn can now own a bounded optimization loop, but the reusable object API is still not exposed |
-| GPU tensor/autodiff training, distributed execution, mixed precision and memory sharding | Not implemented | the GPU gate proves adapter selection and one compute/readback path, not model training |
+| GPU tensor/autodiff training, GPU MLP, distributed execution, mixed precision and memory sharding | Not implemented | `train_linear_gpu` is a closed scalar F32 profile; it does not make `Tensor` or MLP device-resident |
 | Transformer/LLM training, tokenizers and serving | Not implemented | no model-scale or production-serving claim |
 | Runtime installer, registry, broad package ecosystem and stable ABI | Not implemented | use a built binary or the source checkout; the preview is not a stable distribution |
 | Full LSP and interactive VS Code training panel | Not implemented | the extension uses the CLI as source of truth; training is run through CLI/terminal |
-| Replay, signatures, redaction, backpressure protocol and general execution telemetry | Not implemented | JSON2 currently proves an integrity chain for the bounded CPU training profiles only |
+| Public-key signatures, asynchronous backpressure protocol and general execution telemetry | Not implemented | JSON2 now supports deterministic identity/replay for bounded training and optional keyed HMAC authentication; it is not a public Ed25519 signature or async queue |
 
 ## Evidence rule
 
@@ -57,8 +60,14 @@ source execution.
 The `0.06` gain adds hash-chained JSON2 training receipts, independent
 tamper/duplicate-key verification, early event-sink cancellation, checkpoint
 temporary-file cleanup and enforcement of manifest JSON limits in the CPU
-training profiles. It does not claim replay, signatures, backpressure
-independence or general execution telemetry.
+training profiles.
+The `0.07` gain adds program/manifest/dataset/checkpoint/result identity,
+successful-run replay in an isolated copy when the recorded initial checkpoint
+is available, structured path redaction in JSON2, optional HMAC-SHA256 receipt
+authentication and a closed GPU linear trainer whose weights remain in a WGSL
+storage buffer until one final readback. It does not claim public-key signing,
+asynchronous backpressure, GPU tensor/autodiff/MLP training or distributed
+execution.
 The public comparison remains honest: Seloryn's current differentiator is a
 single typed, bounded and observable workflow with an independently verifiable
 training receipt. Broad productivity, security-authenticity or performance

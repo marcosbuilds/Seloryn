@@ -1,6 +1,7 @@
 use crate::autograd;
 use crate::builtins::{self, Builtin};
 use crate::diagnostic::{Diagnostic, Span};
+use crate::gpu;
 use crate::ir::{
     Binding, EnumDecl, Expr, Function, IfBranch, Item, Pattern, Program, Record, Statement,
 };
@@ -214,6 +215,8 @@ pub enum RuntimeEvent {
         model: String,
         train_path: String,
         test_path: String,
+        train_sha256: String,
+        test_sha256: String,
         train_samples: usize,
         test_samples: usize,
         steps: i64,
@@ -250,11 +253,51 @@ pub enum RuntimeEvent {
         weight: f64,
         bias: f64,
     },
+    GpuStarted {
+        model: String,
+        train_path: String,
+        test_path: String,
+        train_sha256: String,
+        test_sha256: String,
+        train_samples: usize,
+        steps: usize,
+        seed: i64,
+        device: String,
+        dtype: String,
+        optimizer: String,
+        learning_rate: f32,
+        parameter_count: usize,
+        adapter: String,
+        backend: String,
+    },
+    GpuCompleted {
+        model: String,
+        steps: usize,
+        seed: i64,
+        device: String,
+        dtype: String,
+        optimizer: String,
+        learning_rate: f32,
+        parameter_count: usize,
+        initial_loss: f32,
+        final_loss: f32,
+        loss_decreased: bool,
+        holdout_mae_observed: f32,
+        weight: f32,
+        bias: f32,
+        adapter: String,
+        backend: String,
+        dispatches: usize,
+        readbacks: usize,
+    },
     MlpStarted {
         model: String,
         train_path: String,
         test_path: String,
         checkpoint_path: String,
+        train_sha256: String,
+        test_sha256: String,
+        checkpoint_before_sha256: Option<String>,
         train_samples: usize,
         test_samples: usize,
         steps: i64,
@@ -1553,6 +1596,41 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
                 Ok(result)
             }
+            "train_linear_gpu" => {
+                let (Some(Value::Text(train)), Some(Value::Text(test))) =
+                    (values.first(), values.get(1))
+                else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "train_linear_gpu requires dataset paths",
+                        span,
+                    )));
+                };
+                let seed = values.get(2).and_then(|value| match value {
+                    Value::I64(value) => Some(*value),
+                    _ => None,
+                });
+                let steps = values.get(3).and_then(|value| match value {
+                    Value::I64(value) => Some(*value),
+                    _ => None,
+                });
+                let train_file = self.resolve_read_path(train, span)?;
+                let test_file = self.resolve_read_path(test, span)?;
+                let result = train_linear_gpu_json(
+                    &train_file,
+                    &test_file,
+                    train,
+                    test,
+                    seed.unwrap_or(0),
+                    steps.unwrap_or(100),
+                    self.training_max_bytes,
+                    self.training_max_depth,
+                    &mut *self.event_sink,
+                )
+                .map(Value::Json)
+                .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                Ok(result)
+            }
             "train_mlp" => {
                 let strings = values
                     .iter()
@@ -1656,7 +1734,7 @@ impl<'a, 'event> Interpreter<'a, 'event> {
         span: Span,
     ) -> Eval<Vec<Value>> {
         let parameter_names: Option<&[&str]> = match name {
-            "train_linear" => Some(&["train", "test", "seed", "steps"]),
+            "train_linear" | "train_linear_gpu" => Some(&["train", "test", "seed", "steps"]),
             "train_mlp" => Some(&[
                 "train",
                 "test",
@@ -2811,6 +2889,8 @@ fn train_linear_json(
         model: "linear".to_owned(),
         train_path: train_path.to_owned(),
         test_path: test_path.to_owned(),
+        train_sha256: train.2.clone(),
+        test_sha256: test.2.clone(),
         train_samples: train.0.len(),
         test_samples: test.0.len(),
         steps,
@@ -2902,6 +2982,133 @@ fn train_linear_json(
         (
             "holdout_mae_observed".to_owned(),
             JsonValue::Number(format!("{holdout_mae_observed:.8}")),
+        ),
+        ("seed".to_owned(), JsonValue::Number(seed.to_string())),
+    ])))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn train_linear_gpu_json(
+    train_file: &Path,
+    test_file: &Path,
+    train_path: &str,
+    test_path: &str,
+    seed: i64,
+    steps: i64,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+    event_sink: &mut dyn EventSink,
+) -> Result<JsonValue, String> {
+    const LEARNING_RATE: f32 = 0.02;
+    let train = read_xy_dataset(train_file, train_path, json_max_bytes, json_max_depth)?;
+    let test = read_xy_dataset(test_file, test_path, json_max_bytes, json_max_depth)?;
+    let steps =
+        usize::try_from(steps).map_err(|_| "GPU linear steps must be a positive I64".to_owned())?;
+    let train_x = train
+        .0
+        .iter()
+        .map(|value| *value as f32)
+        .collect::<Vec<_>>();
+    let train_y = train
+        .1
+        .iter()
+        .map(|value| *value as f32)
+        .collect::<Vec<_>>();
+    event_sink.emit(RuntimeEvent::GpuStarted {
+        model: "linear_gpu".to_owned(),
+        train_path: train_path.to_owned(),
+        test_path: test_path.to_owned(),
+        train_sha256: train.2.clone(),
+        test_sha256: test.2.clone(),
+        train_samples: train_x.len(),
+        steps,
+        seed,
+        device: "gpu".to_owned(),
+        dtype: "f32".to_owned(),
+        optimizer: "sgd".to_owned(),
+        learning_rate: LEARNING_RATE,
+        parameter_count: 2,
+        adapter: "selected_physical_adapter".to_owned(),
+        backend: "wgpu".to_owned(),
+    })?;
+    let report = gpu::train_linear(&train_x, &train_y, steps, LEARNING_RATE)
+        .map_err(|error| error.message)?;
+    let holdout_mae_observed = test
+        .0
+        .iter()
+        .zip(&test.1)
+        .map(|(x, y)| (f64::from(report.weight) * x + f64::from(report.bias) - y).abs())
+        .fold(0.0, f64::max) as f32;
+    if !holdout_mae_observed.is_finite() {
+        return Err("GPU training produced a non-finite holdout error".to_owned());
+    }
+    let loss_decreased = report.final_loss < report.initial_loss;
+    event_sink.emit(RuntimeEvent::GpuCompleted {
+        model: "linear_gpu".to_owned(),
+        steps: report.steps,
+        seed,
+        device: "gpu".to_owned(),
+        dtype: "f32".to_owned(),
+        optimizer: "sgd".to_owned(),
+        learning_rate: LEARNING_RATE,
+        parameter_count: 2,
+        initial_loss: report.initial_loss,
+        final_loss: report.final_loss,
+        loss_decreased,
+        holdout_mae_observed,
+        weight: report.weight,
+        bias: report.bias,
+        adapter: report.adapter.name.clone(),
+        backend: report.adapter.backend.clone(),
+        dispatches: report.dispatches,
+        readbacks: report.readbacks,
+    })?;
+    Ok(JsonValue::Object(std::collections::BTreeMap::from([
+        (
+            "operation".to_owned(),
+            JsonValue::String("train_linear_gpu".to_owned()),
+        ),
+        ("device".to_owned(), JsonValue::String("gpu".to_owned())),
+        ("fallback".to_owned(), JsonValue::Bool(false)),
+        ("dtype".to_owned(), JsonValue::String("f32".to_owned())),
+        ("optimizer".to_owned(), JsonValue::String("sgd".to_owned())),
+        (
+            "steps".to_owned(),
+            JsonValue::Number(report.steps.to_string()),
+        ),
+        (
+            "dispatches".to_owned(),
+            JsonValue::Number(report.dispatches.to_string()),
+        ),
+        (
+            "readbacks".to_owned(),
+            JsonValue::Number(report.readbacks.to_string()),
+        ),
+        (
+            "initial_loss".to_owned(),
+            JsonValue::Number(format_f32(report.initial_loss)),
+        ),
+        (
+            "final_loss".to_owned(),
+            JsonValue::Number(format_f32(report.final_loss)),
+        ),
+        ("loss_decreased".to_owned(), JsonValue::Bool(loss_decreased)),
+        (
+            "holdout_mae_observed".to_owned(),
+            JsonValue::Number(format_f32(holdout_mae_observed)),
+        ),
+        (
+            "weight".to_owned(),
+            JsonValue::Number(format_f32(report.weight)),
+        ),
+        (
+            "bias".to_owned(),
+            JsonValue::Number(format_f32(report.bias)),
+        ),
+        ("adapter".to_owned(), JsonValue::String(report.adapter.name)),
+        (
+            "backend".to_owned(),
+            JsonValue::String(report.adapter.backend),
         ),
         ("seed".to_owned(), JsonValue::Number(seed.to_string())),
     ])))
@@ -3028,10 +3235,12 @@ fn train_mlp_json(
     }
 
     let mut resumed_from = 0_i64;
+    let mut checkpoint_before_sha256 = None;
     let mut state = if checkpoint_file.is_file() {
         let checkpoint_max_bytes = json_max_bytes.min(MAX_CHECKPOINT_BYTES);
         let checkpoint_max_depth = json_max_depth.min(32);
         let source = read_bounded_utf8(checkpoint_file, checkpoint_max_bytes, "MLP checkpoint")?;
+        checkpoint_before_sha256 = Some(sha256_hex(source.as_bytes()));
         let value = json::parse(&source, checkpoint_max_bytes, checkpoint_max_depth)
             .map_err(|error| error.message)?;
         let loaded = parse_mlp_checkpoint(
@@ -3076,6 +3285,9 @@ fn train_mlp_json(
         train_path: train_path.to_owned(),
         test_path: test_path.to_owned(),
         checkpoint_path: checkpoint_path.to_owned(),
+        train_sha256: train.sha256.clone(),
+        test_sha256: test.sha256.clone(),
+        checkpoint_before_sha256,
         train_samples: train.inputs.len(),
         test_samples: test.inputs.len(),
         steps,
@@ -3893,7 +4105,7 @@ fn read_xy_dataset(
     label: &str,
     json_max_bytes: usize,
     json_max_depth: usize,
-) -> Result<(Vec<f64>, Vec<f64>), String> {
+) -> Result<(Vec<f64>, Vec<f64>, String), String> {
     let dataset_max_bytes = json_max_bytes.min(MAX_TRAINING_DATASET_BYTES);
     let dataset_max_depth = json_max_depth.min(16);
     let source = read_bounded_utf8(
@@ -3933,7 +4145,7 @@ fn read_xy_dataset(
     if x.is_empty() || x.len() != y.len() {
         return Err("dataset x/y lengths are invalid".to_owned());
     }
-    Ok((x, y))
+    Ok((x, y, sha256_hex(source.as_bytes())))
 }
 
 fn read_bounded_utf8(path: &Path, max_bytes: usize, label: &str) -> Result<String, String> {
@@ -3964,7 +4176,7 @@ fn json_number(value: &JsonValue) -> Option<f64> {
     }
 }
 
-fn mean_squared_error(dataset: &(Vec<f64>, Vec<f64>), weight: f64, bias: f64) -> f64 {
+fn mean_squared_error(dataset: &(Vec<f64>, Vec<f64>, String), weight: f64, bias: f64) -> f64 {
     dataset
         .0
         .iter()

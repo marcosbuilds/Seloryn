@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import re
 import sys
@@ -63,7 +64,7 @@ def digest(value: object) -> str:
     return "sha256:" + hashlib.sha256(canonical(value)).hexdigest()
 
 
-def verify(lines: Iterable[str]) -> tuple[bool, str, int]:
+def verify(lines: Iterable[str], hmac_key: bytes | None = None) -> tuple[bool, str, int]:
     previous = ZERO_HASH
     run_id: str | None = None
     expected_sequence = 0
@@ -115,9 +116,22 @@ def verify(lines: Iterable[str]) -> tuple[bool, str, int]:
             return False, f"line {line_number}: hash format is invalid", count
         content = dict(parsed)
         del content["hash"]
+        signature = content.pop("signature", None)
         actual = digest(content)
         if actual != claimed:
             return False, f"line {line_number}: hash mismatch", count
+        if signature is not None:
+            if not isinstance(signature, str) or not re.fullmatch(
+                r"hmac-sha256:[0-9a-f]{64}", signature
+            ):
+                return False, f"line {line_number}: signature format is invalid", count
+            if hmac_key is None:
+                return False, f"line {line_number}: signature requires --hmac-key", count
+            expected_signature = "hmac-sha256:" + hmac.new(
+                hmac_key, claimed.encode("ascii"), hashlib.sha256
+            ).hexdigest()
+            if not hmac.compare_digest(signature, expected_signature):
+                return False, f"line {line_number}: signature mismatch", count
         if last_kind == "run.end":
             return False, f"line {line_number}: event follows run.end", count
         if parsed["kind"] == "run.end":
@@ -151,12 +165,16 @@ def verify(lines: Iterable[str]) -> tuple[bool, str, int]:
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2:
-        print(f"usage: {Path(argv[0]).name} EVENTS.ndjson", file=sys.stderr)
+    if len(argv) not in (2, 4) or (len(argv) == 4 and argv[2] != "--hmac-key"):
+        print(
+            f"usage: {Path(argv[0]).name} EVENTS.ndjson [--hmac-key KEY]",
+            file=sys.stderr,
+        )
         return 2
+    hmac_key = argv[3].encode("utf-8") if len(argv) == 4 else None
     try:
         with open(argv[1], "r", encoding="utf-8") as handle:
-            ok, message, _ = verify(handle)
+            ok, message, _ = verify(handle, hmac_key)
     except OSError as error:
         print(f"stream verification failed: {error}", file=sys.stderr)
         return 1

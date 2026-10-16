@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import copy
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -15,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / "target" / "release" / ("seloryn.exe" if sys.platform == "win32" else "seloryn")
 VERIFIER = ROOT / "scripts" / "streaming" / "verify-event-chain.py"
+REPLAYER = ROOT / "scripts" / "streaming" / "replay-receipt.py"
 
 
 def load_verifier():
@@ -113,6 +115,69 @@ def main() -> int:
             check=True,
             text=True,
         )
+        replay = subprocess.run(
+            [
+                sys.executable,
+                str(REPLAYER),
+                "--receipt",
+                str(valid_path),
+                "--project",
+                str(project_two),
+                "--binary",
+                str(BINARY),
+            ],
+            cwd=ROOT,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        assert replay.returncode == 0, replay.stderr
+
+        signed_project = root / "signed"
+        shutil.copytree(ROOT / "examples" / "projects" / "mlp-training", signed_project)
+        signed_checkpoint = signed_project / "checkpoints" / "model.json"
+        if signed_checkpoint.exists():
+            signed_checkpoint.unlink()
+        signed_environment = dict(os.environ)
+        signed_environment["SELORYN_RECEIPT_KEY"] = "streaming-probe-secret"
+        signed_process = subprocess.run(
+            [str(BINARY), "run", str(signed_project), "--log=json2-signed"],
+            cwd=ROOT,
+            env=signed_environment,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            check=False,
+        )
+        assert signed_process.returncode == 0, signed_process.stderr
+        signed_lines = [line for line in signed_process.stderr.splitlines() if line.strip()]
+        signed_valid, signed_message, _ = verifier.verify(
+            signed_lines, b"streaming-probe-secret"
+        )
+        assert signed_valid, signed_message
+        assert all("signature" in json.loads(line) for line in signed_lines)
+        signed_path = root / "signed.ndjson"
+        signed_path.write_text("\n".join(signed_lines) + "\n", encoding="utf-8")
+        signed_replay = subprocess.run(
+            [
+                sys.executable,
+                str(REPLAYER),
+                "--receipt",
+                str(signed_path),
+                "--project",
+                str(signed_project),
+                "--binary",
+                str(BINARY),
+                "--hmac-key",
+                "streaming-probe-secret",
+            ],
+            cwd=ROOT,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        assert signed_replay.returncode == 0, signed_replay.stderr
 
         altered = copy.deepcopy(events)
         altered[2]["data"]["step"] = altered[2]["data"].get("step", 0) + 1

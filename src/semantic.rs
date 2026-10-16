@@ -1565,7 +1565,7 @@ impl<'a> Checker<'a> {
                 }
                 Type::List(Box::new(Type::I64))
             }
-            "train_linear" => {
+            "train_linear" | "train_linear_gpu" => {
                 self.check_standard_arity(name, arguments, 4, span);
                 Type::Json
             }
@@ -1994,7 +1994,13 @@ fn is_supported_standard_directive(text: &str) -> bool {
         .as_slice(),
         "autograd" => ["backward", "gradcheck", "gradients"].as_slice(),
         "data" => ["range"].as_slice(),
-        "training" => ["train_linear", "train_mlp", "load_checkpoint"].as_slice(),
+        "training" => [
+            "train_linear",
+            "train_linear_gpu",
+            "train_mlp",
+            "load_checkpoint",
+        ]
+        .as_slice(),
         _ => return false,
     };
     symbols.iter().all(|symbol| allowed.contains(symbol))

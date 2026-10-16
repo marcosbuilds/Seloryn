@@ -1,6 +1,6 @@
 [package]
 name = "seloryn"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2024"
 publish = false
 description = "Seloryn language bootstrap CLI"
@@ -8,11 +8,12 @@ license = "MIT"
 default-run = "seloryn"
 
 [package.metadata.seloryn]
-language-version = "0.06"
+language-version = "0.07"
 status = "verified-preview"
 
 [dependencies]
 sha2 = "0.10"
+hmac = "0.12"
 unicode-ident = "1.0"
 unicode-normalization = "0.1"
 pollster = "1.0.1"

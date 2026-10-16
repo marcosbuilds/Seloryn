@@ -21,10 +21,17 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::{
+    Arc, Mutex,
+    mpsc::{SyncSender, sync_channel},
+};
+use std::thread::{self, JoinHandle};
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 
-pub(crate) const LANGUAGE_VERSION: &str = "0.06";
+pub(crate) const LANGUAGE_VERSION: &str = "0.07";
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
 const EXIT_OK: u8 = 0;
@@ -32,7 +39,7 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored and CPU MLP training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, while `json2` adds a hash-chained training run envelope.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\nCPU training remains the verified path; GPU probing is available, but GPU training, distributed execution and installer support remain unavailable.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\nGPU training is explicit through `train_linear_gpu` in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution and installer support remain unavailable.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -53,6 +60,7 @@ enum LogFormat {
     Human,
     Json,
     Json2,
+    Json2Signed,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -109,7 +117,9 @@ fn main() -> ExitCode {
 
 fn run(args: &[OsString]) -> u8 {
     match classify(args) {
-        Action::Help => write_stdout(HELP_TEXT),
+        Action::Help => write_stdout(&format!(
+            "{HELP_TEXT}CPU training remains the verified path for the MLP;\n"
+        )),
         Action::Version => write_stdout(&format!(
             "seloryn {LANGUAGE_VERSION} package={PACKAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=verified-preview\n"
         )),
@@ -360,23 +370,108 @@ fn parse_log_text(value: &str) -> Option<LogFormat> {
         "human" => Some(LogFormat::Human),
         "json" => Some(LogFormat::Json),
         "json2" => Some(LogFormat::Json2),
+        "json2-signed" => Some(LogFormat::Json2Signed),
         _ => None,
+    }
+}
+
+#[derive(Clone, Debug)]
+struct RunIdentity {
+    program_sha256: String,
+    manifest_sha256: Option<String>,
+}
+
+const EVENT_QUEUE_CAPACITY: usize = 32;
+
+struct AsyncLogWriter {
+    sender: Option<SyncSender<String>>,
+    failure: Arc<Mutex<Option<String>>>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl AsyncLogWriter {
+    fn new() -> Self {
+        let (sender, receiver) = sync_channel::<String>(EVENT_QUEUE_CAPACITY);
+        let failure = Arc::new(Mutex::new(None));
+        let thread_failure = Arc::clone(&failure);
+        let handle = thread::spawn(move || {
+            let mut stderr = io::stderr();
+            for line in receiver {
+                if let Err(error) = stderr
+                    .write_all(line.as_bytes())
+                    .and_then(|()| stderr.flush())
+                {
+                    if let Ok(mut slot) = thread_failure.lock() {
+                        *slot = Some(error.to_string());
+                    }
+                    break;
+                }
+            }
+        });
+        Self {
+            sender: Some(sender),
+            failure,
+            handle: Some(handle),
+        }
+    }
+
+    fn send(&self, line: String) -> io::Result<()> {
+        if let Ok(slot) = self.failure.lock()
+            && let Some(message) = slot.as_ref()
+        {
+            return Err(io::Error::new(io::ErrorKind::BrokenPipe, message.clone()));
+        }
+        self.sender
+            .as_ref()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::BrokenPipe, "event writer is closed"))?
+            .send(line)
+            .map_err(|_| io::Error::new(io::ErrorKind::BrokenPipe, "event writer disconnected"))
+    }
+
+    fn finish(&mut self) -> Option<io::Error> {
+        self.sender.take();
+        if let Some(handle) = self.handle.take()
+            && handle.join().is_err()
+        {
+            return Some(io::Error::other("event writer thread panicked"));
+        }
+        self.failure
+            .lock()
+            .ok()
+            .and_then(|slot| slot.clone())
+            .map(|message| io::Error::new(io::ErrorKind::BrokenPipe, message))
     }
 }
 
 struct CliEventSink {
     format: LogFormat,
     failure: Option<io::Error>,
+    identity: Option<RunIdentity>,
+    attempt_id: String,
+    signing_key: Option<Vec<u8>>,
+    result_sha256: Option<String>,
+    checkpoint_after_sha256: Option<String>,
+    writer: Option<AsyncLogWriter>,
     v2_run: Option<String>,
     v2_sequence: u64,
     v2_previous_hash: String,
 }
 
 impl CliEventSink {
-    fn new(format: LogFormat) -> Self {
+    fn new(format: LogFormat, identity: Option<RunIdentity>) -> Self {
         Self {
             format,
             failure: None,
+            identity,
+            attempt_id: receipt_attempt_id(),
+            signing_key: (format == LogFormat::Json2Signed)
+                .then(|| env::var("SELORYN_RECEIPT_KEY").ok())
+                .flatten()
+                .filter(|key| !key.is_empty())
+                .map(|key| key.into_bytes()),
+            result_sha256: None,
+            checkpoint_after_sha256: None,
+            writer: (!matches!(format, LogFormat::Off)).then(AsyncLogWriter::new),
             v2_run: None,
             v2_sequence: 0,
             v2_previous_hash: v2_zero_hash(),
@@ -384,11 +479,21 @@ impl CliEventSink {
     }
 
     fn take_failure(&mut self) -> Option<io::Error> {
+        if let Some(writer) = &mut self.writer
+            && let Some(error) = writer.finish()
+            && self.failure.is_none()
+        {
+            self.failure = Some(error);
+        }
         self.failure.take()
     }
 
     fn has_run(&self) -> bool {
         self.v2_run.is_some()
+    }
+
+    fn set_result_sha256(&mut self, value: String) {
+        self.result_sha256 = Some(value);
     }
 
     fn emit_result(&self) -> Result<(), String> {
@@ -402,17 +507,18 @@ impl CliEventSink {
         if self.failure.is_some() || self.format == LogFormat::Off {
             return;
         }
-        let mut stderr = io::stderr();
-        if let Err(error) = stderr
-            .write_all(format!("{line}\n").as_bytes())
-            .and_then(|()| stderr.flush())
-        {
-            self.failure = Some(error);
+        let line = format!("{line}\n");
+        if let Some(writer) = &self.writer {
+            if let Err(error) = writer.send(line) {
+                self.failure = Some(error);
+            }
+        } else {
+            self.failure = Some(io::Error::other("event writer is unavailable"));
         }
     }
 
     fn finish(&mut self, status: &str, error_code: Option<&str>, error_message: Option<&str>) {
-        if self.format != LogFormat::Json2 || self.v2_run.is_none() || self.failure.is_some() {
+        if !is_receipt_log(self.format) || self.v2_run.is_none() || self.failure.is_some() {
             return;
         }
         let mut data = BTreeMap::new();
@@ -440,10 +546,29 @@ impl CliEventSink {
                 json::JsonValue::String(error_message.to_owned()),
             );
         }
+        if let Some(result_sha256) = &self.result_sha256 {
+            data.insert(
+                "result_sha256".to_owned(),
+                json::JsonValue::String(result_sha256.clone()),
+            );
+        }
+        if let Some(checkpoint_sha256) = &self.checkpoint_after_sha256 {
+            data.insert(
+                "checkpoint_after_sha256".to_owned(),
+                json::JsonValue::String(checkpoint_sha256.clone()),
+            );
+        }
         self.write_v2_record("run.end", json::JsonValue::Object(data));
     }
 
     fn write_v2_record(&mut self, kind: &str, data: json::JsonValue) {
+        if self.format == LogFormat::Json2Signed && self.signing_key.is_none() {
+            self.failure = Some(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "SEL-C006 json2-signed requires non-empty SELORYN_RECEIPT_KEY",
+            ));
+            return;
+        }
         let Some(run) = self.v2_run.clone() else {
             return;
         };
@@ -466,6 +591,12 @@ impl CliEventSink {
         );
         let hash = v2_hash(&json::JsonValue::Object(record.clone()));
         record.insert("hash".to_owned(), json::JsonValue::String(hash.clone()));
+        if let Some(key) = &self.signing_key {
+            record.insert(
+                "signature".to_owned(),
+                json::JsonValue::String(hmac_sha256(key, hash.as_bytes())),
+            );
+        }
         self.write_line(json::encode(&json::JsonValue::Object(record)));
         if self.failure.is_none() {
             self.v2_sequence = self.v2_sequence.saturating_add(1);
@@ -480,7 +611,7 @@ impl runtime::EventSink for CliEventSink {
             LogFormat::Off => return Ok(()),
             LogFormat::Human => render_runtime_event_human(&event),
             LogFormat::Json => render_runtime_event_json(&event),
-            LogFormat::Json2 => {
+            LogFormat::Json2 | LogFormat::Json2Signed => {
                 let source = render_runtime_event_json(&event);
                 let Ok(json::JsonValue::Object(mut object)) =
                     json::parse(&source, source.len(), 16)
@@ -502,11 +633,48 @@ impl runtime::EventSink for CliEventSink {
                     }
                 };
                 object.remove("schema_version");
+                redact_v2_paths(&mut object);
                 let fingerprint = v2_hash(&json::JsonValue::Object(object.clone()));
                 if self.v2_run.is_none() {
-                    let run_id = format!("r_{}", &fingerprint["sha256:".len()..]);
-                    self.v2_run = Some(run_id);
                     let mut data = BTreeMap::new();
+                    let mut identity = BTreeMap::new();
+                    if let Some(run_identity) = &self.identity {
+                        identity.insert(
+                            "program_sha256".to_owned(),
+                            json::JsonValue::String(run_identity.program_sha256.clone()),
+                        );
+                        if let Some(manifest_sha256) = &run_identity.manifest_sha256 {
+                            identity.insert(
+                                "manifest_sha256".to_owned(),
+                                json::JsonValue::String(manifest_sha256.clone()),
+                            );
+                        }
+                    }
+                    for key in ["train_sha256", "test_sha256", "checkpoint_before_sha256"] {
+                        if let Some(value) = object.get(key) {
+                            identity.insert(key.to_owned(), value.clone());
+                        }
+                    }
+                    identity.insert(
+                        "schema".to_owned(),
+                        json::JsonValue::String("seloryn.run-identity.v1".to_owned()),
+                    );
+                    let plan = json::JsonValue::Object(BTreeMap::from([
+                        (
+                            "identity".to_owned(),
+                            json::JsonValue::Object(identity.clone()),
+                        ),
+                        (
+                            "source_event".to_owned(),
+                            json::JsonValue::String(kind.clone()),
+                        ),
+                        (
+                            "run_fingerprint".to_owned(),
+                            json::JsonValue::String(fingerprint.clone()),
+                        ),
+                    ]));
+                    let plan_hash = v2_hash(&plan);
+                    self.v2_run = Some(format!("r_{}", &plan_hash["sha256:".len()..]));
                     data.insert(
                         "language_version".to_owned(),
                         json::JsonValue::String(LANGUAGE_VERSION.to_owned()),
@@ -523,7 +691,18 @@ impl runtime::EventSink for CliEventSink {
                         "run_fingerprint".to_owned(),
                         json::JsonValue::String(fingerprint),
                     );
+                    data.insert(
+                        "attempt_id".to_owned(),
+                        json::JsonValue::String(self.attempt_id.clone()),
+                    );
+                    data.insert("identity".to_owned(), json::JsonValue::Object(identity));
                     self.write_v2_record("run.start", json::JsonValue::Object(data));
+                }
+                if kind == "training.complete"
+                    && let Some(json::JsonValue::String(checkpoint_sha256)) =
+                        object.get("checkpoint_sha256")
+                {
+                    self.checkpoint_after_sha256 = Some(checkpoint_sha256.clone());
                 }
                 self.write_v2_record(&kind, json::JsonValue::Object(object));
                 return self.emit_result();
@@ -544,12 +723,54 @@ fn v2_hash(value: &json::JsonValue) -> String {
     format!("sha256:{:x}", hasher.finalize())
 }
 
+fn redact_v2_paths(object: &mut BTreeMap<String, json::JsonValue>) {
+    for key in ["train_path", "test_path", "checkpoint_path"] {
+        let Some(json::JsonValue::String(path)) = object.get(key).cloned() else {
+            continue;
+        };
+        object.insert(
+            key.to_owned(),
+            json::JsonValue::String(format!("path_sha256:{}", sha256_hex(path.as_bytes()))),
+        );
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn hmac_sha256(key: &[u8], message: &[u8]) -> String {
+    let mut mac = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts arbitrary keys");
+    mac.update(message);
+    format!("hmac-sha256:{:x}", mac.finalize().into_bytes())
+}
+
+fn receipt_attempt_id() -> String {
+    let entropy = format!(
+        "{}:{}:{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default(),
+        PACKAGE_VERSION,
+    );
+    format!("a_{}", &sha256_hex(entropy.as_bytes())[..32])
+}
+
+fn is_receipt_log(format: LogFormat) -> bool {
+    matches!(format, LogFormat::Json2 | LogFormat::Json2Signed)
+}
+
 fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
     match event {
         runtime::RuntimeEvent::Started {
             model,
             train_path,
             test_path,
+            train_sha256: _,
+            test_sha256: _,
             train_samples,
             test_samples,
             steps,
@@ -605,11 +826,78 @@ fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
             "seloryn training.complete schema=1 operation=train_linear model={} device={} dtype={} optimizer={} learning_rate={learning_rate:.8} parameter_count={} updates={} steps={} initial_loss={initial_loss:.8} final_loss={final_loss:.8} loss_delta={loss_delta:.8} loss_decreased={} holdout_mae_observed={holdout_mae_observed:.8} weight={weight:.8} bias={bias:.8} seed_metadata={}",
             model, device, dtype, optimizer, parameter_count, updates, steps, loss_decreased, seed
         ),
+        runtime::RuntimeEvent::GpuStarted {
+            model,
+            train_path,
+            test_path,
+            train_samples,
+            steps,
+            seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            parameter_count,
+            adapter,
+            backend,
+            ..
+        } => format!(
+            "seloryn training.start schema=1 operation=train_linear_gpu model={} device={} dtype={} optimizer={} learning_rate={learning_rate:.8} parameter_count={} train={} test={} train_samples={} steps={} seed={} adapter={} backend={}",
+            model,
+            device,
+            dtype,
+            optimizer,
+            parameter_count,
+            json::encode(&json::JsonValue::String(train_path.clone())),
+            json::encode(&json::JsonValue::String(test_path.clone())),
+            train_samples,
+            steps,
+            seed,
+            adapter,
+            backend,
+        ),
+        runtime::RuntimeEvent::GpuCompleted {
+            model,
+            steps,
+            seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            parameter_count,
+            initial_loss,
+            final_loss,
+            loss_decreased,
+            holdout_mae_observed,
+            weight,
+            bias,
+            adapter,
+            backend,
+            dispatches,
+            readbacks,
+        } => format!(
+            "seloryn training.complete schema=1 operation=train_linear_gpu model={} device={} dtype={} optimizer={} learning_rate={learning_rate:.8} parameter_count={} steps={} initial_loss={initial_loss:.8} final_loss={final_loss:.8} loss_decreased={} holdout_mae_observed={holdout_mae_observed:.8} weight={weight:.8} bias={bias:.8} seed={} adapter={} backend={} dispatches={} readbacks={}",
+            model,
+            device,
+            dtype,
+            optimizer,
+            parameter_count,
+            steps,
+            loss_decreased,
+            seed,
+            adapter,
+            backend,
+            dispatches,
+            readbacks,
+        ),
         runtime::RuntimeEvent::MlpStarted {
             model,
             train_path,
             test_path,
             checkpoint_path,
+            train_sha256: _,
+            test_sha256: _,
+            checkpoint_before_sha256: _,
             train_samples,
             test_samples,
             steps,
@@ -696,6 +984,8 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
             model,
             train_path,
             test_path,
+            train_sha256,
+            test_sha256,
             train_samples,
             test_samples,
             steps,
@@ -740,6 +1030,14 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
             object.insert(
                 "test_path".to_owned(),
                 json::JsonValue::String(test_path.clone()),
+            );
+            object.insert(
+                "train_sha256".to_owned(),
+                json::JsonValue::String(train_sha256.clone()),
+            );
+            object.insert(
+                "test_sha256".to_owned(),
+                json::JsonValue::String(test_sha256.clone()),
             );
             object.insert(
                 "train_samples".to_owned(),
@@ -885,11 +1183,185 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
                 json::JsonValue::Number(format!("{bias:.8}")),
             );
         }
+        runtime::RuntimeEvent::GpuStarted {
+            model,
+            train_path,
+            test_path,
+            train_sha256,
+            test_sha256,
+            train_samples,
+            steps,
+            seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            parameter_count,
+            adapter,
+            backend,
+        } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("training.start".to_owned()),
+            );
+            object.insert(
+                "operation".to_owned(),
+                json::JsonValue::String("train_linear_gpu".to_owned()),
+            );
+            object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert(
+                "train_path".to_owned(),
+                json::JsonValue::String(train_path.clone()),
+            );
+            object.insert(
+                "test_path".to_owned(),
+                json::JsonValue::String(test_path.clone()),
+            );
+            object.insert(
+                "train_sha256".to_owned(),
+                json::JsonValue::String(train_sha256.clone()),
+            );
+            object.insert(
+                "test_sha256".to_owned(),
+                json::JsonValue::String(test_sha256.clone()),
+            );
+            object.insert(
+                "train_samples".to_owned(),
+                json::JsonValue::Number(train_samples.to_string()),
+            );
+            object.insert(
+                "steps".to_owned(),
+                json::JsonValue::Number(steps.to_string()),
+            );
+            object.insert("seed".to_owned(), json::JsonValue::Number(seed.to_string()));
+            object.insert("device".to_owned(), json::JsonValue::String(device.clone()));
+            object.insert("dtype".to_owned(), json::JsonValue::String(dtype.clone()));
+            object.insert(
+                "optimizer".to_owned(),
+                json::JsonValue::String(optimizer.clone()),
+            );
+            object.insert(
+                "learning_rate".to_owned(),
+                json::JsonValue::Number(format!("{learning_rate:.8}")),
+            );
+            object.insert(
+                "parameter_count".to_owned(),
+                json::JsonValue::Number(parameter_count.to_string()),
+            );
+            object.insert(
+                "adapter".to_owned(),
+                json::JsonValue::String(adapter.clone()),
+            );
+            object.insert(
+                "backend".to_owned(),
+                json::JsonValue::String(backend.clone()),
+            );
+        }
+        runtime::RuntimeEvent::GpuCompleted {
+            model,
+            steps,
+            seed,
+            device,
+            dtype,
+            optimizer,
+            learning_rate,
+            parameter_count,
+            initial_loss,
+            final_loss,
+            loss_decreased,
+            holdout_mae_observed,
+            weight,
+            bias,
+            adapter,
+            backend,
+            dispatches,
+            readbacks,
+        } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("training.complete".to_owned()),
+            );
+            object.insert(
+                "operation".to_owned(),
+                json::JsonValue::String("train_linear_gpu".to_owned()),
+            );
+            object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert(
+                "steps".to_owned(),
+                json::JsonValue::Number(steps.to_string()),
+            );
+            object.insert("seed".to_owned(), json::JsonValue::Number(seed.to_string()));
+            object.insert("device".to_owned(), json::JsonValue::String(device.clone()));
+            object.insert("dtype".to_owned(), json::JsonValue::String(dtype.clone()));
+            object.insert(
+                "optimizer".to_owned(),
+                json::JsonValue::String(optimizer.clone()),
+            );
+            object.insert(
+                "learning_rate".to_owned(),
+                json::JsonValue::Number(format!("{learning_rate:.8}")),
+            );
+            object.insert(
+                "parameter_count".to_owned(),
+                json::JsonValue::Number(parameter_count.to_string()),
+            );
+            object.insert(
+                "initial_loss".to_owned(),
+                json::JsonValue::Number(format!("{initial_loss:.8}")),
+            );
+            object.insert(
+                "final_loss".to_owned(),
+                json::JsonValue::Number(format!("{final_loss:.8}")),
+            );
+            object.insert(
+                "loss_decreased".to_owned(),
+                json::JsonValue::Bool(*loss_decreased),
+            );
+            object.insert(
+                "holdout_mae_observed".to_owned(),
+                json::JsonValue::Number(format!("{holdout_mae_observed:.8}")),
+            );
+            object.insert(
+                "weight".to_owned(),
+                json::JsonValue::Number(format!("{weight:.8}")),
+            );
+            object.insert(
+                "bias".to_owned(),
+                json::JsonValue::Number(format!("{bias:.8}")),
+            );
+            object.insert(
+                "adapter".to_owned(),
+                json::JsonValue::String(adapter.clone()),
+            );
+            object.insert(
+                "backend".to_owned(),
+                json::JsonValue::String(backend.clone()),
+            );
+            object.insert(
+                "dispatches".to_owned(),
+                json::JsonValue::Number(dispatches.to_string()),
+            );
+            object.insert(
+                "readbacks".to_owned(),
+                json::JsonValue::Number(readbacks.to_string()),
+            );
+        }
         runtime::RuntimeEvent::MlpStarted {
             model,
             train_path,
             test_path,
             checkpoint_path,
+            train_sha256,
+            test_sha256,
+            checkpoint_before_sha256,
             train_samples,
             test_samples,
             steps,
@@ -949,6 +1421,21 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
             object.insert(
                 "checkpoint_path".to_owned(),
                 json::JsonValue::String(checkpoint_path.clone()),
+            );
+            object.insert(
+                "train_sha256".to_owned(),
+                json::JsonValue::String(train_sha256.clone()),
+            );
+            object.insert(
+                "test_sha256".to_owned(),
+                json::JsonValue::String(test_sha256.clone()),
+            );
+            object.insert(
+                "checkpoint_before_sha256".to_owned(),
+                checkpoint_before_sha256
+                    .as_ref()
+                    .map(|value| json::JsonValue::String(value.clone()))
+                    .unwrap_or(json::JsonValue::Null),
             );
             object.insert(
                 "train_samples".to_owned(),
@@ -1376,11 +1863,18 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
     }
 
     let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
-    let mut event_sink = CliEventSink::new(options.log);
+    let mut event_sink = CliEventSink::new(
+        options.log,
+        Some(RunIdentity {
+            program_sha256: sha256_hex(source.as_bytes()),
+            manifest_sha256: None,
+        }),
+    );
     let execution =
         runtime::execute_with_context_and_events(&program, base_dir, 128, 4, &mut event_sink);
     match execution {
         Ok(output) => {
+            event_sink.set_result_sha256(execution_output_sha256(&output));
             let result_failed = matches!(&output.value, runtime::Value::Result { ok: false, .. });
             let status = write_execution_output(
                 &path,
@@ -1388,7 +1882,7 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
                 &program,
                 output,
                 options,
-                options.log == LogFormat::Json2 && event_sink.has_run(),
+                is_receipt_log(options.log) && event_sink.has_run(),
             );
             if status == EXIT_OK {
                 event_sink.finish("ok", None, None);
@@ -1410,7 +1904,7 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
             if let Some(error) = event_sink.take_failure() {
                 return write_io_error("event log", error);
             }
-            if options.log == LogFormat::Json2 && event_sink.has_run() {
+            if is_receipt_log(options.log) && event_sink.has_run() {
                 return EXIT_DATA;
             }
             let diagnostic = error.diagnostic();
@@ -1510,7 +2004,13 @@ fn run_project_path_with_diagnostic_path(
             options,
         );
     }
-    let mut event_sink = CliEventSink::new(options.log);
+    let mut event_sink = CliEventSink::new(
+        options.log,
+        Some(RunIdentity {
+            program_sha256: loaded.program_sha256.clone(),
+            manifest_sha256: Some(loaded.manifest_sha256.clone()),
+        }),
+    );
     let execution = runtime::execute_with_capabilities_and_training_limits(
         &loaded.program,
         &loaded.base_dir,
@@ -1524,6 +2024,7 @@ fn run_project_path_with_diagnostic_path(
     );
     match execution {
         Ok(output) => {
+            event_sink.set_result_sha256(execution_output_sha256(&output));
             let result_failed = matches!(&output.value, runtime::Value::Result { ok: false, .. });
             let status = write_execution_output(
                 diagnostic_path,
@@ -1531,7 +2032,7 @@ fn run_project_path_with_diagnostic_path(
                 &loaded.program,
                 output,
                 options,
-                options.log == LogFormat::Json2 && event_sink.has_run(),
+                is_receipt_log(options.log) && event_sink.has_run(),
             );
             if status == EXIT_OK {
                 event_sink.finish("ok", None, None);
@@ -1553,7 +2054,7 @@ fn run_project_path_with_diagnostic_path(
             if let Some(error) = event_sink.take_failure() {
                 return write_io_error("event log", error);
             }
-            if options.log == LogFormat::Json2 && event_sink.has_run() {
+            if is_receipt_log(options.log) && event_sink.has_run() {
                 return EXIT_DATA;
             }
             let diagnostic = error.diagnostic();
@@ -1572,6 +2073,17 @@ fn run_project_path_with_diagnostic_path(
             }
         }
     }
+}
+
+fn execution_output_sha256(output: &runtime::ExecutionOutput) -> String {
+    let canonical = json::JsonValue::Object(BTreeMap::from([
+        (
+            "stdout".to_owned(),
+            json::JsonValue::String(output.stdout.clone()),
+        ),
+        ("value".to_owned(), runtime::value_to_json(&output.value)),
+    ]));
+    sha256_hex(json::encode(&canonical).as_bytes())
 }
 
 fn write_execution_output(

@@ -1,0 +1,12 @@
+[package]
+name = "gpu-linear-training-example"
+language = "0.07"
+source_root = "src"
+entry = "gpu-linear-training-entry.sely"
+
+[capabilities]
+read = ["data"]
+
+[limits]
+json_max_bytes = 4096
+json_max_depth = 16

@@ -3,6 +3,7 @@
 use crate::diagnostic::{Diagnostic, Span};
 use crate::parser::{Directive, IfBranch, MatchCase, MatchStatement, Pattern};
 use crate::parser::{Expr, Item, Program, Statement};
+use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -22,6 +23,10 @@ pub struct LoadedProgram {
     pub json_max_depth: usize,
     pub training_json_max_bytes: usize,
     pub training_json_max_depth: usize,
+    /// SHA-256 of the manifest bytes used to load this program.
+    pub manifest_sha256: String,
+    /// SHA-256 of the canonical manifest-plus-ordered-source identity.
+    pub program_sha256: String,
 }
 
 #[derive(Debug)]
@@ -158,6 +163,24 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
         .get(&entry_path)
         .map(|unit| unit.source.clone())
         .unwrap_or_default();
+    let manifest_sha256 = sha256_hex(manifest_text.as_bytes());
+    let mut program_hasher = Sha256::new();
+    program_hasher.update(b"seloryn-program-identity-v1\0");
+    program_hasher.update(manifest_text.as_bytes());
+    for source_path in &loader.ordered {
+        let relative = source_path
+            .strip_prefix(&project_root)
+            .unwrap_or(source_path)
+            .to_string_lossy()
+            .replace('\\', "/");
+        program_hasher.update(relative.as_bytes());
+        program_hasher.update([0]);
+        if let Some(unit) = loader.visited.get(source_path) {
+            program_hasher.update(unit.source.as_bytes());
+        }
+        program_hasher.update([0]);
+    }
+    let program_sha256 = format!("{:x}", program_hasher.finalize());
     let mut items = Vec::new();
     for path in &loader.ordered {
         let Some(unit) = loader.visited.get(path) else {
@@ -189,7 +212,14 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
         json_max_depth,
         training_json_max_bytes,
         training_json_max_depth,
+        manifest_sha256,
+        program_sha256,
     })
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 pub fn encode_bundle(path: &Path, profile: &str) -> Result<Vec<u8>, Diagnostic> {

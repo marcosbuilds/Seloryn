@@ -2,14 +2,14 @@
 # The language version is a capability count (M.mm), not a decimal float.
 
 [current]
-language = "0.06"
-runtime_package = "0.6.0"
+language = "0.07"
+runtime_package = "0.7.0"
 extension_package = "0.4.0"
 channel = "verified-preview"
 
 [comparison]
-previous_language = "0.05"
-previous_runtime_package = "0.5.0"
+previous_language = "0.06"
+previous_runtime_package = "0.6.0"
 previous_extension_package = "0.4.0"
 
 [[gains]]
@@ -47,6 +47,12 @@ id = "N8-VERIFIABLE-TRAINING-STREAM"
 language = "0.06"
 summary = "Hash-chained JSON2 training receipts, independent tamper verification, early event-sink cancellation, checkpoint cleanup and manifest limits for CPU training"
 evidence = "src/main.rs; src/runtime.rs; scripts/streaming/verify-event-chain.py; tests/streaming_v2_probe.py; docs/compute/training.md; docs/project/status.md; docs/releases/runtime-0.06.md"
+
+[[gains]]
+id = "N9-REPLAY-IDENTITY-AUTH-GPU-LINEAR"
+language = "0.07"
+summary = "Identity-bearing replayable CPU receipts with structured path redaction and optional HMAC authentication, plus explicit device-resident GPU linear training with one final readback"
+evidence = "src/main.rs; src/project.rs; src/runtime.rs; src/gpu.rs; scripts/streaming/verify-event-chain.py; scripts/streaming/replay-receipt.py; tests/streaming_v2_probe.py; tests/gpu_training_probe.py; examples/projects/gpu-linear-training; docs/releases/runtime-0.07.md"
 
 [[extension_gains]]
 id = "EXT-N6-TRAINING-HARDWARE-COMMANDS"

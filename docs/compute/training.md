@@ -1,6 +1,6 @@
 # Model training
 
-Seloryn `0.06` contains executable CPU training profiles, including a
+Seloryn `0.07` contains executable CPU training profiles, including a
 two-layer `F32` MLP with ReLU hidden activation, mean-squared error, SGD,
 deterministic mini-batches, holdout evaluation and resumable checkpoints. This
 is a verified preview of a small training workflow, not a general neural
@@ -92,10 +92,12 @@ against an exact reference. The independent
 host with no physical non-CPU adapter; when an adapter is reported, the shader result
 must pass with maximum absolute error at most `1e-6`.
 
-This is deliberately narrower than GPU training. The current `Tensor`,
-reverse-mode autodiff tape and `train_mlp` contracts remain CPU-only. GPU
-training still requires device-resident tensor storage, backend parity,
-determinism policy, memory limits and an independent model-training proof.
+This is deliberately narrower than general GPU training. The current `Tensor`,
+reverse-mode autodiff tape and `train_mlp` contracts remain CPU-only. The new
+`training.train_linear_gpu` profile is a separate scalar F32 proof with
+device-resident parameters, WGSL SGD and one final readback; GPU tensor,
+autodiff and MLP training still require their own backend-parity,
+determinism, memory and model-training gates.
 
 ## Streaming events
 
@@ -103,6 +105,15 @@ determinism policy, memory limits and an independent model-training proof.
 backward-compatible schema-v1 object per line. `--log=json2` writes the same
 training lifecycle inside a versioned, hash-chained NDJSON run envelope. Each
 event is flushed immediately, while the program result stays on `stdout`.
+The envelope also carries a deterministic identity for the loaded program and
+manifest, exact dataset bytes, the checkpoint before training and the canonical
+`{stdout,value}` result. Structured dataset/checkpoint paths are replaced by
+non-reversible path identifiers in JSON2. The helper
+[`replay-receipt.py`](../../scripts/streaming/replay-receipt.py) re-executes a
+successful bounded receipt in an isolated copy and compares these identities
+and the final result. Resume replay requires the original pre-run checkpoint
+snapshot to still be supplied; a post-run checkpoint is rejected instead of
+silently treated as the input.
 The MLP lifecycle in both JSON formats is:
 
 ```text
@@ -122,10 +133,15 @@ The v2 record has the fields `schema`, `run`, `seq`, `kind`, `phase`, `data`,
 `prev` and `hash`. The first record is `run.start`; the source training events
 follow; the final record is `run.end`. `hash` is a SHA-256 digest of the
 canonical record without its own `hash` field, and `prev` links it to the
-previous record. The run envelope is currently limited to the implemented CPU
-`train_linear` and `train_mlp` profiles. It is an integrity receipt for the
-bytes emitted by Seloryn, not a signature, replay engine, performance protocol,
-SSE endpoint or general execution telemetry.
+previous record. The run envelope covers the CPU `train_linear`/`train_mlp`
+profiles and the closed GPU `train_linear_gpu` profile. It is an integrity
+receipt with an execution-plan identity, not a public-key signature, async
+backpressure protocol or general execution telemetry.
+For keyed authentication, `--log=json2-signed` requires a non-empty
+`SELORYN_RECEIPT_KEY`. It adds an HMAC-SHA256 tag to every record; the
+independent verifier checks it with `--hmac-key`. This authenticates the stream
+to parties that already possess the secret; it is not publisher authentication,
+non-repudiation or an Ed25519 signature.
 Only a profile that reaches `run.start` receives this envelope. Failures during
 manifest loading, static checking, capability resolution or dataset/checkpoint
 preflight remain ordinary CLI diagnostics because there is not yet a complete
@@ -143,19 +159,24 @@ python scripts/streaming/verify-event-chain.py events.ndjson
 real receipt from a clean project, confirms that `--log=json` keeps the same
 stdout, and rejects altered, removed, reordered, truncated and duplicate-key
 records. The verifier preserves numeric spellings during canonicalization so
-Rust values such as `0.02000000` are checked byte-for-byte. Backpressure,
-timestamps, replay/diff, redaction, signatures and cross-platform numerical
-identity remain separate gates; none is claimed by this preview.
+Rust values such as `0.02000000` are checked byte-for-byte. Asynchronous
+backpressure, public-key signatures, secret-content redaction and
+cross-platform numerical identity remain separate gates. JSON2 path redaction
+is structural and limited to the documented path fields; it is not a guarantee
+that arbitrary program data or error text contains no secrets.
 
 ## What remains outside this profile
 
-The training implementation is CPU-only, single-process and bounded. It does
-not claim GPU tensor execution, distributed collectives, AdamW, gradient accumulation, mixed
-precision, model serving, a general `Dataset`/`Module` API or transformer/LLM
-training. Those capabilities require separate numerical, reproducibility and
-platform evidence. The previous `training.train_linear` fixture remains
-available for compatibility, but `train_mlp` is the current end-to-end proof
-of actual model training.
+The MLP and general tensor/autodiff implementation remains CPU-only,
+single-process and bounded. The new `train_linear_gpu` profile is a separate
+scalar F32 proof: parameters stay in a GPU storage buffer, the WGSL shader
+performs the SGD update, and one final readback returns the result. It does
+not claim GPU tensor execution, GPU MLP/autodiff, distributed collectives,
+AdamW, gradient accumulation, mixed precision, model serving, a general
+`Dataset`/`Module` API or transformer/LLM training. Those capabilities require
+separate numerical, reproducibility and platform evidence. The previous
+`training.train_linear` fixture remains available for compatibility, and
+`train_mlp` remains the CPU end-to-end proof of general model training.
 
 ## Independent verification
 

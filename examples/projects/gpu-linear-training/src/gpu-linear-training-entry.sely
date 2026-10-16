@@ -1,0 +1,4 @@
+from training import train_linear_gpu
+
+fn main() -> Json:
+    return train_linear_gpu("data/train.json", "data/test.json", seed=7, steps=300)

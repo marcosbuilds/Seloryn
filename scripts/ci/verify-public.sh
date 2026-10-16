@@ -19,6 +19,7 @@ python3 tests/mlp_training_probe.py
 python3 tests/streaming_v2_probe.py
 python3 tests/self_hosted_probe.py
 python3 tests/gpu_probe.py
+python3 tests/gpu_training_probe.py
 ./target/release/seloryn run examples/tensors/linear-forward.sely
 ./target/release/seloryn run examples/tensors/tensor-reduce.sely
 set +e

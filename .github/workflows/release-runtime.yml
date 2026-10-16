@@ -47,6 +47,7 @@ jobs:
           python tests/release_probe.py
           python tests/project_manifest_probe.py
           python tests/streaming_v2_probe.py
+          python tests/gpu_training_probe.py
       - name: Read package versions
         id: versions
         shell: bash

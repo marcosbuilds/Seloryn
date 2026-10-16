@@ -40,6 +40,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Seloryn-authored training verification failed' }
     & python tests/gpu_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'GPU compute verification failed' }
+    & python tests/gpu_training_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'GPU training verification failed' }
     & npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'VS Code packaging dependencies failed to install' }
     & npm run package --prefix tooling/vscode

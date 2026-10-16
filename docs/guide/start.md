@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.06 currently provides a verified-preview CPU MLP profile plus independently verifiable hash-chained training receipts, a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. Project manifests are parsed strictly and future language versions are rejected before execution. It also includes a real hardware inventory and bounded GPU compute/readback probe; this does not yet enable GPU model training. There is no distributed backend, package registry, hosted API, stable ABI or supported runtime installer; the preview is used from a built binary or source checkout.
+**Availability:** Seloryn 0.07 currently provides a verified-preview CPU MLP profile plus identity-bearing replayable training receipts, a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. Project manifests are parsed strictly and future language versions are rejected before execution. It also includes a real hardware inventory, bounded GPU compute/readback probe and an explicit scalar F32 `train_linear_gpu` profile; general GPU tensor/MLP training is not enabled. There is no distributed backend, package registry, hosted API, stable ABI or supported runtime installer; the preview is used from a built binary or source checkout.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 
@@ -41,7 +41,7 @@ stdout.
 - No GPU tensor/autodiff training, distributed or symbolic-shape execution; N1/N2 and MLP training remain bounded CPU contracts.
 - No HTTP, process or unrestricted file/package runtime; only bounded standard-input JSON and root-confined project JSON reads are available.
 - No public `Module`/`Parameter`/`Dataset` framework, model loading or production model serving; the verified training profiles remain bounded CPU contracts.
-- No distributed backend, supported installer or supported release target; local installer scripts are not a release. `gpu-probe` is hardware evidence, not GPU training.
+- No distributed backend, supported installer or supported release target; local installer scripts are not a release. `gpu-probe` is hardware evidence, while `train_linear_gpu` is the separate closed scalar F32 training proof; neither implies general GPU tensor/MLP training.
 
 The current capability limits are recorded in the [status page](../project/status.md) and the [tensor reference](../compute/tensors.md).
 

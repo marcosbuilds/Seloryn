@@ -1,7 +1,7 @@
 # Command-line interface
 
-The native CLI exposes help, version metadata, the E3 source checker, the
-bounded CPU training profile and project/bundle gates. It is a verified
+The native CLI exposes help, version metadata, the E3 source checker, bounded
+CPU/GPU-linear training profiles and project/bundle gates. It is a verified
 preview, not an installable stable release.
 
 ```text
@@ -10,12 +10,12 @@ seloryn --version
 seloryn devices [--format=human|json]
 seloryn gpu-probe [--format=human|json]
 seloryn check <file.sely|project> [--format=human|json] [--quiet]
-seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2]
+seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]
 seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
 ```
 
-The preview version reports `0.06`, `package=0.6.0` and
+The preview version reports `0.07`, `package=0.7.0` and
 `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
@@ -45,10 +45,12 @@ source byte spans, Unicode-aware locations, help and runtime stack.
 `from autograd import gradients` returns one gradient tensor for each of
 multiple Tensor[F32] inputs, while `from data import range` creates a bounded
 I64 sequence for Seloryn `for` loops. `--quiet` suppresses the successful `check`
-line. `--log=human`, `--log=json` or `--log=json2` is opt-in and streams the
+line. `--log=human`, `--log=json`, `--log=json2` or `--log=json2-signed` is opt-in and streams the
 active training lifecycle to stderr; it never changes program stdout. Human
 logs are concise, `json` is schema-v1 compatibility output, and `json2` is a
-hash-chained schema-v2 run envelope for the bounded CPU training profiles.
+hash-chained schema-v2 run envelope with identity for the bounded CPU and
+GPU-linear training profiles. `json2-signed` adds HMAC-SHA256 tags when
+`SELORYN_RECEIPT_KEY` is set.
 The MLP profile reports dataset paths, sample counts, effective seed,
 batch/model sizes, checkpoint hash and measured train/evaluation losses.
 `--log=off` is the default. A standalone source run performs no file, network, process or GPU
@@ -80,7 +82,9 @@ bundle evidence rather than an installer or supported release.
 `devices` reports the compiled hardware adapters as structured JSON or concise
 human output. `gpu-probe` is a bounded hardware smoke test: it requires a
 physical non-fallback adapter and validates a real compute dispatch/readback, but it
-does not move model training to the GPU.
+does not move general model training to the GPU. A `.sely` project can explicitly
+import `train_linear_gpu` for the closed scalar F32 proof profile; it never
+silently falls back to CPU.
 
 ## Future commands
 
@@ -116,11 +120,16 @@ This contract applies only to the bounded fixture, not to general telemetry.
 ### Training event stream v2
 
 `--log=json2` begins with `run.start`, emits the v1 training events as chained
-records and closes with `run.end`. The external verifier at
+records and closes with `run.end`. The start identity covers program, manifest,
+datasets and the checkpoint before training; the end identity covers the result
+and checkpoint after training. Structured path fields are redacted. The helper
+[`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py)
+re-executes successful bounded receipts in an isolated copy. The external verifier at
 [`scripts/streaming/verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py)
 detects changed fields, missing or reordered records, truncation, append-after-
-completion and duplicate JSON keys. It verifies integrity only; it does not
-authenticate an untrusted publisher, replay arbitrary executions or imply GPU,
+completion and duplicate JSON keys. `json2-signed` authenticates the receipt
+with a shared HMAC key, but is not a public-key signature. The stream does not
+replay arbitrary executions or imply GPU,
 distributed, serving or general runtime telemetry support. Preflight failures
 before `run.start` remain normal CLI diagnostics and do not claim to have a
 JSON2 receipt.

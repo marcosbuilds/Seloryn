@@ -1,6 +1,6 @@
 # Next executable gates
 
-Seloryn is currently `0.06`: a bounded verified-preview language and runtime for
+Seloryn is currently `0.07`: a bounded verified-preview language and runtime for
 AI development and integration. The next steps are executable gates, not a
 promise that every design proposal already exists.
 
@@ -19,8 +19,9 @@ promise that every design proposal already exists.
   `.sely`; the native backend supplies the bounded tensor/autodiff kernels.
 - MLP resume now detects tampering in sampler state as well as weights and enforces a
   total sample-update budget. `devices` and `gpu-probe` provide a real
-  capability-aware hardware gate with synchronized WGSL readback, while model
-  training remains CPU-only.
+  capability-aware hardware gate with synchronized WGSL readback. The closed
+  scalar `train_linear_gpu` profile now performs a real device-resident update;
+  MLP, Tensor and autodiff training remain CPU-only.
 - Public CI exercises Linux, Windows and macOS, while independent CLI probes
   compare selected tensor results with external references.
 - Project manifests now use a real TOML parser and reject malformed or
@@ -32,7 +33,13 @@ promise that every design proposal already exists.
 - `--log=json2` now emits a real hash-chained run envelope for the two bounded
   CPU training profiles. An independent Python verifier and black-box probe
   detect changed, missing, reordered, truncated and duplicate-key records;
-  schema-v1 JSON remains available for compatibility.
+  schema-v1 JSON remains available for compatibility. JSON2 also carries
+  program/manifest/dataset/checkpoint/result identity; the public replay helper
+  re-executes successful receipts in an isolated copy, signed receipts use
+  keyed HMAC-SHA256 and structured path fields are redacted.
+- `train_linear_gpu` is an explicit scalar F32 GPU profile: the shader updates
+  device-resident parameters and performs one final readback. It fails without
+  a physical adapter and never silently falls back to CPU.
 
 ## Next gates
 
@@ -57,11 +64,15 @@ promise that every design proposal already exists.
 5. **Runtime release:** publish supported binaries, checksums, provenance,
    upgrade/rollback behavior and a release only after the corresponding
    platform and failure-path evidence exists.
-6. **Receipt continuation:** add dataset/program/result identity to the run
-   receipt, then prove resume equivalence, error receipts, slow/disconnected
-   consumers and measured overhead. Replay, signatures, redaction and general
-   execution events must each earn separate evidence; they are not implied by
-   JSON2.
+6. **Receipt continuation — first slice completed:** identity, successful
+   isolated replay, structured path redaction and keyed HMAC authentication
+   are now tested. Remaining gates are pre-run failure receipts, initial
+   checkpoint snapshots for resume replay, public-key signatures, async
+   backpressure, slow/disconnected consumer evidence and measured overhead.
+7. **GPU continuation — first slice completed:** the closed `train_linear_gpu`
+   proof is real on a declared physical adapter. The next gate is a reusable
+   device-resident Tensor/F32 abstraction, then GPU autodiff and MLP training;
+   no fallback or distributed claim is implied.
 
 ## Boundaries
 
