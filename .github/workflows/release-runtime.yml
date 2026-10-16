@@ -37,13 +37,22 @@ jobs:
         shell: bash
         run: |
           python scripts/release/verify-version.py
-          test "${GITHUB_REF_NAME}" = "seloryn-v0.05"
+          language_version=$(python -c 'import tomllib; print(tomllib.load(open("VERSION.toml", "rb"))["current"]["language"])')
+          runtime_version=$(python -c 'import tomllib; print(tomllib.load(open("VERSION.toml", "rb"))["current"]["runtime_package"])')
+          test "${GITHUB_REF_NAME}" = "seloryn-v${language_version}"
       - name: Build release runtime
         run: cargo build --release --locked
       - name: Run release project and manifest evidence
         run: |
           python tests/release_probe.py
           python tests/project_manifest_probe.py
+          python tests/streaming_v2_probe.py
+      - name: Read package versions
+        id: versions
+        shell: bash
+        run: |
+          echo "language=$(python -c 'import tomllib; print(tomllib.load(open("VERSION.toml", "rb"))["current"]["language"])')" >> "$GITHUB_OUTPUT"
+          echo "runtime=$(python -c 'import tomllib; print(tomllib.load(open("VERSION.toml", "rb"))["current"]["runtime_package"])')" >> "$GITHUB_OUTPUT"
       - name: Package deterministic runtime archive
         shell: bash
         run: |
@@ -51,8 +60,8 @@ jobs:
             --binary "${{ matrix.binary }}" \
             --output-dir dist \
             --platform "${{ matrix.platform }}" \
-            --runtime-version 0.5.0 \
-            --language-version 0.05 \
+            --runtime-version "${{ steps.versions.outputs.runtime }}" \
+            --language-version "${{ steps.versions.outputs.language }}" \
             --commit "${GITHUB_SHA}"
       - uses: actions/upload-artifact@v4
         with:
@@ -77,10 +86,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          language_version=$(python -c 'import tomllib; print(tomllib.load(open("VERSION.toml", "rb"))["current"]["language"])')
+          runtime_version=$(python -c 'import tomllib; print(tomllib.load(open("VERSION.toml", "rb"))["current"]["runtime_package"])')
           gh release create "${GITHUB_REF_NAME}" \
             dist/*.zip dist/SHA256SUMS \
             --repo "${GITHUB_REPOSITORY}" \
-            --title "Seloryn runtime 0.5.0" \
-            --notes-file docs/releases/runtime-0.05.md \
+            --title "Seloryn runtime ${runtime_version}" \
+            --notes-file "docs/releases/runtime-${language_version}.md" \
             --prerelease \
             --latest=false

@@ -39,12 +39,12 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
-| Language capability | `0.04` | `0.05` | N7 strict project-manifest parsing and future-language rejection |
-| Runtime package | `0.4.0` | `0.5.0` | package identity follows the accepted runtime reliability gain |
+| Language capability | `0.05` | `0.06` | N8 hash-chained training receipts and reliability fixes around training I/O |
+| Runtime package | `0.5.0` | `0.6.0` | package identity follows the accepted runtime reliability gain |
 | VS Code extension | `0.4.0` | `0.4.0` | unchanged: the runtime manifest gain must not be disguised as an editor gain |
 
 The comparison is intentionally visible: a new commit alone cannot advance
 the language version. N3B remains the historical reason for `0.01`; N6 is the
-historical `0.04` gain, and N7 is the current `0.05` reliability gain. The
-extension ledger is checked separately because an editor patch must not be
-disguised as a language gain.
+historical `0.04` gain, N7 is the `0.05` reliability gain and N8 is the current
+`0.06` streaming/reliability gain. The extension ledger is checked separately
+because an editor patch must not be disguised as a language gain.

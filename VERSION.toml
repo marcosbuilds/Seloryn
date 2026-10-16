@@ -2,14 +2,14 @@
 # The language version is a capability count (M.mm), not a decimal float.
 
 [current]
-language = "0.05"
-runtime_package = "0.5.0"
+language = "0.06"
+runtime_package = "0.6.0"
 extension_package = "0.4.0"
 channel = "verified-preview"
 
 [comparison]
-previous_language = "0.04"
-previous_runtime_package = "0.4.0"
+previous_language = "0.05"
+previous_runtime_package = "0.5.0"
 previous_extension_package = "0.4.0"
 
 [[gains]]
@@ -41,6 +41,12 @@ id = "N7-STRICT-PROJECT-MANIFESTS"
 language = "0.05"
 summary = "Project manifests use a real TOML parser and reject malformed or future language declarations before execution"
 evidence = "src/project.rs; tests/bootstrap_cli.rs; tests/project_manifest_probe.py; tests/release_probe.py; docs/guide/cli.md; docs/releases/runtime-0.05.md"
+
+[[gains]]
+id = "N8-VERIFIABLE-TRAINING-STREAM"
+language = "0.06"
+summary = "Hash-chained JSON2 training receipts, independent tamper verification, early event-sink cancellation, checkpoint cleanup and manifest limits for CPU training"
+evidence = "src/main.rs; src/runtime.rs; scripts/streaming/verify-event-chain.py; tests/streaming_v2_probe.py; docs/compute/training.md; docs/project/status.md; docs/releases/runtime-0.06.md"
 
 [[extension_gains]]
 id = "EXT-N6-TRAINING-HARDWARE-COMMANDS"

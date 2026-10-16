@@ -34,6 +34,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Project manifest verification failed' }
     & python tests/mlp_training_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'CPU MLP independent verification failed' }
+    & python tests/streaming_v2_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Hash-chained training stream verification failed' }
     & python tests/self_hosted_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Seloryn-authored training verification failed' }
     & python tests/gpu_probe.py

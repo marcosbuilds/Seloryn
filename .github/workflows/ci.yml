@@ -61,6 +61,8 @@ jobs:
         run: python tests/project_manifest_probe.py
       - name: Independent CPU MLP training proof
         run: python tests/mlp_training_probe.py
+      - name: Independent hash-chained training stream proof
+        run: python tests/streaming_v2_probe.py
       - name: Independent Seloryn-authored training proof
         run: python tests/self_hosted_probe.py
       - name: GPU compute probe when an adapter exists

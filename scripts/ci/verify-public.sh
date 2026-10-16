@@ -16,6 +16,7 @@ python3 tests/n3_tensor_probe.py
 python3 tests/release_probe.py
 python3 tests/project_manifest_probe.py
 python3 tests/mlp_training_probe.py
+python3 tests/streaming_v2_probe.py
 python3 tests/self_hosted_probe.py
 python3 tests/gpu_probe.py
 ./target/release/seloryn run examples/tensors/linear-forward.sely

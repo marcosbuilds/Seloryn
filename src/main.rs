@@ -22,7 +22,9 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-pub(crate) const LANGUAGE_VERSION: &str = "0.05";
+use sha2::{Digest, Sha256};
+
+pub(crate) const LANGUAGE_VERSION: &str = "0.06";
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
 const EXIT_OK: u8 = 0;
@@ -30,7 +32,7 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored and CPU MLP training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; when enabled, training progress is streamed and flushed to stderr.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\nCPU training remains the verified path; GPU probing is available, but GPU training, distributed execution and installer support remain unavailable.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored and CPU MLP training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, while `json2` adds a hash-chained training run envelope.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\nCPU training remains the verified path; GPU probing is available, but GPU training, distributed execution and installer support remain unavailable.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -50,6 +52,7 @@ enum LogFormat {
     Off,
     Human,
     Json,
+    Json2,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -356,6 +359,7 @@ fn parse_log_text(value: &str) -> Option<LogFormat> {
         "off" => Some(LogFormat::Off),
         "human" => Some(LogFormat::Human),
         "json" => Some(LogFormat::Json),
+        "json2" => Some(LogFormat::Json2),
         _ => None,
     }
 }
@@ -363,6 +367,9 @@ fn parse_log_text(value: &str) -> Option<LogFormat> {
 struct CliEventSink {
     format: LogFormat,
     failure: Option<io::Error>,
+    v2_run: Option<String>,
+    v2_sequence: u64,
+    v2_previous_hash: String,
 }
 
 impl CliEventSink {
@@ -370,11 +377,25 @@ impl CliEventSink {
         Self {
             format,
             failure: None,
+            v2_run: None,
+            v2_sequence: 0,
+            v2_previous_hash: v2_zero_hash(),
         }
     }
 
     fn take_failure(&mut self) -> Option<io::Error> {
         self.failure.take()
+    }
+
+    fn has_run(&self) -> bool {
+        self.v2_run.is_some()
+    }
+
+    fn emit_result(&self) -> Result<(), String> {
+        self.failure
+            .as_ref()
+            .map(|error| Err(error.to_string()))
+            .unwrap_or(Ok(()))
     }
 
     fn write_line(&mut self, line: String) {
@@ -389,17 +410,138 @@ impl CliEventSink {
             self.failure = Some(error);
         }
     }
+
+    fn finish(&mut self, status: &str, error_code: Option<&str>, error_message: Option<&str>) {
+        if self.format != LogFormat::Json2 || self.v2_run.is_none() || self.failure.is_some() {
+            return;
+        }
+        let mut data = BTreeMap::new();
+        data.insert(
+            "status".to_owned(),
+            json::JsonValue::String(status.to_owned()),
+        );
+        data.insert(
+            "events_before_end".to_owned(),
+            json::JsonValue::Number(self.v2_sequence.to_string()),
+        );
+        data.insert(
+            "last_event_hash".to_owned(),
+            json::JsonValue::String(self.v2_previous_hash.clone()),
+        );
+        if let Some(error_code) = error_code {
+            data.insert(
+                "error_code".to_owned(),
+                json::JsonValue::String(error_code.to_owned()),
+            );
+        }
+        if let Some(error_message) = error_message {
+            data.insert(
+                "error_message".to_owned(),
+                json::JsonValue::String(error_message.to_owned()),
+            );
+        }
+        self.write_v2_record("run.end", json::JsonValue::Object(data));
+    }
+
+    fn write_v2_record(&mut self, kind: &str, data: json::JsonValue) {
+        let Some(run) = self.v2_run.clone() else {
+            return;
+        };
+        let mut record = BTreeMap::new();
+        record.insert("data".to_owned(), data);
+        record.insert("kind".to_owned(), json::JsonValue::String(kind.to_owned()));
+        record.insert(
+            "phase".to_owned(),
+            json::JsonValue::String("run".to_owned()),
+        );
+        record.insert(
+            "prev".to_owned(),
+            json::JsonValue::String(self.v2_previous_hash.clone()),
+        );
+        record.insert("run".to_owned(), json::JsonValue::String(run));
+        record.insert("schema".to_owned(), json::JsonValue::Number("2".to_owned()));
+        record.insert(
+            "seq".to_owned(),
+            json::JsonValue::Number(self.v2_sequence.to_string()),
+        );
+        let hash = v2_hash(&json::JsonValue::Object(record.clone()));
+        record.insert("hash".to_owned(), json::JsonValue::String(hash.clone()));
+        self.write_line(json::encode(&json::JsonValue::Object(record)));
+        if self.failure.is_none() {
+            self.v2_sequence = self.v2_sequence.saturating_add(1);
+            self.v2_previous_hash = hash;
+        }
+    }
 }
 
 impl runtime::EventSink for CliEventSink {
-    fn emit(&mut self, event: runtime::RuntimeEvent) {
+    fn emit(&mut self, event: runtime::RuntimeEvent) -> Result<(), String> {
         let line = match self.format {
-            LogFormat::Off => return,
+            LogFormat::Off => return Ok(()),
             LogFormat::Human => render_runtime_event_human(&event),
             LogFormat::Json => render_runtime_event_json(&event),
+            LogFormat::Json2 => {
+                let source = render_runtime_event_json(&event);
+                let Ok(json::JsonValue::Object(mut object)) =
+                    json::parse(&source, source.len(), 16)
+                else {
+                    self.failure = Some(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "failed to convert runtime event to streaming v2",
+                    ));
+                    return self.emit_result();
+                };
+                let kind = match object.remove("event") {
+                    Some(json::JsonValue::String(kind)) => kind,
+                    _ => {
+                        self.failure = Some(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "runtime event has no event kind",
+                        ));
+                        return self.emit_result();
+                    }
+                };
+                object.remove("schema_version");
+                let fingerprint = v2_hash(&json::JsonValue::Object(object.clone()));
+                if self.v2_run.is_none() {
+                    let run_id = format!("r_{}", &fingerprint["sha256:".len()..]);
+                    self.v2_run = Some(run_id);
+                    let mut data = BTreeMap::new();
+                    data.insert(
+                        "language_version".to_owned(),
+                        json::JsonValue::String(LANGUAGE_VERSION.to_owned()),
+                    );
+                    data.insert(
+                        "runtime_package".to_owned(),
+                        json::JsonValue::String(PACKAGE_VERSION.to_owned()),
+                    );
+                    data.insert(
+                        "source_event".to_owned(),
+                        json::JsonValue::String(kind.clone()),
+                    );
+                    data.insert(
+                        "run_fingerprint".to_owned(),
+                        json::JsonValue::String(fingerprint),
+                    );
+                    self.write_v2_record("run.start", json::JsonValue::Object(data));
+                }
+                self.write_v2_record(&kind, json::JsonValue::Object(object));
+                return self.emit_result();
+            }
         };
         self.write_line(line);
+        self.emit_result()
     }
+}
+
+fn v2_zero_hash() -> String {
+    format!("sha256:{}", "0".repeat(64))
+}
+
+fn v2_hash(value: &json::JsonValue) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(json::encode(value).as_bytes());
+    format!("sha256:{:x}", hasher.finalize())
 }
 
 fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
@@ -1237,12 +1379,40 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
     let mut event_sink = CliEventSink::new(options.log);
     let execution =
         runtime::execute_with_context_and_events(&program, base_dir, 128, 4, &mut event_sink);
-    if let Some(error) = event_sink.take_failure() {
-        return write_io_error("event log", error);
-    }
     match execution {
-        Ok(output) => write_execution_output(&path, &source, &program, output, options),
+        Ok(output) => {
+            let result_failed = matches!(&output.value, runtime::Value::Result { ok: false, .. });
+            let status = write_execution_output(
+                &path,
+                &source,
+                &program,
+                output,
+                options,
+                options.log == LogFormat::Json2 && event_sink.has_run(),
+            );
+            if status == EXIT_OK {
+                event_sink.finish("ok", None, None);
+            } else {
+                let code = if result_failed && status == EXIT_DATA {
+                    "SEL-R127"
+                } else {
+                    "SEL-C002"
+                };
+                event_sink.finish("error", Some(code), None);
+            }
+            if let Some(error) = event_sink.take_failure() {
+                return write_io_error("event log", error);
+            }
+            status
+        }
         Err(error) => {
+            event_sink.finish("error", Some(error.code), Some(&error.message));
+            if let Some(error) = event_sink.take_failure() {
+                return write_io_error("event log", error);
+            }
+            if options.log == LogFormat::Json2 && event_sink.has_run() {
+                return EXIT_DATA;
+            }
             let diagnostic = error.diagnostic();
             if options.format == OutputFormat::Human {
                 let mut rendered = diagnostic::render(&path, &source, &diagnostic);
@@ -1341,27 +1511,51 @@ fn run_project_path_with_diagnostic_path(
         );
     }
     let mut event_sink = CliEventSink::new(options.log);
-    let execution = runtime::execute_with_capabilities_and_events(
+    let execution = runtime::execute_with_capabilities_and_training_limits(
         &loaded.program,
         &loaded.base_dir,
         loaded.json_max_bytes,
         loaded.json_max_depth,
+        loaded.training_json_max_bytes,
+        loaded.training_json_max_depth,
         &loaded.read_roots,
         &loaded.write_roots,
         &mut event_sink,
     );
-    if let Some(error) = event_sink.take_failure() {
-        return write_io_error("event log", error);
-    }
     match execution {
-        Ok(output) => write_execution_output(
-            diagnostic_path,
-            &loaded.source,
-            &loaded.program,
-            output,
-            options,
-        ),
+        Ok(output) => {
+            let result_failed = matches!(&output.value, runtime::Value::Result { ok: false, .. });
+            let status = write_execution_output(
+                diagnostic_path,
+                &loaded.source,
+                &loaded.program,
+                output,
+                options,
+                options.log == LogFormat::Json2 && event_sink.has_run(),
+            );
+            if status == EXIT_OK {
+                event_sink.finish("ok", None, None);
+            } else {
+                let code = if result_failed && status == EXIT_DATA {
+                    "SEL-R127"
+                } else {
+                    "SEL-C002"
+                };
+                event_sink.finish("error", Some(code), None);
+            }
+            if let Some(error) = event_sink.take_failure() {
+                return write_io_error("event log", error);
+            }
+            status
+        }
         Err(error) => {
+            event_sink.finish("error", Some(error.code), Some(&error.message));
+            if let Some(error) = event_sink.take_failure() {
+                return write_io_error("event log", error);
+            }
+            if options.log == LogFormat::Json2 && event_sink.has_run() {
+                return EXIT_DATA;
+            }
             let diagnostic = error.diagnostic();
             if options.format == OutputFormat::Human {
                 let mut rendered = diagnostic::render(diagnostic_path, &loaded.source, &diagnostic);
@@ -1386,11 +1580,12 @@ fn write_execution_output(
     program: &parser::Program,
     output: runtime::ExecutionOutput,
     options: Options,
+    suppress_result_diagnostic: bool,
 ) -> u8 {
     let runtime::ExecutionOutput { value, stdout } = output;
     if let runtime::Value::Result { ok: false, .. } = &value {
         if !stdout.is_empty() {
-            let status = write_stdout(&stdout);
+            let status = write_stdout_for_run(&stdout, suppress_result_diagnostic);
             if status != EXIT_OK {
                 return status;
             }
@@ -1400,6 +1595,9 @@ fn write_execution_output(
             format!("program returned {}", value.render()),
             result_failure_span(program),
         );
+        if suppress_result_diagnostic {
+            return EXIT_DATA;
+        }
         return write_diagnostics(path, source, &[diagnostic], options);
     }
 
@@ -1408,7 +1606,10 @@ fn write_execution_output(
             ("stdout".to_owned(), json::JsonValue::String(stdout)),
             ("value".to_owned(), runtime::value_to_json(&value)),
         ]));
-        return write_stdout(&format!("{}\n", json::encode(&result)));
+        return write_stdout_for_run(
+            &format!("{}\n", json::encode(&result)),
+            suppress_result_diagnostic,
+        );
     }
 
     let mut rendered = stdout;
@@ -1418,7 +1619,7 @@ fn write_execution_output(
     if rendered.is_empty() {
         EXIT_OK
     } else {
-        write_stdout(&rendered)
+        write_stdout_for_run(&rendered, suppress_result_diagnostic)
     }
 }
 
@@ -1702,6 +1903,14 @@ fn render_cli_value(program: &parser::Program, value: runtime::Value) -> String 
 fn write_stdout(message: &str) -> u8 {
     match io::stdout().write_all(message.as_bytes()) {
         Ok(()) => EXIT_OK,
+        Err(error) => write_io_error("stdout", error),
+    }
+}
+
+fn write_stdout_for_run(message: &str, suppress_diagnostic: bool) -> u8 {
+    match io::stdout().write_all(message.as_bytes()) {
+        Ok(()) => EXIT_OK,
+        Err(_error) if suppress_diagnostic => EXIT_IO,
         Err(error) => write_io_error("stdout", error),
     }
 }

@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.05 currently provides a verified-preview CPU MLP profile plus a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. Project manifests are parsed strictly and future language versions are rejected before execution. It also includes a real hardware inventory and bounded GPU compute/readback probe; this does not yet enable GPU model training. There is no distributed backend, package registry, hosted API, stable ABI or supported runtime installer; the preview is used from a built binary or source checkout.
+**Availability:** Seloryn 0.06 currently provides a verified-preview CPU MLP profile plus independently verifiable hash-chained training receipts, a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. Project manifests are parsed strictly and future language versions are rejected before execution. It also includes a real hardware inventory and bounded GPU compute/readback probe; this does not yet enable GPU model training. There is no distributed backend, package registry, hosted API, stable ABI or supported runtime installer; the preview is used from a built binary or source checkout.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 

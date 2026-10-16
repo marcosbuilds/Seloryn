@@ -20,6 +20,8 @@ pub struct LoadedProgram {
     pub write_roots: Vec<PathBuf>,
     pub json_max_bytes: usize,
     pub json_max_depth: usize,
+    pub training_json_max_bytes: usize,
+    pub training_json_max_depth: usize,
 }
 
 #[derive(Debug)]
@@ -79,6 +81,12 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
     let json_max_depth = value_for(&manifest_document, "json_max_depth")
         .and_then(|value| value.parse().ok())
         .unwrap_or(4);
+    let training_json_max_bytes = value_for(&manifest_document, "json_max_bytes")
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(1_048_576);
+    let training_json_max_depth = value_for(&manifest_document, "json_max_depth")
+        .and_then(|value| value.parse().ok())
+        .unwrap_or(32);
     let entry_path = source_root.join(entry);
     if !entry_path.starts_with(&source_root) || !entry_path.is_file() {
         return Err(Diagnostic::new(
@@ -179,6 +187,8 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
         write_roots,
         json_max_bytes,
         json_max_depth,
+        training_json_max_bytes,
+        training_json_max_depth,
     })
 }
 

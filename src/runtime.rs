@@ -300,13 +300,15 @@ pub enum RuntimeEvent {
 
 /// Receives runtime events while execution is in progress.
 pub trait EventSink {
-    fn emit(&mut self, event: RuntimeEvent);
+    fn emit(&mut self, event: RuntimeEvent) -> Result<(), String>;
 }
 
 struct NullEventSink;
 
 impl EventSink for NullEventSink {
-    fn emit(&mut self, _event: RuntimeEvent) {}
+    fn emit(&mut self, _event: RuntimeEvent) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /// Execute a semantically valid program and return explicit program output separately
@@ -336,17 +338,20 @@ pub fn execute_with_context_and_events(
     event_sink: &mut dyn EventSink,
 ) -> Result<ExecutionOutput, RuntimeError> {
     let lowered = crate::ir::lower(program);
-    execute_ir_with_capabilities_and_events(
+    execute_ir_with_capabilities_and_training_limits(
         &lowered,
         base_dir,
         json_max_bytes,
         json_max_depth,
+        MAX_TRAINING_DATASET_BYTES,
+        32,
         &[],
         &[],
         event_sink,
     )
 }
 
+#[allow(dead_code)]
 pub fn execute_with_capabilities_and_events(
     program: &source_parser::Program,
     base_dir: &Path,
@@ -362,6 +367,32 @@ pub fn execute_with_capabilities_and_events(
         base_dir,
         json_max_bytes,
         json_max_depth,
+        read_roots,
+        write_roots,
+        event_sink,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn execute_with_capabilities_and_training_limits(
+    program: &source_parser::Program,
+    base_dir: &Path,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+    training_max_bytes: usize,
+    training_max_depth: usize,
+    read_roots: &[PathBuf],
+    write_roots: &[PathBuf],
+    event_sink: &mut dyn EventSink,
+) -> Result<ExecutionOutput, RuntimeError> {
+    let lowered = crate::ir::lower(program);
+    execute_ir_with_capabilities_and_training_limits(
+        &lowered,
+        base_dir,
+        json_max_bytes,
+        json_max_depth,
+        training_max_bytes,
+        training_max_depth,
         read_roots,
         write_roots,
         event_sink,
@@ -386,17 +417,20 @@ pub fn execute_ir_with_context_and_events(
     json_max_depth: usize,
     event_sink: &mut dyn EventSink,
 ) -> Result<ExecutionOutput, RuntimeError> {
-    execute_ir_with_capabilities_and_events(
+    execute_ir_with_capabilities_and_training_limits(
         program,
         base_dir,
         json_max_bytes,
         json_max_depth,
+        MAX_TRAINING_DATASET_BYTES,
+        32,
         &[],
         &[],
         event_sink,
     )
 }
 
+#[allow(dead_code)]
 pub fn execute_ir_with_capabilities_and_events(
     program: &Program,
     base_dir: &Path,
@@ -406,11 +440,38 @@ pub fn execute_ir_with_capabilities_and_events(
     write_roots: &[PathBuf],
     event_sink: &mut dyn EventSink,
 ) -> Result<ExecutionOutput, RuntimeError> {
+    execute_ir_with_capabilities_and_training_limits(
+        program,
+        base_dir,
+        json_max_bytes,
+        json_max_depth,
+        json_max_bytes,
+        json_max_depth,
+        read_roots,
+        write_roots,
+        event_sink,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_ir_with_capabilities_and_training_limits(
+    program: &Program,
+    base_dir: &Path,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+    training_max_bytes: usize,
+    training_max_depth: usize,
+    read_roots: &[PathBuf],
+    write_roots: &[PathBuf],
+    event_sink: &mut dyn EventSink,
+) -> Result<ExecutionOutput, RuntimeError> {
     Interpreter::new(
         program,
         base_dir,
         json_max_bytes,
         json_max_depth,
+        training_max_bytes,
+        training_max_depth,
         read_roots,
         write_roots,
         event_sink,
@@ -442,16 +503,21 @@ struct Interpreter<'a, 'event> {
     write_roots: Vec<PathBuf>,
     json_max_bytes: usize,
     json_max_depth: usize,
+    training_max_bytes: usize,
+    training_max_depth: usize,
     stdin_json: Option<Result<JsonValue, String>>,
     event_sink: &'event mut dyn EventSink,
 }
 
 impl<'a, 'event> Interpreter<'a, 'event> {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         program: &'a Program,
         base_dir: &Path,
         json_max_bytes: usize,
         json_max_depth: usize,
+        training_max_bytes: usize,
+        training_max_depth: usize,
         read_roots: &[PathBuf],
         write_roots: &[PathBuf],
         event_sink: &'event mut dyn EventSink,
@@ -516,6 +582,8 @@ impl<'a, 'event> Interpreter<'a, 'event> {
             write_roots: write_roots.to_vec(),
             json_max_bytes,
             json_max_depth,
+            training_max_bytes,
+            training_max_depth,
             stdin_json: None,
             event_sink,
         }
@@ -1468,6 +1536,8 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 });
                 let train_file = self.resolve_read_path(train, span)?;
                 let test_file = self.resolve_read_path(test, span)?;
+                let json_max_bytes = self.training_max_bytes;
+                let json_max_depth = self.training_max_depth;
                 let result = train_linear_json(
                     &train_file,
                     &test_file,
@@ -1475,6 +1545,8 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                     test,
                     seed.unwrap_or(0),
                     steps.unwrap_or(100),
+                    json_max_bytes,
+                    json_max_depth,
                     &mut *self.event_sink,
                 )
                 .map(Value::Json)
@@ -1526,6 +1598,8 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 let train_file = self.resolve_read_path(strings[0], span)?;
                 let test_file = self.resolve_read_path(strings[1], span)?;
                 let checkpoint_file = self.resolve_write_path(strings[2], span)?;
+                let json_max_bytes = self.training_max_bytes;
+                let json_max_depth = self.training_max_depth;
                 let result = train_mlp_json(
                     MlpTrainingRequest {
                         train_file: &train_file,
@@ -1540,6 +1614,8 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                         hidden_size,
                         learning_rate,
                     },
+                    json_max_bytes,
+                    json_max_depth,
                     &mut *self.event_sink,
                 )
                 .map(Value::Json)
@@ -2693,6 +2769,7 @@ fn is_named_error_constructor(name: &str) -> bool {
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn train_linear_json(
     train_file: &Path,
     test_file: &Path,
@@ -2700,10 +2777,12 @@ fn train_linear_json(
     test_path: &str,
     seed: i64,
     steps: i64,
+    json_max_bytes: usize,
+    json_max_depth: usize,
     event_sink: &mut dyn EventSink,
 ) -> Result<JsonValue, String> {
-    let train = read_xy_dataset(train_file, train_path)?;
-    let test = read_xy_dataset(test_file, test_path)?;
+    let train = read_xy_dataset(train_file, train_path, json_max_bytes, json_max_depth)?;
+    let test = read_xy_dataset(test_file, test_path, json_max_bytes, json_max_depth)?;
     if steps < 0 {
         return Err("training steps must be non-negative".to_owned());
     }
@@ -2741,7 +2820,7 @@ fn train_linear_json(
         optimizer: LINEAR_OPTIMIZER.to_owned(),
         learning_rate: LINEAR_LEARNING_RATE,
         parameter_count: LINEAR_PARAMETER_COUNT,
-    });
+    })?;
     let progress_interval = (steps / 10).max(1);
     for step in 1..=steps {
         let count = train.0.len() as f64;
@@ -2771,7 +2850,7 @@ fn train_linear_json(
                 updates: (step as usize) * train.0.len(),
                 loss,
                 loss_delta: initial_loss - loss,
-            });
+            })?;
         }
     }
     let final_loss = mean_squared_error(&train, weight, bias);
@@ -2810,7 +2889,7 @@ fn train_linear_json(
         holdout_mae_observed,
         weight,
         bias,
-    });
+    })?;
     Ok(JsonValue::Object(std::collections::BTreeMap::from([
         (
             "loss_decreased".to_owned(),
@@ -2871,6 +2950,8 @@ struct MlpTrainingRequest<'a> {
 
 fn train_mlp_json(
     request: MlpTrainingRequest<'_>,
+    json_max_bytes: usize,
+    json_max_depth: usize,
     event_sink: &mut dyn EventSink,
 ) -> Result<JsonValue, String> {
     let MlpTrainingRequest {
@@ -2886,8 +2967,8 @@ fn train_mlp_json(
         hidden_size,
         learning_rate,
     } = request;
-    let train = read_mlp_dataset(train_file, train_path)?;
-    let test = read_mlp_dataset(test_file, test_path)?;
+    let train = read_mlp_dataset(train_file, train_path, json_max_bytes, json_max_depth)?;
+    let test = read_mlp_dataset(test_file, test_path, json_max_bytes, json_max_depth)?;
     if train.input_size != test.input_size || train.output_size != test.output_size {
         return Err(
             "train and test datasets must have identical input/output dimensions".to_owned(),
@@ -2948,9 +3029,11 @@ fn train_mlp_json(
 
     let mut resumed_from = 0_i64;
     let mut state = if checkpoint_file.is_file() {
-        let source = read_bounded_utf8(checkpoint_file, MAX_CHECKPOINT_BYTES, "MLP checkpoint")?;
-        let value =
-            json::parse(&source, MAX_CHECKPOINT_BYTES, 32).map_err(|error| error.message)?;
+        let checkpoint_max_bytes = json_max_bytes.min(MAX_CHECKPOINT_BYTES);
+        let checkpoint_max_depth = json_max_depth.min(32);
+        let source = read_bounded_utf8(checkpoint_file, checkpoint_max_bytes, "MLP checkpoint")?;
+        let value = json::parse(&source, checkpoint_max_bytes, checkpoint_max_depth)
+            .map_err(|error| error.message)?;
         let loaded = parse_mlp_checkpoint(
             &value,
             &train,
@@ -3005,7 +3088,7 @@ fn train_mlp_json(
         hidden_size,
         parameter_count,
         resumed_from,
-    });
+    })?;
 
     let progress_interval = (steps / 10).max(1);
     while state.step < steps {
@@ -3022,9 +3105,6 @@ fn train_mlp_json(
         if state.step == 1 || state.step == steps || state.step % progress_interval == 0 {
             let loss = mlp_loss(&state.model, &train)?;
             let evaluation_loss = mlp_loss(&state.model, &test)?;
-            let checkpoint =
-                encode_mlp_checkpoint(&state, &train, &test, seed, batch_size, learning_rate);
-            let checkpoint_sha256 = write_checkpoint_atomic(checkpoint_file, &checkpoint)?;
             event_sink.emit(RuntimeEvent::MlpStep {
                 model: "mlp".to_owned(),
                 step: state.step,
@@ -3033,8 +3113,10 @@ fn train_mlp_json(
                 epoch: state.epoch,
                 loss,
                 evaluation_loss,
-            });
-            let _ = checkpoint_sha256;
+            })?;
+            let checkpoint =
+                encode_mlp_checkpoint(&state, &train, &test, seed, batch_size, learning_rate);
+            write_checkpoint_atomic(checkpoint_file, &checkpoint)?;
         }
     }
     let final_loss = mlp_loss(&state.model, &train)?;
@@ -3060,7 +3142,7 @@ fn train_mlp_json(
         loss_decreased,
         resumed_from,
         checkpoint_sha256: checkpoint_sha256.clone(),
-    });
+    })?;
     Ok(JsonValue::Object(std::collections::BTreeMap::from([
         (
             "operation".to_owned(),
@@ -3110,15 +3192,22 @@ fn train_mlp_json(
     ])))
 }
 
-fn read_mlp_dataset(path: &Path, label: &str) -> Result<MlpDataset, String> {
+fn read_mlp_dataset(
+    path: &Path,
+    label: &str,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+) -> Result<MlpDataset, String> {
+    let dataset_max_bytes = json_max_bytes.min(MAX_TRAINING_DATASET_BYTES);
+    let dataset_max_depth = json_max_depth.min(32);
     let source = read_bounded_utf8(
         path,
-        MAX_TRAINING_DATASET_BYTES,
+        dataset_max_bytes,
         &format!("training dataset `{label}`"),
     )?;
     let sha256 = sha256_hex(source.as_bytes());
-    let value =
-        json::parse(&source, MAX_TRAINING_DATASET_BYTES, 32).map_err(|error| error.message)?;
+    let value = json::parse(&source, dataset_max_bytes, dataset_max_depth)
+        .map_err(|error| error.message)?;
     let JsonValue::Object(values) = value else {
         return Err("MLP dataset must be a JSON object".to_owned());
     };
@@ -3601,12 +3690,20 @@ fn write_checkpoint_atomic(path: &Path, source: &str) -> Result<String, String> 
         .create_new(true)
         .open(&temporary)
         .map_err(|error| format!("checkpoint temporary file creation failed: {error}"))?;
-    file.write_all(source.as_bytes())
+    let write_result = file
+        .write_all(source.as_bytes())
         .and_then(|()| file.flush())
-        .and_then(|()| file.sync_all())
-        .map_err(|error| format!("checkpoint temporary file flush failed: {error}"))?;
+        .and_then(|()| file.sync_all());
+    if let Err(error) = write_result {
+        drop(file);
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!("checkpoint temporary file flush failed: {error}"));
+    }
     drop(file);
-    replace_checkpoint_atomically(&temporary, path)?;
+    if let Err(error) = replace_checkpoint_atomically(&temporary, path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(error);
+    }
     Ok(sha256_hex(source.as_bytes()))
 }
 
@@ -3791,14 +3888,21 @@ fn format_f32(value: f32) -> String {
     value.to_string()
 }
 
-fn read_xy_dataset(path: &Path, label: &str) -> Result<(Vec<f64>, Vec<f64>), String> {
+fn read_xy_dataset(
+    path: &Path,
+    label: &str,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+) -> Result<(Vec<f64>, Vec<f64>), String> {
+    let dataset_max_bytes = json_max_bytes.min(MAX_TRAINING_DATASET_BYTES);
+    let dataset_max_depth = json_max_depth.min(16);
     let source = read_bounded_utf8(
         path,
-        MAX_TRAINING_DATASET_BYTES,
+        dataset_max_bytes,
         &format!("training dataset `{label}`"),
     )?;
-    let value =
-        json::parse(&source, MAX_TRAINING_DATASET_BYTES, 16).map_err(|error| error.message)?;
+    let value = json::parse(&source, dataset_max_bytes, dataset_max_depth)
+        .map_err(|error| error.message)?;
     let JsonValue::Object(values) = value else {
         return Err("dataset must be a JSON object".to_owned());
     };

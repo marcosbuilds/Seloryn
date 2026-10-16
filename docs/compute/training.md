@@ -1,6 +1,6 @@
 # Model training
 
-Seloryn `0.05` contains executable CPU training profiles, including a
+Seloryn `0.06` contains executable CPU training profiles, including a
 two-layer `F32` MLP with ReLU hidden activation, mean-squared error, SGD,
 deterministic mini-batches, holdout evaluation and resumable checkpoints. This
 is a verified preview of a small training workflow, not a general neural
@@ -99,9 +99,11 @@ determinism policy, memory limits and an independent model-training proof.
 
 ## Streaming events
 
-`--log=human` writes readable events to `stderr`; `--log=json` writes one JSON
-object per line. Each event is flushed immediately, while the program result
-stays on `stdout`. The MLP lifecycle is:
+`--log=human` writes readable events to `stderr`; `--log=json` writes the
+backward-compatible schema-v1 object per line. `--log=json2` writes the same
+training lifecycle inside a versioned, hash-chained NDJSON run envelope. Each
+event is flushed immediately, while the program result stays on `stdout`.
+The MLP lifecycle in both JSON formats is:
 
 ```text
 training.start -> training.step* -> training.complete
@@ -113,6 +115,37 @@ number, epoch, train loss and evaluation loss. Completion reports final
 metrics and checkpoint hash. JSON output is deterministic apart from the
 external process manifest; timestamps are intentionally not embedded in the
 canonical stream.
+
+### Streaming v2 evidence contract
+
+The v2 record has the fields `schema`, `run`, `seq`, `kind`, `phase`, `data`,
+`prev` and `hash`. The first record is `run.start`; the source training events
+follow; the final record is `run.end`. `hash` is a SHA-256 digest of the
+canonical record without its own `hash` field, and `prev` links it to the
+previous record. The run envelope is currently limited to the implemented CPU
+`train_linear` and `train_mlp` profiles. It is an integrity receipt for the
+bytes emitted by Seloryn, not a signature, replay engine, performance protocol,
+SSE endpoint or general execution telemetry.
+Only a profile that reaches `run.start` receives this envelope. Failures during
+manifest loading, static checking, capability resolution or dataset/checkpoint
+preflight remain ordinary CLI diagnostics because there is not yet a complete
+execution identity from which to construct a truthful receipt. A `training.step`
+is progress evidence; checkpoint persistence can still fail afterward and is
+represented by an error `run.end`.
+
+The independent verifier can run without the Seloryn binary:
+
+```text
+python scripts/streaming/verify-event-chain.py events.ndjson
+```
+
+[`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py) generates a
+real receipt from a clean project, confirms that `--log=json` keeps the same
+stdout, and rejects altered, removed, reordered, truncated and duplicate-key
+records. The verifier preserves numeric spellings during canonicalization so
+Rust values such as `0.02000000` are checked byte-for-byte. Backpressure,
+timestamps, replay/diff, redaction, signatures and cross-platform numerical
+identity remain separate gates; none is claimed by this preview.
 
 ## What remains outside this profile
 

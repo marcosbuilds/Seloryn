@@ -1,6 +1,6 @@
 # Next executable gates
 
-Seloryn is currently `0.05`: a bounded verified-preview language and runtime for
+Seloryn is currently `0.06`: a bounded verified-preview language and runtime for
 AI development and integration. The next steps are executable gates, not a
 promise that every design proposal already exists.
 
@@ -29,6 +29,10 @@ promise that every design proposal already exists.
 - The VS Code package provides `.sely` association, syntax highlighting,
   native completion and opt-in model ghost text. Its installable preview is
   validated separately from the language runtime.
+- `--log=json2` now emits a real hash-chained run envelope for the two bounded
+  CPU training profiles. An independent Python verifier and black-box probe
+  detect changed, missing, reordered, truncated and duplicate-key records;
+  schema-v1 JSON remains available for compatibility.
 
 ## Next gates
 
@@ -53,6 +57,11 @@ promise that every design proposal already exists.
 5. **Runtime release:** publish supported binaries, checksums, provenance,
    upgrade/rollback behavior and a release only after the corresponding
    platform and failure-path evidence exists.
+6. **Receipt continuation:** add dataset/program/result identity to the run
+   receipt, then prove resume equivalence, error receipts, slow/disconnected
+   consumers and measured overhead. Replay, signatures, redaction and general
+   execution events must each earn separate evidence; they are not implied by
+   JSON2.
 
 ## Boundaries
 

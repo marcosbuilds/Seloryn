@@ -10,12 +10,12 @@ seloryn --version
 seloryn devices [--format=human|json]
 seloryn gpu-probe [--format=human|json]
 seloryn check <file.sely|project> [--format=human|json] [--quiet]
-seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json]
+seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2]
 seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
 ```
 
-The preview version reports `0.05`, `package=0.5.0` and
+The preview version reports `0.06`, `package=0.6.0` and
 `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
@@ -45,10 +45,11 @@ source byte spans, Unicode-aware locations, help and runtime stack.
 `from autograd import gradients` returns one gradient tensor for each of
 multiple Tensor[F32] inputs, while `from data import range` creates a bounded
 I64 sequence for Seloryn `for` loops. `--quiet` suppresses the successful `check`
-line. `--log=human` or `--log=json` is opt-in and streams the active training
-lifecycle to stderr; it never changes program stdout.
-Human logs are concise, while JSON logs are one deterministic JSON object per
-line. The MLP profile reports dataset paths, sample counts, effective seed,
+line. `--log=human`, `--log=json` or `--log=json2` is opt-in and streams the
+active training lifecycle to stderr; it never changes program stdout. Human
+logs are concise, `json` is schema-v1 compatibility output, and `json2` is a
+hash-chained schema-v2 run envelope for the bounded CPU training profiles.
+The MLP profile reports dataset paths, sample counts, effective seed,
 batch/model sizes, checkpoint hash and measured train/evaluation losses.
 `--log=off` is the default. A standalone source run performs no file, network, process or GPU
 effects. A program may explicitly import read_stdin from json to consume one
@@ -111,3 +112,15 @@ scope; sampled `training.step` records report completed updates, measured loss
 and change from the initial loss; `training.complete` reports the loss change,
 improvement flag, holdout MAE, total updates and learned linear parameters.
 This contract applies only to the bounded fixture, not to general telemetry.
+
+### Training event stream v2
+
+`--log=json2` begins with `run.start`, emits the v1 training events as chained
+records and closes with `run.end`. The external verifier at
+[`scripts/streaming/verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py)
+detects changed fields, missing or reordered records, truncation, append-after-
+completion and duplicate JSON keys. It verifies integrity only; it does not
+authenticate an untrusted publisher, replay arbitrary executions or imply GPU,
+distributed, serving or general runtime telemetry support. Preflight failures
+before `run.start` remain normal CLI diagnostics and do not claim to have a
+JSON2 receipt.
