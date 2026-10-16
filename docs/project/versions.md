@@ -26,8 +26,8 @@ its own evidenced gain. For example, language `0.08` authorizes the `0.8.x`
 runtime and extension line. A package cannot jump ahead of the language line,
 and a package update cannot be justified by a commit count, documentation-only
 edit or an unproven feature. Runtime patch releases remain blocked until a
-runtime-specific gain ledger is added; the current runtime line therefore
-uses patch `0`.
+runtime-specific gain ledger is added; the current runtime line is at patch `3`
+because `R1`, `R2` and `R3` each carry their own evidence.
 
 `VERSION.toml` is the source of truth for the current/previous comparison and
 the append-only `extension_gains` ledger. Every extension gain records the
@@ -59,7 +59,7 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
 | Language capability | `0.08` | `0.09` | N11 hash-validated bounded MLP batch inference |
-| Runtime package | `0.9.1` | `0.9.2` | `R2` adds verified source/toolchain/lockfile/binary/artifact provenance |
+| Runtime package | `0.9.2` | `0.9.3` | `R3` makes the Windows installer verify provenance before copying a binary |
 | VS Code extension | `0.8.1` | `0.9.0` | `0.9.0` exposes the new batch-inference workflow on the language line |
 
 The comparison is intentionally visible: a new commit alone cannot advance
