@@ -23,6 +23,15 @@ not a promise that GitHub publication already happened.
   metadata, including the runtime version and binary hash, before copying a
   binary into the install root.
 
+## [0.9.4] — local runtime patch, 2026-10-16
+
+- `.selyapp` bundles now carry an explicit `seloryn.bundle.v1` format version;
+  `build` writes `seloryn-build.json` with language/runtime metadata, byte
+  length and SHA-256, and `exec <build-directory>` rejects tampered metadata.
+- The LSP now tracks document versions, ignores stale or ranged full-sync
+  changes atomically, clears diagnostics on close and validates framed headers.
+- The language remains `0.09` and the extension remains `0.9.0`.
+
 ## [0.9.1] — local runtime patch, 2026-10-16
 
 - Added read-only `seloryn doctor` project diagnostics with stable JSON output.

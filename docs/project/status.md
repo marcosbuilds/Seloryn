@@ -27,8 +27,10 @@ purpose ML platform.
 | Hash-validated bounded CPU MLP checkpoint batch inference | **Verified language gain** | [`examples/projects/mlp-inference`](../../examples/projects/mlp-inference), [`tests/mlp_inference_probe.py`](../../tests/mlp_inference_probe.py); no general model loader or serving |
 | Read-only `doctor` project diagnostics and transactional `init` project templates | **Verified runtime patch** | [`src/workspace.rs`](../../src/workspace.rs), [`tests/workspace_probe.py`](../../tests/workspace_probe.py); reports `production_ready=false` while ABI remains unstable |
 | Runtime release provenance: source tree, toolchain, lockfile, binary and staged artifact hashes | **Verified packaging gate** | [`scripts/release/package-runtime.py`](../../scripts/release/package-runtime.py), [`scripts/release/prepare-release.py`](../../scripts/release/prepare-release.py), [`tests/release_staging_probe.py`](../../tests/release_staging_probe.py) |
+| Versioned `seloryn.bundle.v1` artifacts with build metadata hash verification | **Verified runtime patch** | [`src/project.rs`](../../src/project.rs), [`src/main.rs`](../../src/main.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
 | VS Code `.sely` highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and canonical Seloryn file icon | **Verified editor preview on the `0.09` language line** | [`tooling/vscode`](../../tooling/vscode); headless transport/controller tests and GitHub release publication pending |
-| `seloryn lsp --stdio` full-document diagnostics, completion, definition and document symbols | **Initial LSP v1 verified locally and wired to VS Code** | [`src/lsp.rs`](../../src/lsp.rs), [`tooling/vscode/lsp-client.js`](../../tooling/vscode/lsp-client.js), [`tests/lsp_probe.py`](../../tests/lsp_probe.py); indexed analysis and incremental parsing remain outside this gate |
+| `seloryn lsp --stdio` full-document diagnostics, completion, definition and document symbols | **Verified bounded LSP v1 lifecycle slice** | [`src/lsp.rs`](../../src/lsp.rs), [`tooling/vscode/lsp-client.js`](../../tooling/vscode/lsp-client.js), [`tests/lsp_probe.py`](../../tests/lsp_probe.py); version ordering, stale-change rejection, `didClose` cleanup and diagnostic clearing are covered; indexed analysis and incremental range parsing remain outside this gate |
+| LSP document lifecycle, monotonic versions, stale-change rejection and framed-header validation | **Verified runtime patch** | [`src/lsp.rs`](../../src/lsp.rs), [`tests/lsp_probe.py`](../../tests/lsp_probe.py) |
 | Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
 | Strict `seloryn.toml` parsing and runtime-language compatibility rejection | **Verified preview** | [`src/project.rs`](../../src/project.rs), [`tests/project_manifest_probe.py`](../../tests/project_manifest_probe.py), CLI and VS Code integration fixtures |
 
@@ -96,3 +98,7 @@ The runtime-only `0.9.3` patch makes the Windows installer verify that supplied
 provenance describes the exact binary and compatibility line before installation.
 It closes an installation-integrity gap but is not a signature, stable ABI or
 public release.
+The runtime-only `0.9.4` patch versions the `.selyapp` wire format, verifies
+build-directory metadata before execution and hardens the LSP document
+lifecycle. It improves compatibility and maintenance safety but is not a stable
+runtime ABI or public release.

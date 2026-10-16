@@ -9,6 +9,8 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 const BUNDLE_MAGIC: &[u8] = b"SELORYN-SELYAPP\0";
+pub const BUNDLE_FORMAT: &str = "seloryn.bundle.v1";
+const BUNDLE_FORMAT_VERSION: u32 = 1;
 const MAX_BUNDLE_BYTES: usize = 64 * 1024 * 1024;
 const MAX_BUNDLE_FILES: usize = 4096;
 
@@ -31,6 +33,7 @@ pub struct LoadedProgram {
 
 #[derive(Debug)]
 pub struct Bundle {
+    pub format_version: u32,
     pub profile: String,
     pub files: Vec<BundleFile>,
 }
@@ -278,6 +281,7 @@ pub fn encode_bundle(path: &Path, profile: &str) -> Result<Vec<u8>, Diagnostic> 
     }
     files.sort_by(|left, right| left.path.cmp(&right.path));
     let bundle = Bundle {
+        format_version: BUNDLE_FORMAT_VERSION,
         profile: profile.to_owned(),
         files,
     };
@@ -291,6 +295,12 @@ pub fn decode_bundle(bytes: &[u8]) -> Result<Bundle, Diagnostic> {
     let mut reader = BundleReader { bytes, cursor: 0 };
     if reader.take(BUNDLE_MAGIC.len()) != Some(BUNDLE_MAGIC) {
         return Err(bundle_error("invalid `.selyapp` bundle header"));
+    }
+    let format_version = reader.u32()?;
+    if format_version != BUNDLE_FORMAT_VERSION {
+        return Err(bundle_error(format!(
+            "unsupported `.selyapp` format version {format_version}"
+        )));
     }
     let profile_length = reader.u32()?;
     let profile = reader.text(profile_length, "bundle profile")?;
@@ -331,7 +341,11 @@ pub fn decode_bundle(bytes: &[u8]) -> Result<Bundle, Diagnostic> {
     if !files.iter().any(|file| file.path == "seloryn.toml") {
         return Err(bundle_error("bundle has no `seloryn.toml` manifest"));
     }
-    Ok(Bundle { profile, files })
+    Ok(Bundle {
+        format_version,
+        profile,
+        files,
+    })
 }
 
 fn encode_bundle_data(bundle: &Bundle) -> Result<Vec<u8>, Diagnostic> {
@@ -342,6 +356,13 @@ fn encode_bundle_data(bundle: &Bundle) -> Result<Vec<u8>, Diagnostic> {
     }
     let mut output = Vec::new();
     output.extend_from_slice(BUNDLE_MAGIC);
+    if bundle.format_version != BUNDLE_FORMAT_VERSION {
+        return Err(bundle_error(format!(
+            "unsupported `.selyapp` format version {}",
+            bundle.format_version
+        )));
+    }
+    output.extend_from_slice(&bundle.format_version.to_le_bytes());
     put_text(&mut output, &bundle.profile)?;
     output.extend_from_slice(&(bundle.files.len() as u32).to_le_bytes());
     for file in &bundle.files {
@@ -1146,6 +1167,7 @@ mod tests {
     #[test]
     fn bundle_round_trip_is_deterministic_and_relative() {
         let bundle = Bundle {
+            format_version: 1,
             profile: "debug".to_owned(),
             files: vec![
                 BundleFile {
@@ -1163,12 +1185,14 @@ mod tests {
         assert_eq!(first, second);
         let decoded = decode_bundle(&first).expect("bundle should decode");
         assert_eq!(decoded.profile, "debug");
+        assert_eq!(decoded.format_version, 1);
         assert_eq!(decoded.files[1].path, "src/main.sely");
     }
 
     #[test]
     fn bundle_decoder_rejects_path_escape_and_trailing_data() {
         let bundle = Bundle {
+            format_version: 1,
             profile: "debug".to_owned(),
             files: vec![BundleFile {
                 path: "../outside.sely".to_owned(),
@@ -1178,6 +1202,7 @@ mod tests {
         assert_eq!(encode_bundle_data(&bundle).unwrap_err().code, "SEL-B001");
 
         let valid = Bundle {
+            format_version: 1,
             profile: "debug".to_owned(),
             files: vec![BundleFile {
                 path: "seloryn.toml".to_owned(),
@@ -1187,5 +1212,26 @@ mod tests {
         let mut bytes = encode_bundle_data(&valid).expect("bundle should encode");
         bytes.push(0);
         assert_eq!(decode_bundle(&bytes).unwrap_err().code, "SEL-B001");
+    }
+
+    #[test]
+    fn bundle_decoder_rejects_unknown_format_version() {
+        let bundle = Bundle {
+            format_version: 1,
+            profile: "debug".to_owned(),
+            files: vec![BundleFile {
+                path: "seloryn.toml".to_owned(),
+                bytes: Vec::new(),
+            }],
+        };
+        let mut bytes = encode_bundle_data(&bundle).expect("bundle should encode");
+        let version_offset = super::BUNDLE_MAGIC.len();
+        bytes[version_offset..version_offset + 4].copy_from_slice(&99_u32.to_le_bytes());
+        let error = decode_bundle(&bytes).expect_err("unknown bundle version must fail");
+        assert!(
+            error
+                .message
+                .contains("unsupported `.selyapp` format version 99")
+        );
     }
 }

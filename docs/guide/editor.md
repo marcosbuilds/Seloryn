@@ -14,7 +14,8 @@ It provides:
   own mark;
 - native completion items for local functions, parameters, bindings, current
   types, implemented builtins, language snippets, keywords and reserved syntax;
-- parser-backed LSP diagnostics, completion and definition for unsaved buffers;
+- parser-backed LSP diagnostics, completion, definition and document symbols for
+  unsaved buffers, with document lifecycle and stale-version protection;
 - a saved-file CLI diagnostic fallback controlled by `seloryn.lsp.enabled`;
 - opt-in inline ghost text through the VS Code Language Model API.
 - `Seloryn: Run CPU Training in Terminal`, `Seloryn: Inspect Hardware Devices`
@@ -68,3 +69,9 @@ path contains spaces and Unicode, then checks CRLF success, structured failure
 JSON, source spans and the `65` data-error exit code. The editor integration
 runs on save; it does not inspect unsaved buffers or pretend that a missing CLI
 is a language diagnostic.
+
+The native LSP uses full-document synchronization. The client sends an
+increasing document version for each change; the server rejects stale or ranged
+changes, removes state on `didClose`, and clears diagnostics for the closed
+URI. Incremental range synchronization and indexed project analysis are still
+future work.

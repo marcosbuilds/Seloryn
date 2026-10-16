@@ -53,21 +53,28 @@ promise that every design proposal already exists.
 - Runtime staging now embeds `seloryn.provenance.v1` with source-tree,
   toolchain, lockfile, binary and artifact hashes; the release probe verifies
   the envelope before accepting a candidate.
+- Built bundles now use the explicit `seloryn.bundle.v1` format and emit
+  `seloryn-build.json`; directory execution verifies the metadata hash before
+  materialization. The LSP tracks document versions and closes diagnostics
+  deterministically.
 
 ## Next gates
 
 1. **Editor distribution — completed locally:** the `0.9.0` package is on the
-   same compatibility line as language `0.09` and runtime `0.9.3`. It contains
+   same compatibility line as language `0.09` and runtime `0.9.4`. It contains
    a deterministic self-contained VSIX, the canonical Seloryn symbol and the
    optional `.sely` file-icon theme. A real VS Code host still needs an
    interactive rendering check; that is a validation task, not an unbuilt
    distribution feature.
-2. **Editor/runtime integration — full-document LSP slice completed:** the
-   editor now uses `seloryn lsp --stdio` by default for unsaved diagnostics,
-   completion and definition, with a tested full-text synchronization client.
+2. **Editor/runtime integration — lifecycle-safe full-document LSP slice
+   completed:** the editor now uses `seloryn lsp --stdio` by default for
+   unsaved diagnostics, completion and definition. The server advertises
+   open/close plus full-text synchronization, requires integer document
+   versions, rejects stale or ranged changes, and clears state and diagnostics
+   on `didClose`; the black-box probe covers these transitions.
    `seloryn.lsp.enabled=false` preserves the saved-file CLI bridge with its
    timeout, output bound and cancellation fixtures. Incremental/indexed project
-   analysis and rename support remain the next editor gates.
+   analysis, range-change support and rename remain the next editor gates.
 3. **AI workflow evidence:** compare one small Seloryn AI-development workflow
    with an equivalent conventional workflow. Measure invalid states,
    development/production adaptations and diagnostic effort before making an

@@ -2496,6 +2496,52 @@ fn build_path(path: PathBuf, profile: String, output: PathBuf) -> u8 {
             display_argument(artifact_path.as_os_str())
         ));
     }
+    let bundle_sha256 = sha256_hex(&bytes);
+    let build_metadata = json::JsonValue::Object(BTreeMap::from([
+        (
+            "schema".to_owned(),
+            json::JsonValue::String("seloryn.build.v1".to_owned()),
+        ),
+        (
+            "bundle_format".to_owned(),
+            json::JsonValue::String(project::BUNDLE_FORMAT.to_owned()),
+        ),
+        (
+            "language_version".to_owned(),
+            json::JsonValue::String(LANGUAGE_VERSION.to_owned()),
+        ),
+        (
+            "runtime_package".to_owned(),
+            json::JsonValue::String(PACKAGE_VERSION.to_owned()),
+        ),
+        (
+            "profile".to_owned(),
+            json::JsonValue::String(profile.clone()),
+        ),
+        (
+            "artifact".to_owned(),
+            json::JsonValue::String("seloryn.selyapp".to_owned()),
+        ),
+        (
+            "bytes".to_owned(),
+            json::JsonValue::Number(bytes.len().to_string()),
+        ),
+        (
+            "sha256".to_owned(),
+            json::JsonValue::String(bundle_sha256.clone()),
+        ),
+        ("deterministic".to_owned(), json::JsonValue::Bool(true)),
+    ]));
+    let metadata_path = output.join("seloryn-build.json");
+    if let Err(error) = fs::write(
+        &metadata_path,
+        format!("{}\n", json::encode(&build_metadata)),
+    ) {
+        return write_io_diagnostic(&format!(
+            "SEL-C003 failed to write build metadata `{}`: {error}\n",
+            display_argument(metadata_path.as_os_str())
+        ));
+    }
     let mut result = BTreeMap::new();
     result.insert("absolute_paths".to_owned(), json::JsonValue::Bool(false));
     result.insert(
@@ -2507,7 +2553,16 @@ fn build_path(path: PathBuf, profile: String, output: PathBuf) -> u8 {
         json::JsonValue::Number(bytes.len().to_string()),
     );
     result.insert("deterministic".to_owned(), json::JsonValue::Bool(true));
+    result.insert(
+        "bundle_format".to_owned(),
+        json::JsonValue::String(project::BUNDLE_FORMAT.to_owned()),
+    );
     result.insert("profile".to_owned(), json::JsonValue::String(profile));
+    result.insert("sha256".to_owned(), json::JsonValue::String(bundle_sha256));
+    result.insert(
+        "metadata".to_owned(),
+        json::JsonValue::String("seloryn-build.json".to_owned()),
+    );
     result.insert(
         "same_inputs_same_hash".to_owned(),
         json::JsonValue::Bool(true),
@@ -2532,6 +2587,11 @@ fn exec_path(path: PathBuf) -> u8 {
             ));
         }
     };
+    if path.is_dir()
+        && let Err(diagnostic) = verify_build_metadata(&path, &bytes)
+    {
+        return write_diagnostics(&artifact, "", &[diagnostic], Options::default());
+    }
     let bundle = match project::decode_bundle(&bytes) {
         Ok(bundle) => bundle,
         Err(diagnostic) => {
@@ -2550,6 +2610,99 @@ fn exec_path(path: PathBuf) -> u8 {
     };
     let _ = fs::remove_dir_all(&temporary);
     result
+}
+
+fn verify_build_metadata(
+    directory: &std::path::Path,
+    bundle_bytes: &[u8],
+) -> Result<(), diagnostic::Diagnostic> {
+    let metadata_path = directory.join("seloryn-build.json");
+    if !metadata_path.is_file() {
+        return Ok(());
+    }
+    let source = fs::read_to_string(&metadata_path).map_err(|error| {
+        diagnostic::Diagnostic::new(
+            "SEL-B001",
+            format!("bundle build metadata is unreadable: {error}"),
+            diagnostic::Span::new(0, 0),
+        )
+    })?;
+    let value = json::parse(&source, 64 * 1024, 8).map_err(|error| {
+        diagnostic::Diagnostic::new(
+            "SEL-B001",
+            format!("bundle build metadata is invalid: {}", error.message),
+            diagnostic::Span::new(0, 0),
+        )
+    })?;
+    let json::JsonValue::Object(object) = value else {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata must be a JSON object",
+            diagnostic::Span::new(0, 0),
+        ));
+    };
+    let string_field = |key: &str| -> Result<&str, diagnostic::Diagnostic> {
+        match object.get(key) {
+            Some(json::JsonValue::String(value)) => Ok(value),
+            Some(_) => Err(diagnostic::Diagnostic::new(
+                "SEL-B001",
+                format!("bundle build metadata field `{key}` must be a string"),
+                diagnostic::Span::new(0, 0),
+            )),
+            None => Err(diagnostic::Diagnostic::new(
+                "SEL-B001",
+                format!("bundle build metadata is missing `{key}`"),
+                diagnostic::Span::new(0, 0),
+            )),
+        }
+    };
+    if string_field("schema")? != "seloryn.build.v1" {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata schema is unsupported",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    if string_field("bundle_format")? != project::BUNDLE_FORMAT {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata format is unsupported",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    if string_field("language_version")? != LANGUAGE_VERSION {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata language version is incompatible",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    let expected_bytes = bundle_bytes.len().to_string();
+    match object.get("bytes") {
+        Some(json::JsonValue::Number(value)) if value == &expected_bytes => {}
+        Some(_) => {
+            return Err(diagnostic::Diagnostic::new(
+                "SEL-B001",
+                "bundle build metadata byte length does not match the artifact",
+                diagnostic::Span::new(0, 0),
+            ));
+        }
+        None => {
+            return Err(diagnostic::Diagnostic::new(
+                "SEL-B001",
+                "bundle build metadata is missing `bytes`",
+                diagnostic::Span::new(0, 0),
+            ));
+        }
+    }
+    if string_field("sha256")? != sha256_hex(bundle_bytes) {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata SHA-256 does not match the artifact",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    Ok(())
 }
 
 fn find_artifact(path: &std::path::Path) -> Result<PathBuf, diagnostic::Diagnostic> {

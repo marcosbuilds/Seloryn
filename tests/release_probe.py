@@ -65,9 +65,26 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="seloryn-release-") as temporary:
         run("build", str(project), "--profile", "release", "--output", temporary)
         artifact = Path(temporary) / "seloryn.selyapp"
+        metadata = Path(temporary) / "seloryn-build.json"
         assert artifact.is_file(), artifact
-        bundled = run("exec", str(artifact))
+        assert metadata.is_file(), metadata
+        metadata_text = metadata.read_text(encoding="utf-8")
+        assert '"schema":"seloryn.build.v1"' in metadata_text
+        assert '"bundle_format":"seloryn.bundle.v1"' in metadata_text
+        bundled = run("exec", str(temporary))
         assert_pipeline_output(bundled)
+        metadata.write_text(metadata_text.replace('"sha256":"', '"sha256":"0', 1), encoding="utf-8")
+        tampered = subprocess.run(
+            [str(BINARY), "exec", str(temporary)],
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            check=False,
+        )
+        assert tampered.returncode == 65
+        assert "SHA-256 does not match" in tampered.stderr
 
     print("Seloryn public project and bundle checks completed successfully")
     return 0

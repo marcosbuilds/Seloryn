@@ -18,7 +18,7 @@ seloryn exec <bundle.selyapp|directory>
 seloryn lsp --stdio
 ```
 
-The preview version reports `0.09`, `package=0.9.3` and
+The preview version reports `0.09`, `package=0.9.4` and
 `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
@@ -68,19 +68,28 @@ examples are grouped under [`examples/projects`](../../examples/projects/README.
 
 `lsp --stdio` speaks a bounded JSON-RPC Language Server Protocol surface. It
 supports full-text `didOpen`/`didChange`/`didSave`, parser-backed diagnostics,
-completion, definition and document symbols. The wire contract is tested by
-[`tests/lsp_probe.py`](../../tests/lsp_probe.py). It is the runtime foundation
-for the editor, not yet a claim of incremental parsing, rename, formatting or
-debugging support.
+completion, definition and document symbols. It advertises open/close
+synchronization and full-text changes. Every opened document must carry an
+integer version; a change is applied only when its version is strictly newer
+than the stored version. Stale, malformed or ranged changes are ignored so
+they cannot overwrite a newer buffer. `didClose` drops the document state and
+publishes an empty diagnostic set. Header names are treated case-insensitively
+as required by the protocol. The wire contract is tested by
+[`tests/lsp_probe.py`](../../tests/lsp_probe.py) and the in-process Rust LSP
+tests. It is the runtime foundation for the editor, not yet a claim of
+incremental parsing, rename, formatting or debugging support.
 
 `build` validates a local `seloryn.toml` project, packages its validated source
 files and explicitly declared `[capabilities].read` and `[capabilities].write`
-directories into a
-deterministic experimental `.selyapp` bundle and writes JSON build metadata.
+directories into a deterministic `.selyapp` bundle using the versioned
+`seloryn.bundle.v1` format. It also writes `seloryn-build.json` with the
+language/runtime versions, profile, byte length and SHA-256 of the artifact.
 The runtime performs the same deterministic lowering at `exec` time; this
 bundle is not native code or a public release. `exec` validates and materializes
-that bundle in a temporary directory before running the same project contract,
-but diagnostics retain the stable bundle path rather than exposing the
+that bundle in a temporary directory before running the same project contract.
+When a build directory is supplied, the runtime verifies the metadata hash
+before materialization; a bare `.selyapp` remains accepted for transport.
+Diagnostics retain the stable bundle path rather than exposing the
 materialization directory. A top-level `Err(E)` also points to the first
 applicable control-flow source span in the entry function. Repeated execution
 of the same failing bundle therefore produces the same diagnostic identity.

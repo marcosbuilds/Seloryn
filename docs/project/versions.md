@@ -59,7 +59,7 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
 | Language capability | `0.08` | `0.09` | N11 hash-validated bounded MLP batch inference |
-| Runtime package | `0.9.2` | `0.9.3` | `R3` makes the Windows installer verify provenance before copying a binary |
+| Runtime package | `0.9.3` | `0.9.4` | `R4` adds bundle v1 metadata verification and LSP document lifecycle/version handling |
 | VS Code extension | `0.8.1` | `0.9.0` | `0.9.0` exposes the new batch-inference workflow on the language line |
 
 The comparison is intentionally visible: a new commit alone cannot advance
