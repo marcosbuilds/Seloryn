@@ -57,6 +57,10 @@ promise that every design proposal already exists.
   `seloryn-build.json`; directory execution verifies the metadata hash before
   materialization. The LSP tracks document versions and closes diagnostics
   deterministically.
+- A black-box operational probe now runs four fresh CPU training processes
+  concurrently, verifies deterministic semantic receipts/checkpoints and exact
+  workspace confinement, and records forced Windows termination behavior without
+  claiming graceful cancellation.
 
 ## Next gates
 
@@ -83,9 +87,11 @@ promise that every design proposal already exists.
    reusable `Parameter`/`Module`/`Dataset`/`Optimizer` APIs with explicit state
    and checkpoint compatibility. The current loop proves ownership of the
    orchestration, not yet a public object framework.
-5. **Runtime release:** publish supported binaries, checksums, provenance,
-   upgrade/rollback behavior and a release only after the corresponding
-   platform and failure-path evidence exists.
+5. **Runtime release:** the local 0.9.4 candidate now has supported Windows
+   x64 staging, checksums, provenance, installer failure-path evidence and the
+   bounded operational reliability evidence. Public binaries, cross-platform
+   installer execution, upgrade/rollback behavior and a release remain pending
+   explicit publication authorization and corresponding platform evidence.
 6. **Receipt continuation — first slice completed:** identity, successful
    isolated replay, structured path redaction and keyed HMAC authentication
    are now tested. Remaining gates are pre-run failure receipts, initial

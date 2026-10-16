@@ -44,6 +44,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'MLP batch inference verification failed' }
     & python tests/workspace_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Workspace doctor/init verification failed' }
+    & python tests/operational_reliability_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Operational reliability verification failed' }
     & python tests/streaming_v2_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Hash-chained training stream verification failed' }
     & python tests/self_hosted_probe.py
