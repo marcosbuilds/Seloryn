@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -40,6 +42,23 @@ def deterministic_entry(name: str, content: bytes) -> zipfile.ZipInfo:
     return entry
 
 
+def sha256_bytes(content: bytes) -> str:
+    return hashlib.sha256(content).hexdigest()
+
+
+def sha256_file(path: Path) -> str:
+    return sha256_bytes(path.read_bytes())
+
+
+def source_tree_sha256(commit: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(ROOT), "archive", "--format=tar", commit],
+        capture_output=True,
+        check=True,
+    )
+    return sha256_bytes(result.stdout)
+
+
 def main() -> int:
     options = arguments()
     validate_version(options.runtime_version, PACKAGE_PATTERN, "runtime package")
@@ -57,14 +76,24 @@ def main() -> int:
     archive_name = f"seloryn-runtime-{options.runtime_version}-{options.platform}.zip"
     archive_path = options.output_dir / archive_name
     binary_name = "seloryn.exe" if options.platform == "windows-x64" else "seloryn"
+    binary_sha256 = sha256_file(binary)
+    cargo_lock_sha256 = sha256_file(ROOT / "Cargo.lock")
+    toolchain_sha256 = sha256_file(ROOT / "rust-toolchain.toml")
     manifest = {
         "artifact": archive_name,
+        "abi": "unstable",
+        "binary_sha256": binary_sha256,
+        "build_profile": "release",
+        "cargo_lock_sha256": cargo_lock_sha256,
         "channel": "verified-preview",
         "commit": options.commit,
         "gpu_tensor_training": False,
         "language_version": options.language_version,
         "platform": options.platform,
+        "provenance_schema": "seloryn.provenance.v1",
         "runtime_package": options.runtime_version,
+        "rust_toolchain_sha256": toolchain_sha256,
+        "source_tree_sha256": source_tree_sha256(options.commit),
     }
     manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
     with zipfile.ZipFile(archive_path, "w") as archive:

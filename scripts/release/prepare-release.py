@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 try:
@@ -40,6 +41,32 @@ def sha256(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def runtime_provenance(path: Path) -> dict[str, str]:
+    with zipfile.ZipFile(path) as archive:
+        try:
+            document = json.loads(archive.read("runtime-manifest.json"))
+        except (KeyError, json.JSONDecodeError) as error:
+            raise SystemExit(f"runtime archive has invalid provenance metadata: {error}") from error
+    required = [
+        "abi",
+        "binary_sha256",
+        "build_profile",
+        "cargo_lock_sha256",
+        "commit",
+        "provenance_schema",
+        "rust_toolchain_sha256",
+        "source_tree_sha256",
+    ]
+    for key in required:
+        if not isinstance(document.get(key), str) or not document[key]:
+            raise SystemExit(f"runtime provenance is missing `{key}`")
+    if document["provenance_schema"] != "seloryn.provenance.v1":
+        raise SystemExit("runtime provenance schema is unsupported")
+    if document["build_profile"] != "release":
+        raise SystemExit("runtime provenance must describe a release build")
+    return {key: document[key] for key in required}
 
 
 def require_version(value: object, pattern: re.Pattern[str], label: str) -> str:
@@ -137,6 +164,7 @@ def stage() -> int:
 
     staged_extension = output_dir / f"seloryn-language-{extension_version}.vsix"
     shutil.copyfile(extension, staged_extension)
+    provenance = runtime_provenance(staged_runtime)
     artifacts = [
         {
             "kind": "runtime",
@@ -162,6 +190,7 @@ def stage() -> int:
         "commit": options.commit,
         "abi": "unstable",
         "artifacts": artifacts,
+        "provenance": provenance,
     }
     manifest_path = output_dir / "release-manifest.json"
     manifest_path.write_text(
@@ -169,6 +198,19 @@ def stage() -> int:
     )
     checksums = "".join(f"{item['sha256']}  {item['name']}\n" for item in artifacts)
     (output_dir / "SHA256SUMS").write_text(checksums, encoding="utf-8")
+    provenance_document = {
+        "schema": "seloryn.provenance.v1",
+        "language_version": language,
+        "runtime_package": runtime,
+        "extension_package": extension_version,
+        "commit": options.commit,
+        "abi": "unstable",
+        "artifacts": {item["name"]: item["sha256"] for item in artifacts},
+        "runtime": provenance,
+    }
+    (output_dir / "PROVENANCE.json").write_text(
+        json.dumps(provenance_document, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     print(f"staged Seloryn {language}: {output_dir}")
     return 0
 

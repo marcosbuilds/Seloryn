@@ -50,11 +50,14 @@ promise that every design proposal already exists.
 - `doctor` now performs read-only project and semantic validation, while
   `init` creates validated minimal or tabular-MLP projects transactionally and
   refuses overwrite; both have stable JSON contracts and independent probes.
+- Runtime staging now embeds `seloryn.provenance.v1` with source-tree,
+  toolchain, lockfile, binary and artifact hashes; the release probe verifies
+  the envelope before accepting a candidate.
 
 ## Next gates
 
 1. **Editor distribution — completed locally:** the `0.9.0` package is on the
-   same compatibility line as language `0.09` and runtime `0.9.1`. It contains
+   same compatibility line as language `0.09` and runtime `0.9.2`. It contains
    a deterministic self-contained VSIX, the canonical Seloryn symbol and the
    optional `.sely` file-icon theme. A real VS Code host still needs an
    interactive rendering check; that is a validation task, not an unbuilt

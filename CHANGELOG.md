@@ -28,6 +28,13 @@ not a promise that GitHub publication already happened.
 - Kept the language at `0.09` and the extension at `0.9.0`; this is an explicit
   runtime-only gain under the stricter version ledger.
 
+## [0.9.2] — local runtime patch, 2026-10-16
+
+- Runtime staging now embeds and verifies `seloryn.provenance.v1` with source
+  tree, toolchain, lockfile, binary and artifact hashes.
+- The candidate remains local `verified-preview`; provenance is not a public
+  signature and does not make the ABI stable.
+
 ## [0.09] — local candidate, 2026-10-16
 
 - `training.predict_mlp` loads a hash-validated bounded CPU MLP checkpoint and

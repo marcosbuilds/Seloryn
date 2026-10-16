@@ -59,7 +59,7 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
 | Language capability | `0.08` | `0.09` | N11 hash-validated bounded MLP batch inference |
-| Runtime package | `0.9.0` | `0.9.1` | `R1` adds read-only doctor and transactional init without changing the language line |
+| Runtime package | `0.9.1` | `0.9.2` | `R2` adds verified source/toolchain/lockfile/binary/artifact provenance |
 | VS Code extension | `0.8.1` | `0.9.0` | `0.9.0` exposes the new batch-inference workflow on the language line |
 
 The comparison is intentionally visible: a new commit alone cannot advance

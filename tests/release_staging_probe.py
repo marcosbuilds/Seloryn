@@ -21,6 +21,9 @@ def digest(path: Path) -> str:
 def main() -> int:
     binary = ROOT / "target" / "release" / "seloryn.exe"
     extension = ROOT / "tooling" / "vscode" / "seloryn-language-0.9.0.vsix"
+    commit = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
+    ).strip()
     if not binary.is_file() or not extension.is_file():
         raise SystemExit("release staging probe requires the release binary and VSIX")
     with tempfile.TemporaryDirectory(prefix="seloryn-release-probe-") as temporary:
@@ -38,7 +41,7 @@ def main() -> int:
                 "--platform",
                 "windows-x64",
                 "--commit",
-                "test-commit-0a29245",
+                commit,
             ],
             cwd=ROOT,
             capture_output=True,
@@ -51,9 +54,14 @@ def main() -> int:
         assert manifest["schema"] == 1
         assert manifest["channel"] == "verified-preview"
         assert manifest["language_version"] == "0.09"
-        assert manifest["runtime_package"] == "0.9.1"
+        assert manifest["runtime_package"] == "0.9.2"
         assert manifest["extension_package"] == "0.9.0"
         assert manifest["abi"] == "unstable"
+        assert manifest["provenance"]["provenance_schema"] == "seloryn.provenance.v1"
+        provenance = json.loads((output / "PROVENANCE.json").read_text(encoding="utf-8"))
+        assert provenance["schema"] == "seloryn.provenance.v1"
+        assert provenance["commit"] == commit
+        assert provenance["runtime"]["build_profile"] == "release"
         assert len(manifest["artifacts"]) == 2
         checksums = (output / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
         assert len(checksums) == 2
@@ -62,12 +70,16 @@ def main() -> int:
             assert artifact.is_file()
             assert item["sha256"] == digest(artifact)
             assert item["bytes"] == artifact.stat().st_size
-        runtime = output / "seloryn-runtime-0.9.1-windows-x64.zip"
+        runtime = output / "seloryn-runtime-0.9.2-windows-x64.zip"
         with zipfile.ZipFile(runtime) as archive:
             runtime_manifest = json.loads(archive.read("runtime-manifest.json"))
             assert runtime_manifest["language_version"] == "0.09"
-            assert runtime_manifest["runtime_package"] == "0.9.1"
+            assert runtime_manifest["runtime_package"] == "0.9.2"
             assert runtime_manifest["channel"] == "verified-preview"
+            assert runtime_manifest["abi"] == "unstable"
+            assert runtime_manifest["provenance_schema"] == "seloryn.provenance.v1"
+            assert runtime_manifest["binary_sha256"]
+            assert runtime_manifest["source_tree_sha256"]
         with zipfile.ZipFile(output / "seloryn-language-0.9.0.vsix") as archive:
             package = json.loads(archive.read("extension/package.json"))
             assert package["version"] == "0.9.0"

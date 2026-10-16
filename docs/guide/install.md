@@ -17,7 +17,7 @@ $hash = (Get-FileHash .\target\release\seloryn.exe -Algorithm SHA256).Hash
   -BinaryPath .\target\release\seloryn.exe `
   -InstallRoot .\local-install `
   -ExpectedSha256 $hash `
-  -ExpectedLanguageVersion 0.09 -ExpectedRuntimeVersion 0.9.1
+  -ExpectedLanguageVersion 0.09 -ExpectedRuntimeVersion 0.9.2
 .\scripts\install\install-seloryn-windows.ps1 -Action DiagnosePath -InstallRoot .\local-install
 .\scripts\install\install-seloryn-windows.ps1 -Action Rollback -InstallRoot .\local-install
 .\scripts\install\install-seloryn-windows.ps1 -Action Uninstall -InstallRoot .\local-install
@@ -36,4 +36,8 @@ for execution here; those targets remain unsupported.
 | Linux x64 | POSIX installer script only | Native binary and dynamic-linker checks not executed |
 | macOS arm64/x64 | POSIX installer script only | Native binary, signing and Gatekeeper checks not executed |
 
-Downloaded releases must publish `SHA-256`, provenance/build ID, target ABI, install/uninstall steps, `PATH` diagnosis and rollback instructions. Do not mark a target supported until actual binaries and tests exist. No release date is promised.
+Downloaded releases must publish `SHA-256`, the `seloryn.provenance.v1`
+record, target ABI, install/uninstall steps, `PATH` diagnosis and rollback
+instructions. The current local staging gate now checks source-tree,
+toolchain, lockfile, binary and artifact hashes. Do not mark a target supported
+until actual binaries and tests exist. No release date is promised.
