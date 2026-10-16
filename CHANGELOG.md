@@ -19,6 +19,9 @@ not a promise that GitHub publication already happened.
 - **Candidate:** the VS Code extension starts the parser-backed LSP for
   unsaved diagnostics, completion and definition by default, while retaining
   the saved-file CLI bridge as an explicit fallback.
+- **Candidate:** the Windows installer verifies supplied `seloryn.provenance.v1`
+  metadata, including the runtime version and binary hash, before copying a
+  binary into the install root.
 
 ## [0.9.1] — local runtime patch, 2026-10-16
 
@@ -34,6 +37,13 @@ not a promise that GitHub publication already happened.
   tree, toolchain, lockfile, binary and artifact hashes.
 - The candidate remains local `verified-preview`; provenance is not a public
   signature and does not make the ABI stable.
+
+## [0.9.3] — local runtime patch, 2026-10-16
+
+- Windows installation now rejects unsupported provenance, version mismatch and
+  binary-hash mismatch before changing the installation root.
+- The language remains `0.09` and the extension remains `0.9.0`; this is an
+  installer-integrity gain on the existing compatibility line.
 
 ## [0.09] — local candidate, 2026-10-16
 

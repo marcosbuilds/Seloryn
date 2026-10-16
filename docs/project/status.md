@@ -92,3 +92,7 @@ or unstable ABI into a production-ready claim.
 The runtime-only `0.9.2` patch adds a checked provenance envelope for staged
 artifacts. It improves traceability and tamper detection but is not a signature,
 stable ABI or public release.
+The runtime-only `0.9.3` patch makes the Windows installer verify that supplied
+provenance describes the exact binary and compatibility line before installation.
+It closes an installation-integrity gap but is not a signature, stable ABI or
+public release.

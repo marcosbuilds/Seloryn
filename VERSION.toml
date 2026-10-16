@@ -3,13 +3,13 @@
 
 [current]
 language = "0.09"
-runtime_package = "0.9.2"
+runtime_package = "0.9.3"
 extension_package = "0.9.0"
 channel = "verified-preview"
 
 [comparison]
 previous_language = "0.09"
-previous_runtime_package = "0.9.1"
+previous_runtime_package = "0.9.2"
 previous_extension_package = "0.9.0"
 
 [[gains]]
@@ -135,3 +135,10 @@ language = "0.09"
 package = "0.9.2"
 summary = "Release staging embeds and verifies source, toolchain, lockfile, binary and artifact provenance"
 evidence = "scripts/release/package-runtime.py; scripts/release/prepare-release.py; tests/release_staging_probe.py; docs/releases/runtime-0.9.2.md"
+
+[[runtime_gains]]
+id = "R3-INSTALL-PROVENANCE-GATE"
+language = "0.09"
+package = "0.9.3"
+summary = "The Windows installer verifies provenance schema, compatibility versions and binary hash before installation"
+evidence = "scripts/install/install-seloryn-windows.ps1; tests/installer_probe.ps1; docs/releases/runtime-0.9.3.md"

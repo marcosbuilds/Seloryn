@@ -38,6 +38,37 @@ function Read-Manifest([string]$Root) {
     return Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
 }
 
+function Provenance-Field($Document, [string]$Name) {
+    if ($null -ne $Document -and $Document.PSObject.Properties.Name -contains $Name) {
+        return $Document.$Name
+    }
+    if ($null -ne $Document -and $null -ne $Document.runtime -and
+        $Document.runtime.PSObject.Properties.Name -contains $Name) {
+        return $Document.runtime.$Name
+    }
+    return $null
+}
+
+function Verify-Provenance($Document, [string]$BinaryHash, [string]$LanguageVersion, [string]$RuntimeVersion) {
+    $schema = Provenance-Field $Document 'provenance_schema'
+    if (-not $schema) { $schema = Provenance-Field $Document 'schema' }
+    if ($schema -and $schema -ne 'seloryn.provenance.v1') {
+        Fail "unsupported provenance schema: $schema"
+    }
+    $provenanceHash = Provenance-Field $Document 'binary_sha256'
+    if ($provenanceHash -and $provenanceHash.ToLowerInvariant() -ne $BinaryHash) {
+        Fail "provenance binary SHA-256 mismatch: expected $provenanceHash, observed $BinaryHash"
+    }
+    $provenanceLanguage = Provenance-Field $Document 'language_version'
+    if ($provenanceLanguage -and $provenanceLanguage -ne $LanguageVersion) {
+        Fail "provenance language mismatch: expected $provenanceLanguage, observed $LanguageVersion"
+    }
+    $provenanceRuntime = Provenance-Field $Document 'runtime_package'
+    if ($provenanceRuntime -and $provenanceRuntime -ne $RuntimeVersion) {
+        Fail "provenance runtime mismatch: expected $provenanceRuntime, observed $RuntimeVersion"
+    }
+}
+
 function Safe-InstalledPath([string]$Root, [string]$Relative) {
     if ([IO.Path]::IsPathRooted($Relative) -or $Relative.Contains('..')) {
         Fail 'installation manifest contains an unsafe relative path'
@@ -83,6 +114,7 @@ switch ($Action) {
         if ($ProvenancePath) {
             if (-not (Test-Path -LiteralPath $ProvenancePath -PathType Leaf)) { Fail "provenance is missing: $ProvenancePath" }
             $provenance = Get-Content -LiteralPath $ProvenancePath -Raw | ConvertFrom-Json
+            Verify-Provenance $provenance $hash $languageVersion $runtimeVersion
         }
         New-Item -ItemType Directory -Force -Path (Join-Path $root 'bin'), (Join-Path $root 'rollback') | Out-Null
         $destinationRelative = 'bin/seloryn.exe'
