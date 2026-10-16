@@ -7,7 +7,7 @@
 
 > **Current local candidate: language 0.08 / runtime package 0.8.0, verified-preview CPU training plus identity-bearing replay receipts, typed JSON-array ingestion and an explicit device-resident GPU linear-training profile.** The release also retains hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles. GPU tensor/MLP training, distributed, registry, installer publication and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
 
-> **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Public preview artifacts are now available, but they carry the exact platform, version and boundary claims documented below.
+> **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Local preview artifacts are generated and validated, but they carry the exact platform, version and boundary claims documented below; GitHub publication remains explicit and separate.
 
 ## Public preview artifacts
 
