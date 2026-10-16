@@ -1,6 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" role="img" aria-labelledby="title">
-  <title id="title">Seloryn mark</title>
-  <rect width="128" height="128" rx="24" fill="#111827"/>
-  <path d="M92 31H50c-12 0-21 7-21 17 0 11 8 16 21 19l18 4c7 2 10 4 10 8 0 5-5 8-13 8H30v11h38c17 0 28-8 28-20 0-11-8-17-23-20l-18-4c-6-1-8-4-8-7 0-4 4-6 10-6h35Z" fill="#8BD3DD"/>
-  <path d="M91 31 73 48h19c2 0 4 1 5 2V31Z" fill="#F6C85F"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" role="img" aria-labelledby="title description"><title id="title">Seloryn symbol</title><desc id="description">Two precise, interconnected flowing strands form an abstract S representing the Seloryn language's typed computation and system execution paths.</desc>
+<path d="M120 37 H69 C46 37 35 49 35 66 C35 83 47 91 69 91 H97" fill="none" stroke="#34CCA7" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M40 125 H91 C115 125 126 113 126 95 C126 78 114 69 92 69 H63" fill="none" stroke="#148874" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

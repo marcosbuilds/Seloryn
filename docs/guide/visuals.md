@@ -4,7 +4,7 @@
 
 | Asset | Purpose | Origin |
 |---|---|---|
-| `seloryn-symbol.svg` | Language identity, future terminal/editor icon | Original project asset, canonical vector |
+| `seloryn-symbol.svg` | Canonical language, runtime, extension and `.sely` file identity | Original project asset, canonical vector |
 | `architecture-flow.png` | Design pipeline from source to future runtime/backends; the bounded checker, interpreter and CPU tensor path exist today | Original project raster diagram |
 | `training-flow.png` | Design-only forward pass, gradient and optimizer flow; only narrow scalar/autograd and linear fixtures exist today | Original project raster diagram |
 | `theSVG` links | Distinguish outside vendors/services visually | External brand assets; not bundled |
@@ -15,4 +15,4 @@ For vendor visuals, the project uses the catalog at https://thesvg.org/ as the l
 
 ### Identity
 
-Mark: a continuous, compact split-path glyph suggesting structured flows converging into one execution. Proposed palette: near-black `#111920`, off-white `#F4FAF8` and mineral mint `#74D6B0`. Must remain legible in single-color and 16×16 contexts; no glossy gradients or vendor lookalikes.
+Mark: a continuous, compact split-path glyph suggesting structured flows converging into one execution. The public SVG is the source of truth; package-local raster/vector copies are derived assets and are checked against it. It must remain legible in single-color and 16×16 contexts; no glossy gradients or vendor lookalikes.

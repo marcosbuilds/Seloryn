@@ -12,7 +12,7 @@
 ## Public preview artifacts
 
 - [Seloryn runtime 0.7.0 / language 0.07](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07): Windows x64, Linux x64 and macOS arm64 archives with SHA-256 checksums.
-- [Seloryn VS Code extension 0.4.0](https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.4.0): editor preview with syntax highlighting, completions, CLI diagnostics and `.sely` file icons.
+- [Seloryn VS Code extension package 0.7.0](tooling/vscode): editor preview with syntax highlighting, completions, CLI diagnostics and `.sely` file icons on the language `0.07` release line. GitHub publication is pending.
 
 These are verified previews, not a stable ABI or a claim of GPU tensor/MLP
 training, distributed execution, package registry, HTTP runtime or a general

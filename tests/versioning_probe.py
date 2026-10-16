@@ -26,6 +26,8 @@ def expect_failure(callback, *arguments: object) -> None:
 
 def main() -> int:
     MODULE.validate(ROOT)
+    assert MODULE.package_base_for_language((0, 7)) == (0, 7)
+    assert MODULE.package_base_for_language((1, 0)) == (1, 0)
     assert MODULE.parse_package_version("0.4.0", "current") == (0, 4, 0)
     assert MODULE.parse_package_version("1.12.3", "current") == (1, 12, 3)
     expect_failure(MODULE.parse_package_version, "0.4", "short package")

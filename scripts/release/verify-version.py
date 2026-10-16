@@ -37,6 +37,11 @@ def parse_package_version(value: str, label: str) -> tuple[int, int, int]:
     return int(major), int(minor), int(patch)
 
 
+def package_base_for_language(language: tuple[int, int]) -> tuple[int, int]:
+    """Map language M.mm to the package SemVer base M.m."""
+    return language[0], language[1]
+
+
 def require_text(record: dict[str, object], key: str, label: str) -> str:
     value = record.get(key)
     if not isinstance(value, str) or not value:
@@ -102,6 +107,14 @@ def validate(root: Path = ROOT) -> None:
     current_extension_number = parse_package_version(extension_package, "current extension version")
     previous_extension_number = parse_package_version(previous_extension, "previous extension version")
 
+    language_package_base = package_base_for_language(current_language_number)
+    if current_runtime_number[:2] != language_package_base:
+        fail("runtime package major/minor must follow the current language version")
+    if current_runtime_number[2] != 0:
+        fail("runtime package patch updates require an explicit runtime gain ledger")
+    if current_extension_number[:2] != language_package_base:
+        fail("extension package major/minor must follow the current language version")
+
     language_ids = [require_text(record, "id", "language gain id") for record in language_gains]
     extension_ids = [require_text(record, "id", "extension gain id") for record in extension_gains]
     if len(set(language_ids)) != len(language_ids):
@@ -123,10 +136,18 @@ def validate(root: Path = ROOT) -> None:
 
     previous_extension_gain = None
     for record in extension_gains:
+        extension_language = parse_language_version(
+            require_text(record, "language", "extension gain language"),
+            "extension gain language",
+        )
         extension_gain = parse_package_version(
             require_text(record, "package", "extension gain package"),
             "extension gain package",
         )
+        if extension_gain[:2] != package_base_for_language(extension_language):
+            fail("extension gain package must follow its language compatibility line")
+        if extension_language > current_language_number:
+            fail("extension gain cannot target a future language version")
         if previous_extension_gain is not None and extension_gain <= previous_extension_gain:
             fail("extension gains must advance monotonically")
         previous_extension_gain = extension_gain
@@ -145,6 +166,8 @@ def validate(root: Path = ROOT) -> None:
     latest_extension = extension_gains[-1]
     if require_text(latest_extension, "package", "latest extension gain package") != extension_package:
         fail("latest extension gain does not match current extension version")
+    if require_text(latest_extension, "language", "latest extension gain language") != current_language:
+        fail("latest extension gain must target the current language version")
     if current_extension_number < previous_extension_number:
         fail("extension package version must not move backwards")
 

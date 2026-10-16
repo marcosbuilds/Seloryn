@@ -9,10 +9,12 @@ const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'ut
 const iconThemePath = path.join(root, manifest.contributes.iconThemes[0].path);
 const iconTheme = JSON.parse(fs.readFileSync(iconThemePath, 'utf8'));
 const pngPath = path.join(root, manifest.icon);
+const canonicalSymbol = fs.readFileSync(path.join(root, '..', '..', 'assets', 'seloryn-symbol.svg'), 'utf8');
+const packagedSymbol = fs.readFileSync(path.join(root, 'assets', 'seloryn-icon-source.svg'), 'utf8');
 const png = fs.readFileSync(pngPath);
-const svg = fs.readFileSync(path.join(root, 'assets', 'seloryn-icon-source.svg'), 'utf8');
+const svg = packagedSymbol;
 
-assert.equal(manifest.version, '0.4.0');
+assert.equal(manifest.version, '0.7.0');
 // VSCE rejects SVG files as the extension manifest icon. The PNG is the
 // marketplace-compatible render of the canonical Seloryn SVG source.
 assert.equal(manifest.icon, './assets/seloryn-icon.png');
@@ -27,8 +29,9 @@ assert.ok(manifest.activationEvents.includes('onCommand:seloryn.runGpuProbe'));
 assert.equal(iconTheme.fileExtensions.sely, '_seloryn');
 assert.equal(iconTheme.languageIds.seloryn, '_seloryn');
 assert.equal(iconTheme.iconDefinitions._seloryn.iconPath, '../assets/seloryn-icon-source.svg');
+assert.equal(packagedSymbol.trimEnd(), canonicalSymbol.trimEnd());
 assert.match(svg, /^<svg\b/u);
-assert.match(svg, /Seloryn mark/u);
+assert.match(svg, /Seloryn symbol/u);
 assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
 assert.equal(png.readUInt32BE(16), 128);
 assert.equal(png.readUInt32BE(20), 128);

@@ -43,8 +43,9 @@ promise that every design proposal already exists.
 
 ## Next gates
 
-1. **Editor distribution — completed:** the public `vscode-v0.4.0` release
-   contains a deterministic self-contained VSIX, the Seloryn mark and the
+1. **Editor distribution — completed locally:** the `0.7.0` package is on the
+   same compatibility line as language `0.07` and runtime `0.7.0`. It contains
+   a deterministic self-contained VSIX, the canonical Seloryn symbol and the
    optional `.sely` file-icon theme. A real VS Code host still needs an
    interactive rendering check; that is a validation task, not an unbuilt
    distribution feature.

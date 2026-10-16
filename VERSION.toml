@@ -4,7 +4,7 @@
 [current]
 language = "0.07"
 runtime_package = "0.7.0"
-extension_package = "0.4.0"
+extension_package = "0.7.0"
 channel = "verified-preview"
 
 [comparison]
@@ -55,7 +55,36 @@ summary = "Identity-bearing replayable CPU receipts with structured path redacti
 evidence = "src/main.rs; src/project.rs; src/runtime.rs; src/gpu.rs; scripts/streaming/verify-event-chain.py; scripts/streaming/replay-receipt.py; tests/streaming_v2_probe.py; tests/gpu_training_probe.py; examples/projects/gpu-linear-training; docs/releases/runtime-0.07.md"
 
 [[extension_gains]]
+id = "EXT-N3B-TENSOR-AUTODIFF"
+language = "0.01"
+package = "0.1.0"
+summary = "Initial Seloryn editor preview with .sely association, syntax highlighting, completions and CLI diagnostics"
+evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.1.0.md"
+
+[[extension_gains]]
+id = "EXT-N4-CPU-MLP-TRAINING"
+language = "0.02"
+package = "0.2.0"
+summary = "Editor completions and snippets expose the verified bounded CPU MLP training workflow"
+evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.2.0.md"
+
+[[extension_gains]]
+id = "EXT-N5-SELF-HOSTED-OPTIMIZATION"
+language = "0.03"
+package = "0.3.0"
+summary = "Editor completions and snippets expose the Seloryn-authored tensor optimization workflow"
+evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.3.0.md"
+
+[[extension_gains]]
 id = "EXT-N6-TRAINING-HARDWARE-COMMANDS"
+language = "0.04"
 package = "0.4.0"
 summary = "VS Code terminal commands expose verified CPU training, physical device inventory and bounded GPU compute/readback evidence"
 evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/package.test.js; tooling/vscode/test/cli.integration.test.js; docs/releases/vscode-0.4.0.md"
+
+[[extension_gains]]
+id = "EXT-N9-CANONICAL-IDENTITY"
+language = "0.07"
+package = "0.7.0"
+summary = "The extension package, language id and .sely file icon use the canonical public Seloryn symbol and the release line follows language compatibility"
+evidence = "assets/seloryn-symbol.svg; tooling/vscode/assets/seloryn-icon-source.svg; tooling/vscode/assets/seloryn-icon.png; tooling/vscode/icons/seloryn-file-icon-theme.json; tooling/vscode/test/package.test.js; docs/project/versions.md"

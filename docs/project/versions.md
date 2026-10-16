@@ -17,20 +17,31 @@ The version advances only when an independently accepted, evidenced, user-releva
 
 `1.00` means *100 accepted gains*, **not** that compatibility magically becomes stable. Compatibility and breaking-change classification are separate. Package ecosystem tools may need a different conventional version format. See [status](status.md).
 
-## Extension versioning
+## Coordinated package versioning
 
-The VS Code package uses numeric SemVer `X.Y.Z`, independently from the
-language capability counter. `VERSION.toml` is the source of truth for both
-the current/previous comparison and the append-only `extension_gains` ledger.
-The release verifier requires a canonical SemVer, a non-decreasing current
-version, a unique extension gain with ordered evidence paths when the
-extension advances, and a package manifest/lockfile match. A
-documentation-only extension change keeps its
-package version; a real editor behavior or reliability gain must name its
-evidence before a tag is accepted. The extension may remain unchanged while
-the runtime advances, but it may never move backwards or repeat a new gain
-without evidence. This prevents repeating `0.1.0` or advancing the extension
-without a measurable change in Seloryn's behavior.
+The language capability counter is the release-line authority. For a language
+version `M.mm`, runtime and extension packages must use the same SemVer
+major/minor base `M.m`; the package patch may only change when that package has
+its own evidenced gain. For example, language `0.07` authorizes the `0.7.x`
+runtime and extension line. A package cannot jump ahead of the language line,
+and a package update cannot be justified by a commit count, documentation-only
+edit or an unproven feature. Runtime patch releases remain blocked until a
+runtime-specific gain ledger is added; the current runtime line therefore
+uses patch `0`.
+
+`VERSION.toml` is the source of truth for the current/previous comparison and
+the append-only `extension_gains` ledger. Every extension gain records the
+language compatibility line, package version, unique ID and tracked evidence.
+The release verifier checks the package base, ordered ledger, manifest,
+lockfile, Cargo metadata, CLI language constant and evidence paths before a
+tag is accepted. A runtime update follows the accepted language gain; an
+extension update requires an additional editor-specific evidenced gain on the
+same language line.
+
+Historical tags remain immutable. Runtime tags use `seloryn-vM.mm`; extension
+tags use `vscode-vM.m.P`. Those namespaces are retained for artifact tooling,
+but both tags must resolve to the same language compatibility line. Do not
+delete or retag the existing `0.01`–`0.07` history to make it look uniform.
 
 ## Current comparison
 
@@ -41,11 +52,12 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 |---|---:|---:|---|
 | Language capability | `0.06` | `0.07` | N9 identity-bearing replay/authenticated receipts plus explicit GPU linear training |
 | Runtime package | `0.6.0` | `0.7.0` | package identity follows the accepted runtime reliability and GPU gain |
-| VS Code extension | `0.4.0` | `0.4.0` | unchanged: the runtime manifest gain must not be disguised as an editor gain |
+| VS Code extension | `0.4.0` | `0.7.0` | canonical public symbol and strict language-based release line, with its own extension evidence |
 
 The comparison is intentionally visible: a new commit alone cannot advance
 the language version. N3B remains the historical reason for `0.01`; N6 is the
 historical `0.04` gain, N7 is the `0.05` reliability gain, N8 is the `0.06`
 streaming/reliability gain and N9 is the current `0.07` identity/replay/GPU
 gain. The extension ledger is checked separately
-because an editor patch must not be disguised as a language gain.
+because an editor patch must carry its own evidence while remaining compatible
+with the language line.

@@ -87,15 +87,17 @@ npm ci
 npm run package
 ```
 
-The result is a local `seloryn-language-0.4.0.vsix`. The package contains the
+The result is a local `seloryn-language-0.7.0.vsix`. The package contains the
 extension runtime, grammar, language configuration, README, logo and file-icon
 theme; tests, fixtures and the lockfile stay out of the VSIX.
 The packaging step fixes ZIP entry ordering and timestamps, so repeated builds
 from the same locked dependency tree produce the same local artifact.
 
-The optional file-icon theme uses the canonical Seloryn source SVG for `.sely`
-files. VS Code Marketplace packaging rejects SVG files as the extension
-manifest icon, so the manifest uses the 128px PNG render of that same mark.
+The optional file-icon theme uses the canonical public Seloryn symbol for
+`.sely` files. VS Code Marketplace packaging rejects SVG files as the extension
+manifest icon, so the manifest uses a 128px PNG render of that same mark. The
+package test fails if the packaged SVG source diverges from
+`assets/seloryn-symbol.svg`.
 To show the Seloryn mark beside `.sely` files in the Explorer, select `Seloryn File Icons`
 from `Preferences: File Icon Theme`. The extension does not change the user's
 global icon-theme setting automatically.
