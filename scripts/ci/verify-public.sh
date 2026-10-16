@@ -14,6 +14,8 @@ python3 tests/n2_probe.py
 python3 tests/n3_probe.py
 python3 tests/n3_tensor_probe.py
 python3 tests/release_probe.py
+python3 tests/release_staging_probe.py
+python3 tests/lsp_probe.py
 python3 tests/project_manifest_probe.py
 python3 tests/mlp_training_probe.py
 python3 tests/streaming_v2_probe.py

@@ -24,6 +24,7 @@ purpose ML platform.
 | Explicit `train_linear_gpu` scalar F32 profile with device-resident parameters and one final readback | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`examples/projects/gpu-linear-training`](../../examples/projects/gpu-linear-training), [`tests/gpu_training_probe.py`](../../tests/gpu_training_probe.py) |
 | JSON2 program/manifest/dataset/checkpoint/result identity, replay helper, structured path redaction and optional HMAC authentication | **Verified preview for bounded training receipts** | [`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py) |
 | VS Code `.sely` highlighting, real snippets/completions, CLI diagnostics and canonical Seloryn file icon | Verified editor preview on the `0.7.x` language line | [`tooling/vscode`](../../tooling/vscode); GitHub release publication pending |
+| `seloryn lsp --stdio` full-document diagnostics, completion, definition and document symbols | **Initial LSP v1 verified locally** | [`src/lsp.rs`](../../src/lsp.rs), [`tests/lsp_probe.py`](../../tests/lsp_probe.py); full extension client and incremental parsing remain outside this gate |
 | Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
 | Strict `seloryn.toml` parsing and runtime-language compatibility rejection | **Verified preview** | [`src/project.rs`](../../src/project.rs), [`tests/project_manifest_probe.py`](../../tests/project_manifest_probe.py), CLI and VS Code integration fixtures |
 
@@ -35,7 +36,7 @@ purpose ML platform.
 | GPU tensor/autodiff training, GPU MLP, distributed execution, mixed precision and memory sharding | Not implemented | `train_linear_gpu` is a closed scalar F32 profile; it does not make `Tensor` or MLP device-resident |
 | Transformer/LLM training, tokenizers and serving | Not implemented | no model-scale or production-serving claim |
 | Runtime installer, registry, broad package ecosystem and stable ABI | Not implemented | use a built binary or the source checkout; the preview is not a stable distribution |
-| Full LSP and interactive VS Code training panel | Not implemented | the extension uses the CLI as source of truth; training is run through CLI/terminal |
+| Full editor LSP integration, incremental parsing and interactive VS Code training panel | Not implemented | the runtime LSP v1 is executable and tested, but the extension still uses the saved-file CLI bridge and training runs through CLI/terminal |
 | Public-key signatures, asynchronous backpressure protocol and general execution telemetry | Not implemented | JSON2 now supports deterministic identity/replay for bounded training and optional keyed HMAC authentication; it is not a public Ed25519 signature or async queue |
 
 ## Evidence rule

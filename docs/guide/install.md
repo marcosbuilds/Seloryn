@@ -2,9 +2,10 @@
 
 There is no supported public runtime release or download yet. The repository
 includes local installers for an already-built binary. The validated Windows
-installer verifies SHA-256 before copying, can write supplied provenance
-metadata, preserves one rollback copy, supports uninstall and reports whether
-the install directory is on `PATH`. The POSIX script has lifecycle commands,
+installer verifies SHA-256 and the binary's canonical language/runtime version
+before copying, can write supplied provenance metadata, preserves one rollback
+copy, supports uninstall and reports whether the install directory is on
+`PATH`. The POSIX script has lifecycle commands,
 but its native binary and provenance path are not yet verified. Neither script
 downloads code, modifies `PATH` automatically or creates a release.
 
@@ -15,7 +16,8 @@ $hash = (Get-FileHash .\target\release\seloryn.exe -Algorithm SHA256).Hash
 .\scripts\install\install-seloryn-windows.ps1 -Action Install `
   -BinaryPath .\target\release\seloryn.exe `
   -InstallRoot .\local-install `
-  -ExpectedSha256 $hash
+  -ExpectedSha256 $hash `
+  -ExpectedLanguageVersion 0.07 -ExpectedRuntimeVersion 0.7.0
 .\scripts\install\install-seloryn-windows.ps1 -Action DiagnosePath -InstallRoot .\local-install
 .\scripts\install\install-seloryn-windows.ps1 -Action Rollback -InstallRoot .\local-install
 .\scripts\install\install-seloryn-windows.ps1 -Action Uninstall -InstallRoot .\local-install

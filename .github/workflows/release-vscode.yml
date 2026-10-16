@@ -12,6 +12,7 @@ jobs:
   release:
     name: Package and publish VS Code extension
     runs-on: ubuntu-24.04
+    environment: release-approval
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

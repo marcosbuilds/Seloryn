@@ -52,8 +52,10 @@ promise that every design proposal already exists.
 2. **Editor/runtime integration — saved-file bridge completed:** the editor now
    uses the CLI's structured diagnostics as its source of truth, with separate
    arguments, workspace-root selection, CRLF/Unicode fixtures, cancellation,
-   timeout and output bounds. A full LSP, unsaved-buffer analysis and broader
-   project diagnostics still require their own contracts and tests.
+   timeout and output bounds. The runtime now also exposes an initial
+   `lsp --stdio` contract with full-document diagnostics, completion,
+   definition and document symbols; wiring the VS Code extension to that server
+   and adding incremental/indexed project analysis are the next editor gates.
 3. **AI workflow evidence:** compare one small Seloryn AI-development workflow
    with an equivalent conventional workflow. Measure invalid states,
    development/production adaptations and diagnostic effort before making an

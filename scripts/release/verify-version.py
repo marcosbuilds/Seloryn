@@ -184,6 +184,13 @@ def validate(root: Path = ROOT) -> None:
     if not cli_language or cli_language.group(1) != current_language:
         fail("CLI language version does not match VERSION.toml")
 
+    diagnostic = (root / "src" / "diagnostic.rs").read_text(encoding="utf-8")
+    diagnostic_language = re.search(
+        r'^pub const LANGUAGE_VERSION: &str = "([^"]+)";', diagnostic, re.MULTILINE
+    )
+    if not diagnostic_language or diagnostic_language.group(1) != current_language:
+        fail("diagnostic/LSP language version does not match VERSION.toml")
+
     extension = json.loads((root / "tooling" / "vscode" / "package.json").read_text(encoding="utf-8"))
     if extension["version"] != extension_package:
         fail("VS Code package version does not match VERSION.toml")

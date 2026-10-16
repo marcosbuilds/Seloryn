@@ -5,10 +5,12 @@ action=install
 binary=
 root="${HOME}/.local/seloryn"
 expected=
+expected_language=
+expected_runtime=
 
 fail() { printf 'SEL-I001 %s\n' "$1" >&2; exit 65; }
 usage() {
-    printf '%s\n' 'usage: install-seloryn-posix.sh install|uninstall|rollback|diagnose-path [--binary PATH] [--root PATH] [--sha256 HEX]' >&2
+    printf '%s\n' 'usage: install-seloryn-posix.sh install|uninstall|rollback|diagnose-path [--binary PATH] [--root PATH] [--sha256 HEX] [--language-version M.mm] [--runtime-version X.Y.Z]' >&2
     exit 64
 }
 full_hash() {
@@ -24,6 +26,8 @@ while [ "$#" -gt 0 ]; do
         --binary) shift; [ "$#" -gt 0 ] || usage; binary="$1" ;;
         --root) shift; [ "$#" -gt 0 ] || usage; root="$1" ;;
         --sha256) shift; [ "$#" -gt 0 ] || usage; expected=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]') ;;
+        --language-version) shift; [ "$#" -gt 0 ] || usage; expected_language="$1" ;;
+        --runtime-version) shift; [ "$#" -gt 0 ] || usage; expected_runtime="$1" ;;
         *) usage ;;
     esac
     shift
@@ -40,6 +44,12 @@ case "$action" in
         [ -f "$binary" ] || fail "binary is missing: $binary"
         hash=$(full_hash "$binary")
         [ -z "$expected" ] || [ "$hash" = "$expected" ] || fail "SHA-256 mismatch: expected $expected, observed $hash"
+        version_output=$("$binary" --version 2>&1) || fail 'binary did not return a canonical Seloryn version record'
+        language_version=$(printf '%s\n' "$version_output" | sed -n 's/^seloryn \([^ ]*\) package=\([^ ]*\) .*/\1/p')
+        runtime_version=$(printf '%s\n' "$version_output" | sed -n 's/^seloryn \([^ ]*\) package=\([^ ]*\) .*/\2/p')
+        [ -n "$language_version" ] && [ -n "$runtime_version" ] || fail 'binary did not return a canonical Seloryn version record'
+        [ -z "$expected_language" ] || [ "$language_version" = "$expected_language" ] || fail "language version mismatch: expected $expected_language, observed $language_version"
+        [ -z "$expected_runtime" ] || [ "$runtime_version" = "$expected_runtime" ] || fail "runtime package mismatch: expected $expected_runtime, observed $runtime_version"
         mkdir -p "$root/bin" "$root/rollback"
         backup=
         if [ -f "$binary_path" ]; then
@@ -50,8 +60,9 @@ case "$action" in
         cp -f "$binary" "$binary_path"
         backup_json=null
         [ -z "$backup" ] || backup_json="\"$backup\""
-        printf '{"schema":1,"artifact":"seloryn-cli","platform":"posix","binary_relative":"bin/seloryn","sha256":"%s","build_id":"%.16s","backup_relative":%s}\n' "$hash" "$hash" "$backup_json" > "$manifest"
-        json_result "{\"action\":\"install\",\"artifact\":\"seloryn-cli\",\"platform\":\"posix\",\"sha256\":\"$hash\",\"path_entry\":\"$root/bin\"}"
+        escaped_version_output=$(printf '%s' "$version_output" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\r$//')
+        printf '{"schema":1,"artifact":"seloryn-cli","platform":"posix","binary_relative":"bin/seloryn","sha256":"%s","build_id":"%.16s","language_version":"%s","runtime_package":"%s","version_output":"%s","backup_relative":%s}\n' "$hash" "$hash" "$language_version" "$runtime_version" "$escaped_version_output" "$backup_json" > "$manifest"
+        json_result "{\"action\":\"install\",\"artifact\":\"seloryn-cli\",\"platform\":\"posix\",\"sha256\":\"$hash\",\"language_version\":\"$language_version\",\"runtime_package\":\"$runtime_version\",\"path_entry\":\"$root/bin\"}"
         ;;
     uninstall)
         [ -f "$manifest" ] || fail "installation manifest is missing: $manifest"

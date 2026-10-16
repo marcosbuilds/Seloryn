@@ -5,7 +5,9 @@ param(
     [string]$BinaryPath,
     [string]$InstallRoot = $(if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'Seloryn' } else { Join-Path $env:TEMP 'Seloryn' }),
     [string]$ExpectedSha256,
-    [string]$ProvenancePath
+    [string]$ProvenancePath,
+    [string]$ExpectedLanguageVersion,
+    [string]$ExpectedRuntimeVersion
 )
 
 $ErrorActionPreference = 'Stop'
@@ -65,6 +67,18 @@ switch ($Action) {
         if ($ExpectedSha256 -and $hash -ne $ExpectedSha256.ToLowerInvariant()) {
             Fail "SHA-256 mismatch: expected $ExpectedSha256, observed $hash"
         }
+        $versionOutput = (& $source --version 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or $versionOutput -notmatch '^seloryn ([^ ]+) package=([^ ]+) ') {
+            Fail 'binary did not return a canonical Seloryn version record'
+        }
+        $languageVersion = $Matches[1]
+        $runtimeVersion = $Matches[2]
+        if ($ExpectedLanguageVersion -and $languageVersion -ne $ExpectedLanguageVersion) {
+            Fail "language version mismatch: expected $ExpectedLanguageVersion, observed $languageVersion"
+        }
+        if ($ExpectedRuntimeVersion -and $runtimeVersion -ne $ExpectedRuntimeVersion) {
+            Fail "runtime package mismatch: expected $ExpectedRuntimeVersion, observed $runtimeVersion"
+        }
         $provenance = $null
         if ($ProvenancePath) {
             if (-not (Test-Path -LiteralPath $ProvenancePath -PathType Leaf)) { Fail "provenance is missing: $ProvenancePath" }
@@ -86,6 +100,9 @@ switch ($Action) {
             platform = 'windows-x64'
             binary_relative = $destinationRelative
             sha256 = $hash
+            language_version = $languageVersion
+            runtime_package = $runtimeVersion
+            version_output = $versionOutput
             source = $source
             build_id = $hash.Substring(0, 16)
             installed_utc = [DateTime]::UtcNow.ToString('o')
@@ -94,7 +111,7 @@ switch ($Action) {
             path_entry = (Join-Path $root 'bin')
         }
         $record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifest -Encoding UTF8
-        Write-Result ([ordered]@{ action = 'install'; artifact = 'seloryn-cli'; platform = 'windows-x64'; sha256 = $hash; path_entry = (Join-Path $root 'bin'); rollback = [bool]$backupRelative })
+        Write-Result ([ordered]@{ action = 'install'; artifact = 'seloryn-cli'; platform = 'windows-x64'; sha256 = $hash; language_version = $languageVersion; runtime_package = $runtimeVersion; path_entry = (Join-Path $root 'bin'); rollback = [bool]$backupRelative })
     }
     'Uninstall' {
         $record = Read-Manifest $root

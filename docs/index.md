@@ -17,4 +17,4 @@ verified preview while broader training remains outside the evidence.**
 | **Systems** | [HTTP services](systems/http.md) | [Automation](systems/automation.md), [Security](systems/security.md) |
 | **Project** | [Architecture](project/architecture.md) | [Next executable gates](project/next-gates.md), [Versioning](project/versions.md), [Status](project/status.md), [Licensing](project/licensing.md) |
 
-The checked runnable examples are grouped under [`examples/`](../examples/README.md), including standalone CPU tensors and project examples for local modules, JSON, linear training and the verified-preview MLP workflow. Other forward-looking system and model examples remain design documentation.
+The checked runnable examples are grouped under [`examples/`](../examples/README.md), including standalone CPU tensors and project examples for local modules, JSON, linear training and the verified-preview MLP workflow. Other forward-looking system and model examples remain design documentation. Release history is summarized in [`CHANGELOG.md`](../CHANGELOG.md); the private benchmark evidence is intentionally kept outside this public tree.

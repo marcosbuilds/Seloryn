@@ -30,7 +30,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.99.0
       - name: Release script dependencies
         run: python -m pip install --disable-pip-version-check --quiet -r scripts/release/requirements.txt
       - name: Verify release version and tag
@@ -74,6 +74,7 @@ jobs:
     name: Publish runtime preview
     needs: package
     runs-on: ubuntu-24.04
+    environment: release-approval
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

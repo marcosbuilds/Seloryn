@@ -7,6 +7,9 @@ Scripts are grouped by their operational purpose:
 - `install/` contains experimental scripts that install an already-built
   binary into a caller-selected directory. They do not download releases or
   establish platform support.
+- `release/prepare-release.py` stages one coordinated runtime plus VSIX
+  candidate with a compatibility manifest and external SHA-256 sums. It does
+  not create tags, GitHub releases or publish anything.
 
 Run scripts from any working directory; each script resolves the repository
 root from its own location. Before committing or pushing a language change,

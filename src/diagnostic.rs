@@ -1,5 +1,9 @@
 use std::path::Path;
 
+pub const ANALYSIS_SCHEMA: &str = "seloryn.analysis.v1";
+pub const LANGUAGE_VERSION: &str = "0.07";
+pub const RUNTIME_PACKAGE: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Span {
     pub start: usize,
@@ -66,7 +70,10 @@ pub fn render(path: &Path, source: &str, diagnostic: &Diagnostic) -> String {
 }
 
 pub fn render_json(path: &Path, source: &str, diagnostics: &[Diagnostic]) -> String {
-    let mut rendered = String::from("{\"diagnostics\":[");
+    let mut rendered = format!(
+        "{{\"schema\":\"{}\",\"language_version\":\"{}\",\"runtime_package\":\"{}\",\"diagnostics\":[",
+        ANALYSIS_SCHEMA, LANGUAGE_VERSION, RUNTIME_PACKAGE
+    );
     for (index, diagnostic) in diagnostics.iter().enumerate() {
         if index > 0 {
             rendered.push(',');

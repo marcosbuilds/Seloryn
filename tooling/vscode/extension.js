@@ -389,6 +389,9 @@ function parseDiagnosticJson(vscode, document, output) {
   if (!payload || !Array.isArray(payload.diagnostics)) {
     throw new Error('Seloryn diagnostic JSON has no diagnostics array');
   }
+  if (payload.schema !== 'seloryn.analysis.v1') {
+    throw new Error('Seloryn diagnostic JSON has an unsupported schema');
+  }
 
   return payload.diagnostics.map((entry, index) => {
     if (!entry || typeof entry !== 'object'

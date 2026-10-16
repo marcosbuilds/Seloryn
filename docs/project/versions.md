@@ -43,6 +43,14 @@ tags use `vscode-vM.m.P`. Those namespaces are retained for artifact tooling,
 but both tags must resolve to the same language compatibility line. Do not
 delete or retag the existing `0.01`–`0.07` history to make it look uniform.
 
+Before publication, `scripts/release/prepare-release.py` creates a single
+staging directory containing the runtime archive, the VSIX, `release-manifest.json`
+and `SHA256SUMS`. The manifest is the promotion unit: its runtime and extension
+versions must match the language line, its artifact hashes are independently
+recomputed, and its `abi = "unstable"` field prevents a preview artifact from
+being mistaken for a stable ABI release. Staging is local and non-publishing;
+the remote release still requires explicit publication authorization.
+
 ## Current comparison
 
 The latest earned implementation gain is now recorded in [`VERSION.toml`](../../VERSION.toml)

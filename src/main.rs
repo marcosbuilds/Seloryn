@@ -7,6 +7,7 @@ mod gpu;
 mod ir;
 mod json;
 mod lexer;
+mod lsp;
 mod parser;
 mod project;
 mod runtime;
@@ -39,7 +40,7 @@ const EXIT_USAGE: u8 = 64;
 const EXIT_DATA: u8 = 65;
 const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\nGPU training is explicit through `train_linear_gpu` in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution and installer support remain unavailable.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `train_linear_gpu` in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OutputFormat {
@@ -107,6 +108,7 @@ enum Action {
     Exec {
         path: OsString,
     },
+    Lsp,
     Unsupported(String),
 }
 
@@ -137,6 +139,7 @@ fn run(args: &[OsString]) -> u8 {
             PathBuf::from(output),
         ),
         Action::Exec { path } => exec_path(PathBuf::from(path)),
+        Action::Lsp => lsp::serve_stdio(),
         Action::Unsupported(command) => write_stderr(&format!(
             "SEL-C001 unsupported command or argument: {command}\n"
         )),
@@ -154,7 +157,16 @@ fn classify(args: &[OsString]) -> Action {
         [command, rest @ ..] if command == "run" => parse_command("run", rest),
         [command, rest @ ..] if command == "build" => parse_build(rest),
         [command, rest @ ..] if command == "exec" => parse_exec(rest),
+        [command, rest @ ..] if command == "lsp" => parse_lsp(rest),
         _ => unsupported_arguments(args),
+    }
+}
+
+fn parse_lsp(args: &[OsString]) -> Action {
+    if args.len() == 1 && args[0] == "--stdio" {
+        Action::Lsp
+    } else {
+        unsupported_arguments(args)
     }
 }
 
@@ -2561,7 +2573,8 @@ mod tests {
             | Action::GpuProbe { .. }
             | Action::Run { .. }
             | Action::Build { .. }
-            | Action::Exec { .. } => {
+            | Action::Exec { .. }
+            | Action::Lsp => {
                 panic!("expected unsupported action")
             }
         }

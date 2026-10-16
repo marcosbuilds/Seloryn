@@ -45,6 +45,7 @@ instead of gaining features by default.
 | Deterministic core IR and execution boundary | Experimental implemented | `src/ir.rs`, runtime parity tests; bounded subset only |
 | Local modules and strict project manifests | Experimental implemented | Public project fixtures, real TOML parsing and future-language rejection; no registry or external package resolver |
 | VS Code syntax highlighting, native completion, saved-file CLI diagnostics and optional `.sely` file icons | Verified editor preview | [`tooling/vscode`](tooling/vscode); headless tests, real CLI bridge fixture, reproducible local VSIX and CLI installation inspection; Explorer rendering remains environment-dependent |
+| `seloryn lsp --stdio` diagnostics, completion, definition and document symbols | Initial LSP v1 verified locally | [`src/lsp.rs`](src/lsp.rs), [`tests/lsp_probe.py`](tests/lsp_probe.py); full extension client, incremental parsing and rename remain future |
 | JSON read/parse/encode/get and bounded file capability | Experimental implemented | JSON project fixtures; paths remain root-confined |
 | Scalar and Tensor[F32] reverse-mode tapes and finite-difference gradient check | Experimental implemented, narrow | [`examples/autograd`](examples/autograd), [`tests/n3_tensor_probe.py`](tests/n3_tensor_probe.py) |
 | Bounded CPU MLP training, mini-batches, evaluation, deterministic seed and checkpoint/resume | Verified preview | [`examples/projects/mlp-training`](examples/projects/mlp-training), [`tests/mlp_training_probe.py`](tests/mlp_training_probe.py); CPU/single-process only |

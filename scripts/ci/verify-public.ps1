@@ -30,6 +30,10 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'N3b tensor independent CLI verification failed' }
     & python tests/release_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Public project and bundle verification failed' }
+    & python tests/release_staging_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Release staging verification failed' }
+    & python tests/lsp_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'LSP integration verification failed' }
     & python tests/project_manifest_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Project manifest verification failed' }
     & python tests/mlp_training_probe.py
@@ -42,6 +46,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'GPU compute verification failed' }
     & python tests/gpu_training_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'GPU training verification failed' }
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/installer_probe.ps1
+    if ($LASTEXITCODE -ne 0) { throw 'Windows installer verification failed' }
     & npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'VS Code packaging dependencies failed to install' }
     & npm run package --prefix tooling/vscode

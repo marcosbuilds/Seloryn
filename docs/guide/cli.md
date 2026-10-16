@@ -13,6 +13,7 @@ seloryn check <file.sely|project> [--format=human|json] [--quiet]
 seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]
 seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
+seloryn lsp --stdio
 ```
 
 The preview version reports `0.07`, `package=0.7.0` and
@@ -62,6 +63,13 @@ behavior is covered by the CLI tests in
 [`tests/tensor_cpu.rs`](../../tests/tensor_cpu.rs), with independent N2 numeric
 references in [`tests/n2_probe.py`](../../tests/n2_probe.py). Public project
 examples are grouped under [`examples/projects`](../../examples/projects/README.md).
+
+`lsp --stdio` speaks a bounded JSON-RPC Language Server Protocol surface. It
+supports full-text `didOpen`/`didChange`/`didSave`, parser-backed diagnostics,
+completion, definition and document symbols. The wire contract is tested by
+[`tests/lsp_probe.py`](../../tests/lsp_probe.py). It is the runtime foundation
+for the editor, not yet a claim of incremental parsing, rename, formatting or
+debugging support.
 
 `build` validates a local `seloryn.toml` project, packages its validated source
 files and explicitly declared `[capabilities].read` and `[capabilities].write`
