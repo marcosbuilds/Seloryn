@@ -46,19 +46,18 @@ promise that every design proposal already exists.
 
 ## Next gates
 
-1. **Editor distribution — completed locally:** the `0.8.0` package is on the
+1. **Editor distribution — completed locally:** the `0.8.1` package is on the
    same compatibility line as language `0.08` and runtime `0.8.0`. It contains
    a deterministic self-contained VSIX, the canonical Seloryn symbol and the
    optional `.sely` file-icon theme. A real VS Code host still needs an
    interactive rendering check; that is a validation task, not an unbuilt
    distribution feature.
-2. **Editor/runtime integration — saved-file bridge completed:** the editor now
-   uses the CLI's structured diagnostics as its source of truth, with separate
-   arguments, workspace-root selection, CRLF/Unicode fixtures, cancellation,
-   timeout and output bounds. The runtime now also exposes an initial
-   `lsp --stdio` contract with full-document diagnostics, completion,
-   definition and document symbols; wiring the VS Code extension to that server
-   and adding incremental/indexed project analysis are the next editor gates.
+2. **Editor/runtime integration — full-document LSP slice completed:** the
+   editor now uses `seloryn lsp --stdio` by default for unsaved diagnostics,
+   completion and definition, with a tested full-text synchronization client.
+   `seloryn.lsp.enabled=false` preserves the saved-file CLI bridge with its
+   timeout, output bound and cancellation fixtures. Incremental/indexed project
+   analysis and rename support remain the next editor gates.
 3. **AI workflow evidence:** compare one small Seloryn AI-development workflow
    with an equivalent conventional workflow. Measure invalid states,
    development/production adaptations and diagnostic effort before making an

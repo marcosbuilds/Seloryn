@@ -32,6 +32,9 @@ It currently provides:
   commands that expose adapter evidence and the bounded compute/readback gate;
 - saved-file diagnostics from the configured Seloryn CLI, using its structured
   JSON output without reimplementing parser or type semantics;
+- parser-backed LSP diagnostics, completion and definition for unsaved buffers;
+- an explicit `seloryn.lsp.enabled` setting; disabling it preserves the saved-file
+  CLI bridge for environments that cannot start the LSP process;
 - opt-in inline ghost text through the VS Code Language Model API when a
   provider is available.
 
@@ -41,13 +44,13 @@ is acceptable. If the API is unavailable, no model is selected, a request is
 cancelled or a provider rejects a request, the extension returns no suggestion
 and does not pretend that AI generation occurred.
 
-Diagnostics run only after a `.sely` file is saved. The extension invokes one
-configured executable (`seloryn.cliPath`, default `seloryn`) with separate
-arguments: `check <file-or-project> --format=json --color=never`. It enforces a
-timeout and combined output limit, cancels a previous check when a newer save
-starts, and clears diagnostics if the CLI is unavailable. It does not parse
-shell commands, inspect unsaved buffers or turn a provider failure into a fake
-language error.
+With LSP enabled (the default), diagnostics and parser-backed queries use one
+configured executable (`seloryn.cliPath`, default `seloryn`) as
+`seloryn lsp --stdio`; document changes are sent as full-text updates. The
+server remains bounded and process-local. If LSP is disabled, diagnostics run
+only after a `.sely` file is saved through `check <file-or-project>
+--format=json --color=never`, preserving the tested CLI bridge and its timeout,
+output bound and cancellation behavior.
 
 ## Development validation
 
@@ -87,7 +90,7 @@ npm ci
 npm run package
 ```
 
-The result is a local `seloryn-language-0.8.0.vsix`. The package contains the
+The result is a local `seloryn-language-0.8.1.vsix`. The package contains the
 extension runtime, grammar, language configuration, README, logo and file-icon
 theme; tests, fixtures and the lockfile stay out of the VSIX.
 The packaging step fixes ZIP entry ordering and timestamps, so repeated builds

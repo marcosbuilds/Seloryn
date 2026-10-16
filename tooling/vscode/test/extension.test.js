@@ -5,6 +5,17 @@ const { EventEmitter } = require('node:events');
 const path = require('node:path');
 const fs = require('node:fs');
 const extension = require('../extension');
+const lspClient = require('../lsp-client');
+
+const lspFrames = Buffer.concat([
+  lspClient.frame({ jsonrpc: '2.0', id: 1, result: { ok: true } }),
+  lspClient.frame({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: {} })
+]);
+const parsedLspFrames = lspClient.parseFrames(lspFrames);
+assert.equal(parsedLspFrames.messages.length, 2);
+assert.equal(parsedLspFrames.messages[0].id, 1);
+assert.equal(parsedLspFrames.messages[1].method, 'textDocument/publishDiagnostics');
+assert.equal(parsedLspFrames.remainder.length, 0);
 
 for (const metadata of ['../package.json', '../language-configuration.json', '../syntaxes/seloryn.tmLanguage.json']) {
   const metadataPath = path.join(__dirname, metadata);

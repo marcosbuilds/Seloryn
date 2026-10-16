@@ -2,7 +2,7 @@
   "name": "seloryn-language",
   "displayName": "Seloryn Language",
   "description": "Seloryn .sely tooling with syntax highlighting, real code completions, diagnostics, CPU training and hardware probes.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "publisher": "seloryn",
   "icon": "./assets/seloryn-icon.png",
   "repository": {
@@ -115,12 +115,17 @@
           "minimum": 4096,
           "maximum": 4194304,
           "description": "Maximum combined CLI output accepted by the editor integration."
+        },
+        "seloryn.lsp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use the parser-backed Seloryn LSP for unsaved diagnostics, completion and definition; disable to use the saved-file CLI bridge."
         }
       }
     }
   },
   "scripts": {
-    "test": "node test/extension.test.js && node test/package.test.js",
+    "test": "node test/extension.test.js && node test/lsp.test.js && node test/package.test.js",
     "test:cli": "node test/cli.integration.test.js",
     "check": "npm test",
     "package": "npm run check && vsce package --no-dependencies && node scripts/normalize-vsix.js"

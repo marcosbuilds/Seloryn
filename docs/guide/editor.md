@@ -14,8 +14,8 @@ It provides:
   own mark;
 - native completion items for local functions, parameters, bindings, current
   types, implemented builtins, language snippets, keywords and reserved syntax;
-- saved-file diagnostics from the configured Seloryn CLI's structured JSON
-  output;
+- parser-backed LSP diagnostics, completion and definition for unsaved buffers;
+- a saved-file CLI diagnostic fallback controlled by `seloryn.lsp.enabled`;
 - opt-in inline ghost text through the VS Code Language Model API.
 - `Seloryn: Run CPU Training in Terminal`, `Seloryn: Inspect Hardware Devices`
   and `Seloryn: Run GPU Compute Probe` commands, all delegated to the
@@ -37,7 +37,7 @@ Build and install the local editor preview with:
 ```text
 npm ci --prefix tooling/vscode
 npm run package --prefix tooling/vscode
-code --install-extension tooling/vscode/seloryn-language-0.7.0.vsix
+code --install-extension tooling/vscode/seloryn-language-0.8.1.vsix
 ```
 
 In VS Code, choose `Seloryn File Icons` from `Preferences: File Icon Theme` to

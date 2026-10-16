@@ -4,6 +4,7 @@ const childProcess = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const { StringDecoder } = require('node:string_decoder');
+const { createSelorynLspClient } = require('./lsp-client');
 
 const KEYWORDS = Object.freeze([
   'let', 'var', 'const', 'fn', 'return', 'record', 'enum', 'match', 'case',
@@ -658,6 +659,108 @@ function createSelorynDiagnosticController(vscode, context, dependencies = {}) {
   };
 }
 
+function lspRange(vscode, value) {
+  return new vscode.Range(
+    new vscode.Position(value.start.line, value.start.character),
+    new vscode.Position(value.end.line, value.end.character)
+  );
+}
+
+function createSelorynLspController(vscode, context, dependencies = {}) {
+  const configuration = vscode.workspace?.getConfiguration?.('seloryn');
+  const workspaceFolder = vscode.workspace?.workspaceFolders?.[0];
+  const workspaceRoot = workspaceFolder?.uri?.fsPath || '';
+  if (!workspaceRoot || !vscode.languages?.createDiagnosticCollection) {
+    return { status: 'unavailable', dispose() {} };
+  }
+  const collection = vscode.languages.createDiagnosticCollection('seloryn-lsp');
+  const client = createSelorynLspClient({
+    command: String(configuration?.get?.('cliPath', 'seloryn') || 'seloryn'),
+    cwd: workspaceRoot,
+    spawn: dependencies.spawn,
+    onNotification: (message) => {
+      if (message.method !== 'textDocument/publishDiagnostics') return;
+      const params = message.params || {};
+      const uri = vscode.Uri?.parse ? vscode.Uri.parse(params.uri) : params.uri;
+      const diagnostics = (params.diagnostics || []).map((entry) => {
+        const diagnostic = new vscode.Diagnostic(
+          lspRange(vscode, entry.range),
+          entry.message,
+          entry.severity === 2
+            ? vscode.DiagnosticSeverity.Warning
+            : vscode.DiagnosticSeverity.Error
+        );
+        diagnostic.code = entry.code;
+        diagnostic.source = entry.source || 'Seloryn';
+        return diagnostic;
+      });
+      collection.set(uri, diagnostics);
+    }
+  });
+  const subscriptions = [];
+  const sendWhenReady = (action) => { void client.start().then(() => action()).catch(() => {}); };
+  subscriptions.push(
+    vscode.workspace.onDidOpenTextDocument?.((document) => {
+      if (document.languageId === 'seloryn') sendWhenReady(() => client.didOpen(document));
+    }),
+    vscode.workspace.onDidChangeTextDocument?.((event) => {
+      if (event.document.languageId === 'seloryn') sendWhenReady(() => client.didChange(event.document));
+    }),
+    vscode.workspace.onDidSaveTextDocument?.((document) => {
+      if (document.languageId === 'seloryn') sendWhenReady(() => client.didSave(document));
+    }),
+    vscode.workspace.onDidCloseTextDocument?.((document) => {
+      if (document.languageId === 'seloryn') client.didClose(document);
+      collection.delete(document.uri);
+    })
+  );
+  const selector = { language: 'seloryn', scheme: 'file' };
+  subscriptions.push(
+    vscode.languages.registerCompletionItemProvider(selector, {
+      provideCompletionItems(document, position) {
+        return client.start()
+          .then(() => client.request('textDocument/completion', {
+            textDocument: { uri: document.uri.toString() },
+            position
+          }))
+          .then((result) => (result?.items || []).map((item) => {
+            const completion = new vscode.CompletionItem(item.label, item.kind);
+            completion.detail = item.detail;
+            return completion;
+          }))
+          .catch(() => []);
+      }
+    }),
+    vscode.languages.registerDefinitionProvider(selector, {
+      provideDefinition(document, position) {
+        return client.start()
+          .then(() => client.request('textDocument/definition', {
+            textDocument: { uri: document.uri.toString() },
+            position
+          }))
+          .then((result) => (result || []).map((location) => ({
+            uri: vscode.Uri?.parse ? vscode.Uri.parse(location.uri) : location.uri,
+            range: lspRange(vscode, location.range)
+          })))
+          .catch(() => []);
+      }
+    })
+  );
+  client.start().catch(() => {});
+  const active = vscode.workspace.textDocuments || [];
+  for (const document of active) {
+    if (document.languageId === 'seloryn') sendWhenReady(() => client.didOpen(document));
+  }
+  return {
+    status: 'started',
+    dispose() {
+      for (const subscription of subscriptions) subscription?.dispose?.();
+      collection.dispose?.();
+      return client.dispose();
+    }
+  };
+}
+
 function createInlineCompletionProvider(vscode) {
   const cache = new Map();
   const inFlight = new Set();
@@ -725,7 +828,13 @@ function activate(context) {
   // eslint-disable-next-line global-require
   const vscode = require('vscode');
   const selector = { language: 'seloryn', scheme: 'file' };
-  context.subscriptions.push(createSelorynDiagnosticController(vscode, context));
+  const configuration = vscode.workspace?.getConfiguration?.('seloryn');
+  const lspEnabled = configuration?.get?.('lsp.enabled', true) !== false;
+  context.subscriptions.push(
+    lspEnabled
+      ? createSelorynLspController(vscode, context)
+      : createSelorynDiagnosticController(vscode, context)
+  );
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(selector, createCompletionProvider(vscode), '.', ':', '_'),
     vscode.languages.registerInlineCompletionItemProvider(selector, createInlineCompletionProvider(vscode)),
@@ -766,6 +875,7 @@ module.exports = {
   createInlineCompletionProvider,
   createSelorynDiagnosticController,
   createSelorynDiagnosticRunner,
+  createSelorynLspController,
   deactivate,
   extractLocalSymbols,
   findProjectRoot,

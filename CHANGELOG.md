@@ -16,6 +16,14 @@ not a promise that GitHub publication already happened.
 - **Candidate:** structured diagnostics identify the `seloryn.analysis.v1`
   schema, language version and runtime package so editor integrations can
   reject stale or incompatible output.
+- **Candidate:** the VS Code extension starts the parser-backed LSP for
+  unsaved diagnostics, completion and definition by default, while retaining
+  the saved-file CLI bridge as an explicit fallback.
+
+## [0.8.1] — local candidate, 2026-10-16
+
+- Extension-only gain `EXT-N11-LSP-CLIENT` on the language `0.08` line.
+- The package is `0.8.1`; runtime `0.8.0` and language `0.08` remain unchanged.
 
 ## [0.08] — local candidate, 2026-10-16
 
@@ -49,4 +57,4 @@ not a promise that GitHub publication already happened.
   remain preserved as prerelease history. They are not relabeled to hide
   their earlier compatibility lines; the current local candidate is
   `vscode-v0.7.0` and still needs explicit publication authorization. The
-  current local candidate is `vscode-v0.8.0`.
+  current local candidate is `vscode-v0.8.1`.

@@ -20,7 +20,7 @@ def digest(path: Path) -> str:
 
 def main() -> int:
     binary = ROOT / "target" / "release" / "seloryn.exe"
-    extension = ROOT / "tooling" / "vscode" / "seloryn-language-0.8.0.vsix"
+    extension = ROOT / "tooling" / "vscode" / "seloryn-language-0.8.1.vsix"
     if not binary.is_file() or not extension.is_file():
         raise SystemExit("release staging probe requires the release binary and VSIX")
     with tempfile.TemporaryDirectory(prefix="seloryn-release-probe-") as temporary:
@@ -52,7 +52,7 @@ def main() -> int:
         assert manifest["channel"] == "verified-preview"
         assert manifest["language_version"] == "0.08"
         assert manifest["runtime_package"] == "0.8.0"
-        assert manifest["extension_package"] == "0.8.0"
+        assert manifest["extension_package"] == "0.8.1"
         assert manifest["abi"] == "unstable"
         assert len(manifest["artifacts"]) == 2
         checksums = (output / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
@@ -68,9 +68,9 @@ def main() -> int:
             assert runtime_manifest["language_version"] == "0.08"
             assert runtime_manifest["runtime_package"] == "0.8.0"
             assert runtime_manifest["channel"] == "verified-preview"
-        with zipfile.ZipFile(output / "seloryn-language-0.8.0.vsix") as archive:
+        with zipfile.ZipFile(output / "seloryn-language-0.8.1.vsix") as archive:
             package = json.loads(archive.read("extension/package.json"))
-            assert package["version"] == "0.8.0"
+            assert package["version"] == "0.8.1"
     print("release staging probe passed")
     return 0
 

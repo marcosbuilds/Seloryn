@@ -14,7 +14,7 @@ const packagedSymbol = fs.readFileSync(path.join(root, 'assets', 'seloryn-icon-s
 const png = fs.readFileSync(pngPath);
 const svg = packagedSymbol;
 
-assert.equal(manifest.version, '0.8.0');
+assert.equal(manifest.version, '0.8.1');
 // VSCE rejects SVG files as the extension manifest icon. The PNG is the
 // marketplace-compatible render of the canonical Seloryn SVG source.
 assert.equal(manifest.icon, './assets/seloryn-icon.png');
@@ -46,4 +46,5 @@ assert.equal(manifest.scripts.package, 'npm run check && vsce package --no-depen
 assert.equal(manifest.contributes.configuration.properties['seloryn.diagnostics.enabled'].default, true);
 assert.equal(manifest.contributes.configuration.properties['seloryn.cliPath'].default, 'seloryn');
 assert.equal(manifest.contributes.configuration.properties['seloryn.diagnostics.timeoutMs'].default, 2500);
+assert.equal(manifest.contributes.configuration.properties['seloryn.lsp.enabled'].default, true);
 console.log('vscode package metadata tests passed');

@@ -4,7 +4,7 @@
 [current]
 language = "0.08"
 runtime_package = "0.8.0"
-extension_package = "0.8.0"
+extension_package = "0.8.1"
 channel = "verified-preview"
 
 [comparison]
@@ -101,3 +101,10 @@ language = "0.08"
 package = "0.8.0"
 summary = "Editor completions expose typed JSON array ingestion on the language 0.08 compatibility line"
 evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.8.0.md"
+
+[[extension_gains]]
+id = "EXT-N11-LSP-CLIENT"
+language = "0.08"
+package = "0.8.1"
+summary = "VS Code uses the parser-backed LSP for unsaved diagnostics, completion and definition while retaining the CLI bridge as an explicit fallback"
+evidence = "tooling/vscode/lsp-client.js; tooling/vscode/extension.js; tooling/vscode/test/lsp.test.js; tooling/vscode/package.json; docs/releases/vscode-0.8.1.md"
