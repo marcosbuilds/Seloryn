@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current local candidate: language 0.08 / runtime package 0.8.0, verified-preview CPU training plus identity-bearing replay receipts, typed JSON-array ingestion and an explicit device-resident GPU linear-training profile.** The release also retains hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles. GPU tensor/MLP training, distributed, registry, installer publication and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
+> **Current local candidate: language 0.09 / runtime package 0.9.0, verified-preview CPU training, hash-validated batch inference, identity-bearing replay receipts, typed JSON-array ingestion and an explicit device-resident GPU linear-training profile.** The release also retains hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles. GPU tensor/MLP training, distributed, registry, installer publication and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
 
 > **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Local preview artifacts are generated and validated, but they carry the exact platform, version and boundary claims documented below; GitHub publication remains explicit and separate.
 
@@ -15,7 +15,7 @@ is documented in [the production-niche benchmark](docs/benchmarks/production-nic
 ## Public preview artifacts
 
 - [Seloryn runtime 0.7.0 / language 0.07](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07): the last published runtime line.
-- [Seloryn VS Code extension package 0.8.1](tooling/vscode): local candidate with syntax highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and `.sely` file icons on the language `0.08` line. GitHub publication is pending.
+- [Seloryn VS Code extension package 0.9.0](tooling/vscode): local candidate with syntax highlighting, parser-backed LSP diagnostics/completion/definition, MLP batch-inference completions, CLI fallback and `.sely` file icons on the language `0.09` line. GitHub publication is pending.
 
 These are verified previews, not a stable ABI or a claim of GPU tensor/MLP
 training, distributed execution, package registry, HTTP runtime or a general
@@ -37,7 +37,7 @@ claim. If equivalent workloads do not show the proposed reduction in failures,
 integration drift or diagnostic cost, the architecture must be reconsidered
 instead of gaining features by default.
 
-| Capability | Availability in 0.08 | Evidence or boundary |
+| Capability | Availability in 0.09 | Evidence or boundary |
 |:--|:--|:--|
 | UTF-8 lexer, layout and parser subset | Implemented and tested | [`src/parser.rs`](src/parser.rs), parser tests |
 | Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | [`src/semantic.rs`](src/semantic.rs), semantic tests |
@@ -51,6 +51,7 @@ instead of gaining features by default.
 | `seloryn lsp --stdio` diagnostics, completion, definition and document symbols | Initial LSP v1 verified locally and wired to VS Code | [`src/lsp.rs`](src/lsp.rs), [`tooling/vscode/lsp-client.js`](tooling/vscode/lsp-client.js), [`tests/lsp_probe.py`](tests/lsp_probe.py); indexed analysis, incremental parsing and rename remain future |
 | JSON read/parse/encode/get and bounded file capability | Experimental implemented | JSON project fixtures; paths remain root-confined |
 | Typed JSON number-array ingestion into `List[I64]` / `List[F64]` | **Verified language gain** | [`examples/projects/json-array-pipeline`](examples/projects/json-array-pipeline), [`tests/json_array_probe.py`](tests/json_array_probe.py); bounded by runtime list limits |
+| Hash-validated bounded CPU MLP checkpoint batch inference | **Verified language gain** | [`examples/projects/mlp-inference`](examples/projects/mlp-inference), [`tests/mlp_inference_probe.py`](tests/mlp_inference_probe.py); CPU-only, bounded inputs, no serving ABI |
 | Scalar and Tensor[F32] reverse-mode tapes and finite-difference gradient check | Experimental implemented, narrow | [`examples/autograd`](examples/autograd), [`tests/n3_tensor_probe.py`](tests/n3_tensor_probe.py) |
 | Bounded CPU MLP training, mini-batches, evaluation, deterministic seed and checkpoint/resume | Verified preview | [`examples/projects/mlp-training`](examples/projects/mlp-training), [`tests/mlp_training_probe.py`](tests/mlp_training_probe.py); CPU/single-process only |
 | Opt-in human/JSON/JSON2 training event stream | Verified preview for CPU and bounded GPU-linear training | `seloryn run ... --log=human|json|json2`; JSON2 carries program/manifest/dataset/checkpoint/result identity, structured path redaction, replay verification and flushed stderr; [`verify-event-chain.py`](scripts/streaming/verify-event-chain.py), [`replay-receipt.py`](scripts/streaming/replay-receipt.py) and [`streaming_v2_probe.py`](tests/streaming_v2_probe.py) |

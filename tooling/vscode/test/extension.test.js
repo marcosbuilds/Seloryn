@@ -175,6 +175,7 @@ assert.ok(broadItems.some((item) => item.label === 'json'));
 assert.ok(broadItems.some((item) => item.label === 'match'));
 assert.ok(broadItems.some((item) => item.label === 'Tensor'));
 assert.ok(broadItems.some((item) => item.label === 'train_mlp'));
+assert.ok(broadItems.some((item) => item.label === 'predict_mlp'));
 assert.ok(broadItems.some((item) => item.label === 'gradients'));
 assert.ok(broadItems.some((item) => item.label === 'range'));
 assert.ok(broadItems.some((item) => item.label === 'as_f64_list'));
@@ -246,8 +247,8 @@ assert.equal(extension.sanitizeGhostText('abcdefgh', 4), 'abcd');
 const diagnosticDocument = documentFor('🙂\nfn main() -> Unit:\n    return\n');
 const diagnosticPayload = JSON.stringify({
   schema: 'seloryn.analysis.v1',
-  language_version: '0.08',
-  runtime_package: '0.8.0',
+  language_version: '0.09',
+  runtime_package: '0.9.0',
   diagnostics: [{
     code: 'SEL-P001',
     severity: 'error',
@@ -328,8 +329,8 @@ const diagnosticVscode = {
 
   const unicodePayload = JSON.stringify({
     schema: 'seloryn.analysis.v1',
-    language_version: '0.08',
-    runtime_package: '0.8.0',
+  language_version: '0.09',
+  runtime_package: '0.9.0',
     diagnostics: [{
       code: 'SEL-P001',
       severity: 'error',

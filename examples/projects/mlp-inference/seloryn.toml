@@ -1,0 +1,12 @@
+[package]
+name = "mlp-inference-example"
+language = "0.09"
+source_root = "src"
+entry = "mlp-inference-entry.sely"
+
+[capabilities]
+read = ["data", "checkpoints"]
+
+[limits]
+json_max_bytes = 1048576
+json_max_depth = 32

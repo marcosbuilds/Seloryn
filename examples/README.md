@@ -11,6 +11,7 @@ examples/
   projects/checkpoint-validation/ bounded checkpoint schema validation
   projects/linear-training/    narrow fixture-driven linear training contract
   projects/mlp-training/       verified bounded CPU MLP training, holdout and resume
+  projects/mlp-inference/      bounded batch inference from a verified MLP checkpoint
   projects/self-hosted-linear/ Seloryn-authored tensor objective and SGD loop
   projects/evaluation-pipeline/ local modules + JSON validation + tensor metrics
 ```
@@ -34,6 +35,8 @@ seloryn check examples/projects/evaluation-pipeline
 seloryn run examples/projects/evaluation-pipeline
 seloryn check examples/projects/mlp-training
 seloryn run examples/projects/mlp-training --log=json
+seloryn check examples/projects/mlp-inference
+seloryn run examples/projects/mlp-inference
 seloryn check examples/projects/self-hosted-linear
 seloryn run examples/projects/self-hosted-linear
 ```

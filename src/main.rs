@@ -32,7 +32,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 
-pub(crate) const LANGUAGE_VERSION: &str = "0.08";
+pub(crate) const LANGUAGE_VERSION: &str = "0.09";
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
 const EXIT_OK: u8 = 0;
@@ -736,7 +736,7 @@ fn v2_hash(value: &json::JsonValue) -> String {
 }
 
 fn redact_v2_paths(object: &mut BTreeMap<String, json::JsonValue>) {
-    for key in ["train_path", "test_path", "checkpoint_path"] {
+    for key in ["train_path", "test_path", "checkpoint_path", "input_path"] {
         let Some(json::JsonValue::String(path)) = object.get(key).cloned() else {
             continue;
         };
@@ -985,6 +985,36 @@ fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
             seed,
             resumed_from,
             checkpoint_sha256,
+        ),
+        runtime::RuntimeEvent::InferenceStarted {
+            model,
+            checkpoint_path,
+            input_path,
+            samples,
+            input_size,
+            output_size,
+            checkpoint_step,
+            ..
+        } => format!(
+            "seloryn inference.start schema=1 operation=predict_mlp model={} device=cpu dtype=f32 checkpoint={} input={} samples={} input_size={} output_size={} checkpoint_step={}",
+            model,
+            json::encode(&json::JsonValue::String(checkpoint_path.clone())),
+            json::encode(&json::JsonValue::String(input_path.clone())),
+            samples,
+            input_size,
+            output_size,
+            checkpoint_step,
+        ),
+        runtime::RuntimeEvent::InferenceCompleted {
+            model,
+            samples,
+            input_size,
+            output_size,
+            checkpoint_step,
+            ..
+        } => format!(
+            "seloryn inference.complete schema=1 operation=predict_mlp model={} device=cpu dtype=f32 samples={} input_size={} output_size={} checkpoint_step={}",
+            model, samples, input_size, output_size, checkpoint_step
         ),
     }
 }
@@ -1601,6 +1631,126 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
             object.insert(
                 "checkpoint_sha256".to_owned(),
                 json::JsonValue::String(checkpoint_sha256.clone()),
+            );
+        }
+        runtime::RuntimeEvent::InferenceStarted {
+            model,
+            checkpoint_path,
+            input_path,
+            checkpoint_sha256,
+            input_sha256,
+            samples,
+            input_size,
+            output_size,
+            checkpoint_step,
+        } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("inference.start".to_owned()),
+            );
+            object.insert(
+                "operation".to_owned(),
+                json::JsonValue::String("predict_mlp".to_owned()),
+            );
+            object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert(
+                "device".to_owned(),
+                json::JsonValue::String("cpu".to_owned()),
+            );
+            object.insert(
+                "dtype".to_owned(),
+                json::JsonValue::String("f32".to_owned()),
+            );
+            object.insert(
+                "checkpoint_path".to_owned(),
+                json::JsonValue::String(checkpoint_path.clone()),
+            );
+            object.insert(
+                "input_path".to_owned(),
+                json::JsonValue::String(input_path.clone()),
+            );
+            object.insert(
+                "checkpoint_sha256".to_owned(),
+                json::JsonValue::String(checkpoint_sha256.clone()),
+            );
+            object.insert(
+                "input_sha256".to_owned(),
+                json::JsonValue::String(input_sha256.clone()),
+            );
+            object.insert(
+                "samples".to_owned(),
+                json::JsonValue::Number(samples.to_string()),
+            );
+            object.insert(
+                "input_size".to_owned(),
+                json::JsonValue::Number(input_size.to_string()),
+            );
+            object.insert(
+                "output_size".to_owned(),
+                json::JsonValue::Number(output_size.to_string()),
+            );
+            object.insert(
+                "checkpoint_step".to_owned(),
+                json::JsonValue::Number(checkpoint_step.to_string()),
+            );
+        }
+        runtime::RuntimeEvent::InferenceCompleted {
+            model,
+            samples,
+            input_size,
+            output_size,
+            checkpoint_sha256,
+            input_sha256,
+            checkpoint_step,
+        } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("inference.complete".to_owned()),
+            );
+            object.insert(
+                "operation".to_owned(),
+                json::JsonValue::String("predict_mlp".to_owned()),
+            );
+            object.insert("model".to_owned(), json::JsonValue::String(model.clone()));
+            object.insert(
+                "device".to_owned(),
+                json::JsonValue::String("cpu".to_owned()),
+            );
+            object.insert(
+                "dtype".to_owned(),
+                json::JsonValue::String("f32".to_owned()),
+            );
+            object.insert(
+                "samples".to_owned(),
+                json::JsonValue::Number(samples.to_string()),
+            );
+            object.insert(
+                "input_size".to_owned(),
+                json::JsonValue::Number(input_size.to_string()),
+            );
+            object.insert(
+                "output_size".to_owned(),
+                json::JsonValue::Number(output_size.to_string()),
+            );
+            object.insert(
+                "checkpoint_sha256".to_owned(),
+                json::JsonValue::String(checkpoint_sha256.clone()),
+            );
+            object.insert(
+                "input_sha256".to_owned(),
+                json::JsonValue::String(input_sha256.clone()),
+            );
+            object.insert(
+                "checkpoint_step".to_owned(),
+                json::JsonValue::Number(checkpoint_step.to_string()),
             );
         }
     }

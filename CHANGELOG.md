@@ -20,6 +20,19 @@ not a promise that GitHub publication already happened.
   unsaved diagnostics, completion and definition by default, while retaining
   the saved-file CLI bridge as an explicit fallback.
 
+## [0.09] — local candidate, 2026-10-16
+
+- `training.predict_mlp` loads a hash-validated bounded CPU MLP checkpoint and
+  produces deterministic batch predictions with checkpoint/input identity and
+  JSON2 lifecycle events.
+- The coordinated language/runtime/extension versions are `0.09`, `0.9.0`
+  and `0.9.0`; public publication remains pending.
+
+## [0.9.0] — local candidate, 2026-10-16
+
+- Extension gain `EXT-N12-MLP-BATCH-INFERENCE` adds completion and a snippet for
+  the verified batch-inference workflow.
+
 ## [0.8.1] — local candidate, 2026-10-16
 
 - Extension-only gain `EXT-N11-LSP-CLIENT` on the language `0.08` line.

@@ -339,6 +339,26 @@ pub enum RuntimeEvent {
         resumed_from: i64,
         checkpoint_sha256: String,
     },
+    InferenceStarted {
+        model: String,
+        checkpoint_path: String,
+        input_path: String,
+        checkpoint_sha256: String,
+        input_sha256: String,
+        samples: usize,
+        input_size: usize,
+        output_size: usize,
+        checkpoint_step: i64,
+    },
+    InferenceCompleted {
+        model: String,
+        samples: usize,
+        input_size: usize,
+        output_size: usize,
+        checkpoint_sha256: String,
+        input_sha256: String,
+        checkpoint_step: i64,
+    },
 }
 
 /// Receives runtime events while execution is in progress.
@@ -1733,6 +1753,31 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
                 Ok(result)
             }
+            "predict_mlp" => {
+                let (Some(Value::Text(checkpoint)), Some(Value::Text(inputs))) =
+                    (values.first(), values.get(1))
+                else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "predict_mlp requires checkpoint and input paths",
+                        span,
+                    )));
+                };
+                let checkpoint_file = self.resolve_read_path(checkpoint, span)?;
+                let input_file = self.resolve_read_path(inputs, span)?;
+                let result = predict_mlp_json(
+                    &checkpoint_file,
+                    &input_file,
+                    checkpoint,
+                    inputs,
+                    self.training_max_bytes,
+                    self.training_max_depth,
+                    &mut *self.event_sink,
+                )
+                .map(Value::Json)
+                .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                Ok(result)
+            }
             "load_checkpoint" => {
                 let Some(Value::Text(checkpoint)) = values.first() else {
                     return Err(Control::Runtime(self.runtime(
@@ -1778,6 +1823,7 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 "hidden_size",
                 "learning_rate",
             ]),
+            "predict_mlp" => Some(&["checkpoint", "inputs"]),
             _ => None,
         };
         let Some(parameter_names) = parameter_names else {
@@ -3502,6 +3548,251 @@ fn read_mlp_dataset(
         output_size,
         sha256,
     })
+}
+
+struct MlpInputBatch {
+    inputs: Vec<Vec<f32>>,
+    input_size: usize,
+    sha256: String,
+}
+
+fn predict_mlp_json(
+    checkpoint_file: &Path,
+    input_file: &Path,
+    checkpoint_path: &str,
+    input_path: &str,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+    event_sink: &mut dyn EventSink,
+) -> Result<JsonValue, String> {
+    let checkpoint_max_bytes = json_max_bytes.min(MAX_CHECKPOINT_BYTES);
+    let checkpoint_source =
+        read_bounded_utf8(checkpoint_file, checkpoint_max_bytes, "MLP checkpoint")?;
+    let checkpoint_sha256 = sha256_hex(checkpoint_source.as_bytes());
+    let checkpoint = json::parse(
+        &checkpoint_source,
+        checkpoint_max_bytes,
+        json_max_depth.min(32),
+    )
+    .map_err(|error| error.message)?;
+    let (model, checkpoint_step) = parse_mlp_model_checkpoint(&checkpoint)?;
+    let inputs = read_mlp_inputs(input_file, input_path, json_max_bytes, json_max_depth)?;
+    if inputs.input_size != model.input_size {
+        return Err(format!(
+            "MLP inference input dimension {} does not match checkpoint dimension {}",
+            inputs.input_size, model.input_size
+        ));
+    }
+
+    event_sink.emit(RuntimeEvent::InferenceStarted {
+        model: "mlp".to_owned(),
+        checkpoint_path: checkpoint_path.to_owned(),
+        input_path: input_path.to_owned(),
+        checkpoint_sha256: checkpoint_sha256.clone(),
+        input_sha256: inputs.sha256.clone(),
+        samples: inputs.inputs.len(),
+        input_size: model.input_size,
+        output_size: model.output_size,
+        checkpoint_step,
+    })?;
+
+    let mut pre_activation = vec![0.0; model.hidden_size];
+    let mut hidden = vec![0.0; model.hidden_size];
+    let mut output = vec![0.0; model.output_size];
+    let mut predictions = Vec::with_capacity(inputs.inputs.len());
+    for input in &inputs.inputs {
+        forward_mlp(&model, input, &mut pre_activation, &mut hidden, &mut output);
+        predictions.push(json_f32_values(&output));
+    }
+    event_sink.emit(RuntimeEvent::InferenceCompleted {
+        model: "mlp".to_owned(),
+        samples: inputs.inputs.len(),
+        input_size: model.input_size,
+        output_size: model.output_size,
+        checkpoint_sha256: checkpoint_sha256.clone(),
+        input_sha256: inputs.sha256.clone(),
+        checkpoint_step,
+    })?;
+
+    Ok(JsonValue::Object(std::collections::BTreeMap::from([
+        (
+            "operation".to_owned(),
+            JsonValue::String("predict_mlp".to_owned()),
+        ),
+        ("model".to_owned(), JsonValue::String("mlp".to_owned())),
+        ("device".to_owned(), JsonValue::String("cpu".to_owned())),
+        ("dtype".to_owned(), JsonValue::String("f32".to_owned())),
+        (
+            "checkpoint_sha256".to_owned(),
+            JsonValue::String(checkpoint_sha256),
+        ),
+        ("input_sha256".to_owned(), JsonValue::String(inputs.sha256)),
+        (
+            "checkpoint_step".to_owned(),
+            JsonValue::Number(checkpoint_step.to_string()),
+        ),
+        (
+            "samples".to_owned(),
+            JsonValue::Number(inputs.inputs.len().to_string()),
+        ),
+        (
+            "input_size".to_owned(),
+            JsonValue::Number(model.input_size.to_string()),
+        ),
+        (
+            "output_size".to_owned(),
+            JsonValue::Number(model.output_size.to_string()),
+        ),
+        ("predictions".to_owned(), JsonValue::Array(predictions)),
+    ])))
+}
+
+fn read_mlp_inputs(
+    path: &Path,
+    label: &str,
+    json_max_bytes: usize,
+    json_max_depth: usize,
+) -> Result<MlpInputBatch, String> {
+    let input_max_bytes = json_max_bytes.min(MAX_TRAINING_DATASET_BYTES);
+    let source = read_bounded_utf8(path, input_max_bytes, &format!("MLP input `{label}`"))?;
+    let sha256 = sha256_hex(source.as_bytes());
+    let value = json::parse(&source, input_max_bytes, json_max_depth.min(32))
+        .map_err(|error| error.message)?;
+    let JsonValue::Object(values) = value else {
+        return Err("MLP inference input must be a JSON object".to_owned());
+    };
+    let Some(JsonValue::Array(input_values)) = values.get("inputs") else {
+        return Err("MLP inference input is missing inputs".to_owned());
+    };
+    if input_values.is_empty() {
+        return Err("MLP inference input must contain at least one row".to_owned());
+    }
+    if input_values.len() > MAX_TRAINING_SAMPLES {
+        return Err(format!(
+            "MLP inference input exceeds maximum {MAX_TRAINING_SAMPLES} samples"
+        ));
+    }
+    let inputs = input_values
+        .iter()
+        .map(|value| json_vector(value, "inputs"))
+        .collect::<Result<Vec<_>, _>>()?;
+    let input_size = inputs[0].len();
+    if input_size == 0 || input_size > MAX_TRAINING_INPUTS {
+        return Err(format!(
+            "MLP inference input size must be between 1 and {MAX_TRAINING_INPUTS}"
+        ));
+    }
+    if inputs.iter().any(|row| row.len() != input_size) {
+        return Err("MLP inference input rows must have uniform dimensions".to_owned());
+    }
+    Ok(MlpInputBatch {
+        inputs,
+        input_size,
+        sha256,
+    })
+}
+
+fn parse_mlp_model_checkpoint(value: &JsonValue) -> Result<(MlpModel, i64), String> {
+    let JsonValue::Object(values) = value else {
+        return Err("MLP checkpoint root must be an object".to_owned());
+    };
+    if !matches!(values.get("schema"), Some(JsonValue::String(value)) if value == "seloryn.training.checkpoint.v2")
+    {
+        return Err("MLP checkpoint schema is unsupported".to_owned());
+    }
+    if !matches!(values.get("model"), Some(JsonValue::String(value)) if value == "mlp") {
+        return Err("MLP checkpoint model is unsupported".to_owned());
+    }
+    if !matches!(
+        values.get("optimizer"),
+        Some(JsonValue::Object(optimizer))
+            if matches!(optimizer.get("name"), Some(JsonValue::String(value)) if value == "sgd")
+                && matches!(optimizer.get("state"), Some(JsonValue::String(value)) if value == "stateless")
+    ) {
+        return Err("MLP checkpoint optimizer is unsupported".to_owned());
+    }
+    let step = json_i64_field(values, "step")?;
+    if step < 0 {
+        return Err("MLP checkpoint step cannot be negative".to_owned());
+    }
+    let input_size = json_usize_field(values, "input_size")?;
+    let hidden_size = json_usize_field(values, "hidden_size")?;
+    let output_size = json_usize_field(values, "output_size")?;
+    if input_size == 0 || input_size > MAX_TRAINING_INPUTS {
+        return Err(format!(
+            "MLP checkpoint input size must be between 1 and {MAX_TRAINING_INPUTS}"
+        ));
+    }
+    if hidden_size == 0 || hidden_size > MAX_TRAINING_HIDDEN {
+        return Err(format!(
+            "MLP checkpoint hidden size must be between 1 and {MAX_TRAINING_HIDDEN}"
+        ));
+    }
+    if output_size == 0 || output_size > MAX_TRAINING_OUTPUTS {
+        return Err(format!(
+            "MLP checkpoint output size must be between 1 and {MAX_TRAINING_OUTPUTS}"
+        ));
+    }
+    let parameter_count = input_size
+        .checked_mul(hidden_size)
+        .and_then(|value| value.checked_add(hidden_size))
+        .and_then(|value| value.checked_add(hidden_size.checked_mul(output_size)?))
+        .and_then(|value| value.checked_add(output_size))
+        .ok_or_else(|| "MLP checkpoint parameter count overflowed".to_owned())?;
+    if parameter_count > MAX_TRAINING_PARAMETERS {
+        return Err(format!(
+            "MLP checkpoint parameters exceed maximum {MAX_TRAINING_PARAMETERS}"
+        ));
+    }
+    let model_values = match values.get("weights") {
+        Some(JsonValue::Object(value)) => value,
+        _ => return Err("MLP checkpoint weights are missing".to_owned()),
+    };
+    let actual_weights_hash =
+        sha256_hex(json::encode(&JsonValue::Object(model_values.clone())).as_bytes());
+    if !matches!(values.get("weights_sha256"), Some(JsonValue::String(value)) if value == &actual_weights_hash)
+    {
+        return Err("MLP checkpoint weights hash does not match the payload".to_owned());
+    }
+    let model = MlpModel {
+        input_size,
+        hidden_size,
+        output_size,
+        first_weights: json_f32_array(model_values, "first_weights")?,
+        first_bias: json_f32_array(model_values, "first_bias")?,
+        second_weights: json_f32_array(model_values, "second_weights")?,
+        second_bias: json_f32_array(model_values, "second_bias")?,
+    };
+    if model.first_weights.len() != input_size * hidden_size
+        || model.first_bias.len() != hidden_size
+        || model.second_weights.len() != hidden_size * output_size
+        || model.second_bias.len() != output_size
+    {
+        return Err("MLP checkpoint parameter shapes are invalid".to_owned());
+    }
+    let data = match values.get("data") {
+        Some(JsonValue::Object(value)) => value,
+        _ => return Err("MLP checkpoint data state is missing".to_owned()),
+    };
+    let actual_data_hash = sha256_hex(json::encode(&JsonValue::Object(data.clone())).as_bytes());
+    if !matches!(values.get("data_sha256"), Some(JsonValue::String(value)) if value == &actual_data_hash)
+    {
+        return Err("MLP checkpoint data hash does not match the payload".to_owned());
+    }
+    let state_value = JsonValue::Object(std::collections::BTreeMap::from([
+        ("step".to_owned(), JsonValue::Number(step.to_string())),
+        (
+            "weights".to_owned(),
+            JsonValue::Object(model_values.clone()),
+        ),
+        ("data".to_owned(), JsonValue::Object(data.clone())),
+    ]));
+    let actual_state_hash = sha256_hex(json::encode(&state_value).as_bytes());
+    if !matches!(values.get("state_sha256"), Some(JsonValue::String(value)) if value == &actual_state_hash)
+    {
+        return Err("MLP checkpoint training state hash does not match the payload".to_owned());
+    }
+    Ok((model, step))
 }
 
 fn json_vector(value: &JsonValue, label: &str) -> Result<Vec<f32>, String> {

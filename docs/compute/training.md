@@ -1,6 +1,6 @@
 # Model training
 
-Seloryn `0.08` contains executable CPU training profiles, including a
+Seloryn `0.09` contains executable CPU training profiles, including a
 two-layer `F32` MLP with ReLU hidden activation, mean-squared error, SGD,
 deterministic mini-batches, holdout evaluation and resumable checkpoints. This
 is a verified preview of a small training workflow, not a general neural
@@ -61,6 +61,25 @@ The final JSON result reports `initial_loss`, `final_loss`,
 `evaluation_loss`, `parameter_count`, the effective batch/model sizes,
 `resumed_from` and the SHA-256 of the checkpoint bytes. The example is
 deliberately small so it can run in local development and CI.
+
+## Batch inference from a checkpoint
+
+The verified MLP checkpoint can be consumed by the bounded
+`training.predict_mlp` function:
+
+```seloryn
+from training import predict_mlp
+
+fn main() -> Json:
+    return predict_mlp("checkpoints/model.json", "data/inputs.json")
+```
+
+The input file is a JSON object containing a non-empty `inputs` array of
+uniform numeric rows. The checkpoint's hash-protected weights, state and model
+dimensions are validated before any prediction. The result includes the
+checkpoint/input hashes, checkpoint step, dimensions and predictions. This is
+batch inference for the closed CPU MLP profile; it is not an HTTP server,
+general model loader or serving ABI.
 
 ## Checkpoint and resume contract
 

@@ -24,7 +24,8 @@ It currently provides:
   maps both the `seloryn` language id and `.sely` files to the Seloryn mark;
 - native VS Code completion items for local declarations, parameters, types,
   implemented builtins including multi-input `autograd.gradients`, bounded
-  `data.range` and `training.train_mlp`, real training snippets,
+  `data.range`, `training.train_mlp` and `training.predict_mlp`, real training
+  snippets,
   keywords and reserved syntax;
 - a `Seloryn: Run CPU Training in Terminal` command that opens the configured
   CLI with an argument vector and `--log=human` for live progress;
@@ -90,7 +91,7 @@ npm ci
 npm run package
 ```
 
-The result is a local `seloryn-language-0.8.1.vsix`. The package contains the
+The result is a local `seloryn-language-0.9.0.vsix`. The package contains the
 extension runtime, grammar, language configuration, README, logo and file-icon
 theme; tests, fixtures and the lockfile stay out of the VSIX.
 The packaging step fixes ZIP entry ordering and timestamps, so repeated builds

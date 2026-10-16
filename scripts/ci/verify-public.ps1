@@ -40,6 +40,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Typed JSON array verification failed' }
     & python tests/mlp_training_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'CPU MLP independent verification failed' }
+    & python tests/mlp_inference_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'MLP batch inference verification failed' }
     & python tests/streaming_v2_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Hash-chained training stream verification failed' }
     & python tests/self_hosted_probe.py

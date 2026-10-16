@@ -58,6 +58,7 @@ const BUILTINS = Object.freeze([
   ['tensor_sum_to_shape', 'tensor_sum_to_shape(tensor, shape)', 'Reduce a broadcasted tensor'],
   ['train_linear', 'train_linear(train, test, seed, steps)', 'Narrow linear-training fixture'],
   ['train_mlp', 'train_mlp(train, test, checkpoint, seed, steps, batch_size, hidden_size, learning_rate)', 'Train a bounded CPU MLP with tamper-detecting resume checkpoint'],
+  ['predict_mlp', 'predict_mlp(checkpoint, inputs)', 'Run bounded batch inference from a verified MLP checkpoint'],
   ['load_checkpoint', 'load_checkpoint(path)', 'Read a bounded checkpoint fixture'],
   ['print', 'print(text)', 'Write explicit program output']
 ]);
@@ -101,6 +102,7 @@ const SNIPPETS = Object.freeze([
   ['for', 'List iteration', 'for ${1:item} in ${2:items}:\n    ${0}'],
   ['match', 'Exhaustive match block', 'match ${1:value}:\n    case ${2:pattern}:\n        ${0}'],
   ['train_mlp', 'Real bounded CPU MLP training', 'from training import train_mlp\n\nfn main() -> Json:\n    return train_mlp("data/train.json", "data/test.json", "checkpoints/model.json", seed=17, steps=640, batch_size=3, hidden_size=8, learning_rate=0.02)${0}'],
+  ['predict_mlp', 'Bounded MLP batch inference', 'from training import predict_mlp\n\nfn main() -> Json:\n    return predict_mlp("checkpoints/model.json", "data/inputs.json")${0}'],
   ['self_hosted_train', 'Seloryn-authored gradient loop', 'from autograd import gradients\nfrom data import range\n\nfor ${1:step} in range(${2:120}):\n    let ${3:derivatives}: List[Tensor[F32]] = gradients(${4:objective}, ${5:inputs}, ${6:weight}, ${7:bias}, ${8:targets})\n    ${9:weight} = ${9:weight} - ${10:rate} * ${3:derivatives}[1]\n    ${11:bias} = ${11:bias} - ${10:rate} * ${3:derivatives}[2]${0}'],
   ['tensor_objective', 'Tensor objective returning a scalar', 'fn ${1:objective}(input: Tensor[F32]) -> Tensor[F32]:\n    let weights: Tensor[F32] = tensor_f32([1.0], [1, 1])\n    let prediction: Tensor[F32] = matmul(input, weights)\n    return tensor_mean(prediction * prediction)${0}']
 ]);

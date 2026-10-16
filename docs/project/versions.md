@@ -58,9 +58,9 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
-| Language capability | `0.07` | `0.08` | N10 typed JSON number-array ingestion into bounded lists |
-| Runtime package | `0.7.0` | `0.8.0` | package identity follows the accepted data-ingestion gain |
-| VS Code extension | `0.7.0` | `0.8.1` | `0.8.0` exposed JSON list conversion; `0.8.1` adds the parser-backed LSP client on the same language line |
+| Language capability | `0.08` | `0.09` | N11 hash-validated bounded MLP batch inference |
+| Runtime package | `0.8.0` | `0.9.0` | package identity follows the accepted inference gain |
+| VS Code extension | `0.8.1` | `0.9.0` | `0.9.0` exposes the new batch-inference workflow on the language line |
 
 The comparison is intentionally visible: a new commit alone cannot advance
 the language version. N3B remains the historical reason for `0.01`; N6 is the

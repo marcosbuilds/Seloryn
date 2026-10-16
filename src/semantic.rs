@@ -1585,6 +1585,10 @@ impl<'a> Checker<'a> {
                 self.check_standard_arity(name, arguments, 8, span);
                 Type::Json
             }
+            "predict_mlp" => {
+                self.check_standard_arity(name, arguments, 2, span);
+                Type::Json
+            }
             "load_checkpoint" => {
                 self.check_standard_arity(name, arguments, 1, span);
                 Type::Result(Box::new(Type::Json), Box::new(Type::CheckpointError))
@@ -2012,6 +2016,7 @@ fn is_supported_standard_directive(text: &str) -> bool {
             "train_linear",
             "train_linear_gpu",
             "train_mlp",
+            "predict_mlp",
             "load_checkpoint",
         ]
         .as_slice(),

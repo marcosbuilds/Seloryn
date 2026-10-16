@@ -2,15 +2,15 @@
 # The language version is a capability count (M.mm), not a decimal float.
 
 [current]
-language = "0.08"
-runtime_package = "0.8.0"
-extension_package = "0.8.1"
+language = "0.09"
+runtime_package = "0.9.0"
+extension_package = "0.9.0"
 channel = "verified-preview"
 
 [comparison]
-previous_language = "0.07"
-previous_runtime_package = "0.7.0"
-previous_extension_package = "0.7.0"
+previous_language = "0.08"
+previous_runtime_package = "0.8.0"
+previous_extension_package = "0.8.1"
 
 [[gains]]
 id = "N3B-TENSOR-AUTODIFF"
@@ -95,6 +95,12 @@ language = "0.08"
 summary = "Bounded JSON number arrays convert to typed List[I64] or List[F64] values for real Seloryn iteration"
 evidence = "src/runtime.rs; src/semantic.rs; examples/projects/json-array-pipeline; tests/json_array_probe.py; docs/releases/runtime-0.08.md"
 
+[[gains]]
+id = "N11-MLP-BATCH-INFERENCE"
+language = "0.09"
+summary = "Hash-validated bounded CPU MLP checkpoints can produce deterministic batch predictions with observable receipts"
+evidence = "src/runtime.rs; src/main.rs; examples/projects/mlp-inference; tests/mlp_inference_probe.py; docs/compute/training.md; docs/releases/runtime-0.09.md"
+
 [[extension_gains]]
 id = "EXT-N10-JSON-TYPED-ARRAY-INGESTION"
 language = "0.08"
@@ -108,3 +114,10 @@ language = "0.08"
 package = "0.8.1"
 summary = "VS Code uses the parser-backed LSP for unsaved diagnostics, completion and definition while retaining the CLI bridge as an explicit fallback"
 evidence = "tooling/vscode/lsp-client.js; tooling/vscode/extension.js; tooling/vscode/test/lsp.test.js; tooling/vscode/package.json; docs/releases/vscode-0.8.1.md"
+
+[[extension_gains]]
+id = "EXT-N12-MLP-BATCH-INFERENCE"
+language = "0.09"
+package = "0.9.0"
+summary = "VS Code exposes the verified batch-inference checkpoint workflow on the language 0.09 compatibility line"
+evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.9.0.md"

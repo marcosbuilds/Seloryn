@@ -1,0 +1,4 @@
+from training import predict_mlp
+
+fn main() -> Json:
+    return predict_mlp("checkpoints/model.json", "data/inputs.json")
