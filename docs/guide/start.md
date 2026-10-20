@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.09 currently provides a verified-preview CPU MLP profile, hash-validated batch inference, read-only `doctor` project diagnostics, transactional `init` templates, reproducible local release provenance, identity-bearing replayable training receipts, typed JSON number-array ingestion, a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. Project manifests are parsed strictly and future language versions are rejected before execution. It also includes a real hardware inventory, bounded GPU compute/readback probe and an explicit scalar F32 `train_linear_gpu` profile; general GPU tensor/MLP training is not enabled. There is no distributed backend, package registry, hosted API, stable ABI or published runtime installer; the preview candidate is staged locally and the public runtime remains 0.07.
+**Availability:** Seloryn 0.10 currently provides a verified-preview CPU MLP profile, a custom `.sely` MLP workflow with source-owned training/checkpoint/reload/inference, hash-validated batch inference, read-only `doctor` project diagnostics, transactional `init` templates, reproducible local release provenance, identity-bearing replayable training receipts, typed JSON number-array ingestion, a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. Project manifests are parsed strictly and future language versions are rejected before execution. It also includes a real hardware inventory, bounded GPU compute/readback probe and an explicit scalar F32 `from training import gpu` profile; general GPU tensor/MLP training is not enabled. There is no distributed backend, package registry, hosted API, stable ABI or published runtime installer.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 
@@ -42,8 +42,8 @@ stdout.
 - No package registry, external dependency resolver or broad standard library runtime.
 - No GPU tensor/autodiff training, distributed or symbolic-shape execution; N1/N2 and MLP training remain bounded CPU contracts.
 - No HTTP, process or unrestricted file/package runtime; only bounded standard-input JSON and root-confined project JSON reads are available.
-- No public `Module`/`Parameter`/`Dataset` framework, model loading or production model serving; the verified training profiles remain bounded CPU contracts.
-- No distributed backend, supported installer or supported release target; local installer scripts are not a release. `gpu-probe` is hardware evidence, while `train_linear_gpu` is the separate closed scalar F32 training proof; neither implies general GPU tensor/MLP training.
+- No public `Module`/`Parameter`/`Dataset` framework, general model registry or production model serving; the custom `.sely` checkpoint proof remains a bounded CPU contract.
+- No distributed backend, supported installer or supported release target; local installer scripts are not a release. `gpu-probe` is hardware evidence, while `from training import gpu` is the separate closed scalar F32 training proof; neither implies general GPU tensor/MLP training.
 
 The current capability limits are recorded in the [status page](../project/status.md) and the [tensor reference](../compute/tensors.md).
 

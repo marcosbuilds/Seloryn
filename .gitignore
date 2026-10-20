@@ -20,4 +20,5 @@ dist/
 build/
 .cache/
 node_modules/
+examples/projects/**/checkpoints/*.json
 *.vsix

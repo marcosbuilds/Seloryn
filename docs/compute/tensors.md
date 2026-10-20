@@ -1,6 +1,6 @@
 # Tensors
 
-**Current availability (`0.09`):** Seloryn has an experimental N1/N2 CPU
+**Current availability (`0.10`):** Seloryn has an experimental N1/N2 CPU
 tensor runtime. It allocates owned, bounded buffers for `Tensor[F32]` and
 `Tensor[I64]`; N2 adds a small pure numeric closure needed before autograd. The
 separate `gpu-probe` command exercises one hardware compute/readback path, but
@@ -36,6 +36,7 @@ is performed.
 | `tensor_softmax(f32_tensor, axis)` | Numerically stable F32 softmax over one explicit axis |
 | `tensor_logsumexp(f32_tensor, axis)` | Numerically stable F32 log-sum-exp reduction over one explicit axis |
 | `tensor_sum_to_shape(f32_tensor, shape)` | Reduces a broadcasted F32 result back to a compatible operand shape |
+| `from tensor import values` | Exports finite `Tensor[F32]` values as a typed `List[F64]` for explicit source-owned persistence |
 | `+`, `-`, `*`, `/` | Same-dtype tensor arithmetic with right-aligned broadcasting |
 
 The runnable example is [`examples/tensors/tensor-matmul.sely`](../../examples/tensors/tensor-matmul.sely):

@@ -1,0 +1,13 @@
+[package]
+name = "self-hosted-mlp"
+language = "0.10"
+source_root = "src"
+entry = "self-hosted-mlp-entry.sely"
+
+[capabilities]
+read = ["data", "checkpoints"]
+write = ["checkpoints"]
+
+[limits]
+json_max_bytes = 1048576
+json_max_depth = 32

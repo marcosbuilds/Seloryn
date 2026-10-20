@@ -2,14 +2,14 @@
 # The language version is a capability count (M.mm), not a decimal float.
 
 [current]
-language = "0.09"
-runtime_package = "0.9.4"
-extension_package = "0.9.0"
+language = "0.10"
+runtime_package = "0.10.0"
+extension_package = "0.10.0"
 channel = "verified-preview"
 
 [comparison]
 previous_language = "0.09"
-previous_runtime_package = "0.9.3"
+previous_runtime_package = "0.9.4"
 previous_extension_package = "0.9.0"
 
 [[gains]]
@@ -101,6 +101,12 @@ language = "0.09"
 summary = "Hash-validated bounded CPU MLP checkpoints can produce deterministic batch predictions with observable receipts"
 evidence = "src/runtime.rs; src/main.rs; examples/projects/mlp-inference; tests/mlp_inference_probe.py; docs/compute/training.md; docs/releases/runtime-0.09.md"
 
+[[gains]]
+id = "N12-SELF-HOSTED-CUSTOM-MLP"
+language = "0.10"
+summary = "A complete custom ReLU MLP can be authored in .sely with owned data ingestion, gradients, SGD, holdout evaluation, JSON persistence, reload and inference"
+evidence = "src/runtime.rs; src/semantic.rs; examples/projects/self-hosted-mlp; tests/self_hosted_mlp_probe.py; scripts/streaming/verify-event-chain.py; docs/compute/training.md; docs/project/status.md"
+
 [[extension_gains]]
 id = "EXT-N10-JSON-TYPED-ARRAY-INGESTION"
 language = "0.08"
@@ -121,6 +127,13 @@ language = "0.09"
 package = "0.9.0"
 summary = "VS Code exposes the verified batch-inference checkpoint workflow on the language 0.09 compatibility line"
 evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.9.0.md"
+
+[[extension_gains]]
+id = "EXT-N13-SELF-HOSTED-CUSTOM-MLP"
+language = "0.10"
+package = "0.10.0"
+summary = "VS Code completions expose the source-owned custom MLP, persistence, progress and canonical GPU alias workflow on the language 0.10 line"
+evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; examples/projects/self-hosted-mlp; docs/releases/vscode-0.10.0.md"
 
 [[runtime_gains]]
 id = "R1-WORKSPACE-CONTRACTS"

@@ -1479,6 +1479,110 @@ impl<'a> Checker<'a> {
                 };
                 result(Type::List(Box::new(value)))
             }
+            "from_text" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(value, &Type::Text, "JSON text value");
+                }
+                Type::Json
+            }
+            "from_i64" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(value, &Type::I64, "JSON integer value");
+                }
+                Type::Json
+            }
+            "from_f64" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(value, &Type::F64, "JSON floating value");
+                }
+                Type::Json
+            }
+            "from_f64_list" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(
+                        value,
+                        &Type::List(Box::new(Type::F64)),
+                        "JSON floating array",
+                    );
+                }
+                Type::Json
+            }
+            "sha256" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(value, &Type::Json, "JSON hash value");
+                }
+                Type::Text
+            }
+            "object" => {
+                self.check_standard_arity(name, arguments, 2, span);
+                if let Some(keys) = arguments.first() {
+                    self.ensure_expr_assignable(
+                        keys,
+                        &Type::List(Box::new(Type::Text)),
+                        "JSON object keys",
+                    );
+                }
+                if let Some(values) = arguments.get(1) {
+                    self.ensure_expr_assignable(
+                        values,
+                        &Type::List(Box::new(Type::Json)),
+                        "JSON object values",
+                    );
+                }
+                result(Type::Json)
+            }
+            "write_file" => {
+                self.check_standard_arity(name, arguments, 2, span);
+                if let Some(path) = arguments.first() {
+                    self.ensure_expr_assignable(path, &Type::Text, "JSON output path");
+                }
+                if let Some(value) = arguments.get(1) {
+                    self.ensure_expr_assignable(value, &Type::Json, "JSON output value");
+                }
+                result(Type::Unit)
+            }
+            "values" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(
+                        value,
+                        &Type::Tensor(TensorDtype::F32),
+                        "tensor values",
+                    );
+                }
+                Type::List(Box::new(Type::F64))
+            }
+            "progress" => {
+                self.check_standard_arity(name, arguments, 4, span);
+                if let Some(operation) = arguments.first() {
+                    self.ensure_expr_assignable(operation, &Type::Text, "progress operation");
+                }
+                if let Some(step) = arguments.get(1) {
+                    self.ensure_expr_assignable(step, &Type::I64, "progress step");
+                }
+                if let Some(total) = arguments.get(2) {
+                    self.ensure_expr_assignable(total, &Type::I64, "progress total");
+                }
+                if let Some(metric) = arguments.get(3) {
+                    let metric_type = self.type_of_expr(metric);
+                    if !matches!(
+                        metric_type,
+                        Type::F32 | Type::F64 | Type::Unknown | Type::Error
+                    ) {
+                        self.error(
+                            "SEL-T003",
+                            "progress metric must be F32 or F64",
+                            metric.span(),
+                        );
+                    }
+                }
+                Type::Unit
+            }
             "ModelRequest" => {
                 self.check_standard_arity(name, arguments, 4, span);
                 Type::ModelRequest
@@ -1577,7 +1681,7 @@ impl<'a> Checker<'a> {
                 }
                 Type::List(Box::new(Type::I64))
             }
-            "train_linear" | "train_linear_gpu" => {
+            "train_linear" | "train_linear_gpu" | "gpu" => {
                 self.check_standard_arity(name, arguments, 4, span);
                 Type::Json
             }
@@ -2001,6 +2105,13 @@ fn is_supported_standard_directive(text: &str) -> bool {
             "as_bool",
             "as_i64_list",
             "as_f64_list",
+            "from_text",
+            "from_i64",
+            "from_f64",
+            "from_f64_list",
+            "sha256",
+            "object",
+            "write_file",
         ]
         .as_slice(),
         "models" => [
@@ -2015,11 +2126,14 @@ fn is_supported_standard_directive(text: &str) -> bool {
         "training" => [
             "train_linear",
             "train_linear_gpu",
+            "gpu",
             "train_mlp",
             "predict_mlp",
             "load_checkpoint",
+            "progress",
         ]
         .as_slice(),
+        "tensor" => ["values"].as_slice(),
         _ => return false,
     };
     symbols.iter().all(|symbol| allowed.contains(symbol))

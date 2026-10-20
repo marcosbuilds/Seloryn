@@ -1,6 +1,6 @@
 # Next executable gates
 
-Seloryn is currently `0.09`: a bounded verified-preview language and runtime for
+Seloryn is currently `0.10`: a bounded verified-preview language and runtime for
 AI development and integration. The next steps are executable gates, not a
 promise that every design proposal already exists.
 
@@ -61,11 +61,14 @@ promise that every design proposal already exists.
   concurrently, verifies deterministic semantic receipts/checkpoints and exact
   workspace confinement, and records forced Windows termination behavior without
   claiming graceful cancellation.
+- The `self-hosted-mlp` proof now owns a complete custom ReLU network in `.sely`,
+  including its dataset, objective, updates, holdout evaluation, persisted
+  JSON checkpoint, reload and inference, with source-owned progress events.
 
 ## Next gates
 
-1. **Editor distribution — completed locally:** the `0.9.0` package is on the
-   same compatibility line as language `0.09` and runtime `0.9.4`. It contains
+1. **Editor distribution — completed locally:** the `0.10.0` package is on the
+   same compatibility line as language `0.10` and runtime `0.10.0`. It contains
    a deterministic self-contained VSIX, the canonical Seloryn symbol and the
    optional `.sely` file-icon theme. A real VS Code host still needs an
    interactive rendering check; that is a validation task, not an unbuilt
@@ -87,7 +90,7 @@ promise that every design proposal already exists.
    reusable `Parameter`/`Module`/`Dataset`/`Optimizer` APIs with explicit state
    and checkpoint compatibility. The current loop proves ownership of the
    orchestration, not yet a public object framework.
-5. **Runtime release:** the local 0.9.4 candidate now has supported Windows
+5. **Runtime release:** the local 0.10.0 candidate now has supported Windows
    x64 staging, checksums, provenance, installer failure-path evidence and the
    bounded operational reliability evidence. Public binaries, cross-platform
    installer execution, upgrade/rollback behavior and a release remain pending

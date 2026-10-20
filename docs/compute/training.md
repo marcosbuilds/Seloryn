@@ -1,6 +1,6 @@
 # Model training
 
-Seloryn `0.09` contains executable CPU training profiles, including a
+Seloryn `0.10` contains executable CPU training profiles, including a
 two-layer `F32` MLP with ReLU hidden activation, mean-squared error, SGD,
 deterministic mini-batches, holdout evaluation and resumable checkpoints. This
 is a verified preview of a small training workflow, not a general neural
@@ -23,6 +23,28 @@ bias = bias - rate * derivatives[2]
 import range` creates a bounded `List[I64]` for ordinary Seloryn `for` loops.
 The native runtime still owns the bounded tensor kernels and tape traversal;
 the training policy is no longer hidden inside `train_mlp`.
+
+## Custom network authored in `.sely`
+
+The [`self-hosted-mlp`](../../examples/projects/self-hosted-mlp) project is the
+stronger end-to-end proof. Its source defines a custom ReLU network and loss,
+loads its own numeric dataset, calls `gradients` with model parameters, applies
+every SGD update, evaluates a holdout split, constructs a versioned JSON
+checkpoint, writes it through a declared capability, reloads it and performs
+inference from the reloaded weights. It does not import or call `train_mlp`.
+
+The small runtime primitives used by that project are explicit:
+`from tensor import values` exports finite F32 weights as a typed list,
+`from json import object, from_f64_list, sha256, write_file` constructs and
+persists JSON values atomically and lets the source validate its weight payload,
+while `from training import progress` emits flushed
+`training.progress` events. `--log=json2` wraps those source-owned events in
+the same independently verifiable hash chain used by native profiles.
+
+The proof is a CPU, bounded, single-process workflow. Rust still supplies the
+reference tensor kernels and reverse-mode tape; it does not supply the custom
+model's training function, optimizer loop, checkpoint schema or inference
+policy.
 
 ## Executable MLP profile
 
@@ -112,9 +134,10 @@ host with no physical non-CPU adapter; when an adapter is reported, the shader r
 must pass with maximum absolute error at most `1e-6`.
 
 This is deliberately narrower than general GPU training. The current `Tensor`,
-reverse-mode autodiff tape and `train_mlp` contracts remain CPU-only. The new
-`training.train_linear_gpu` profile is a separate scalar F32 proof with
-device-resident parameters, WGSL SGD and one final readback; GPU tensor,
+reverse-mode autodiff tape and `train_mlp` contracts remain CPU-only. The
+`from training import gpu` profile (with the older `train_linear_gpu` import
+still accepted) is a separate scalar F32 proof with device-resident parameters,
+WGSL SGD and one final readback; GPU tensor,
 autodiff and MLP training still require their own backend-parity,
 determinism, memory and model-training gates.
 
@@ -195,7 +218,8 @@ AdamW, gradient accumulation, mixed precision, model serving, a general
 `Dataset`/`Module` API or transformer/LLM training. Those capabilities require
 separate numerical, reproducibility and platform evidence. The previous
 `training.train_linear` fixture remains available for compatibility, and
-`train_mlp` remains the CPU end-to-end proof of general model training.
+`train_mlp` remains the CPU end-to-end proof of the native bounded profile;
+`self-hosted-mlp` is the source-owned custom-model proof.
 
 ## Independent verification
 

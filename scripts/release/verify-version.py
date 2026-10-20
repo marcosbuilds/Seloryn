@@ -170,10 +170,10 @@ def validate(root: Path = ROOT) -> None:
             require_text(record, "package", "runtime gain package"),
             "runtime gain package",
         )
-        if runtime_language != current_language_number:
-            fail("runtime gain must target the current language compatibility line")
-        if runtime_gain[:2] != language_package_base:
+        if runtime_gain[:2] != package_base_for_language(runtime_language):
             fail("runtime gain package must follow its language compatibility line")
+        if runtime_language > current_language_number:
+            fail("runtime gain cannot target a future language compatibility line")
         if runtime_gain[2] == 0:
             fail("runtime gain package must be a patch update")
         if previous_runtime_gain is not None and runtime_gain <= previous_runtime_gain:
@@ -192,8 +192,8 @@ def validate(root: Path = ROOT) -> None:
             fail("same-language runtime updates require a matching runtime gain ledger")
     elif current_language_number != expected_language:
         fail("current language version must advance by exactly one accepted gain")
-    elif runtime_gains:
-        fail("language gains and runtime-only patch gains cannot be mixed")
+    elif current_runtime_number[2] != 0:
+        fail("a new language compatibility line must start at runtime patch zero")
 
     require_increasing(current_runtime_number, previous_runtime_number, "runtime package")
     latest_extension = extension_gains[-1]

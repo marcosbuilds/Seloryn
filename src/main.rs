@@ -33,7 +33,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 
-pub(crate) const LANGUAGE_VERSION: &str = "0.09";
+pub(crate) const LANGUAGE_VERSION: &str = "0.10";
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
 pub(crate) const EXIT_OK: u8 = 0;
@@ -41,7 +41,7 @@ const EXIT_USAGE: u8 = 64;
 pub(crate) const EXIT_DATA: u8 = 65;
 pub(crate) const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn doctor [project] [--format=human|json]\n  seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`doctor` performs read-only project validation and reports production blockers; it never executes project code.\n`init` creates a validated project skeleton without overwriting an existing path.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `train_linear_gpu` in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn doctor [project] [--format=human|json]\n  seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`doctor` performs read-only project validation and reports production blockers; it never executes project code.\n`init` creates a validated project skeleton without overwriting an existing path.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `from training import gpu` (the compatible `train_linear_gpu` name remains accepted) in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OutputFormat {
@@ -1141,6 +1141,15 @@ fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
             "seloryn inference.complete schema=1 operation=predict_mlp model={} device=cpu dtype=f32 samples={} input_size={} output_size={} checkpoint_step={}",
             model, samples, input_size, output_size, checkpoint_step
         ),
+        runtime::RuntimeEvent::Progress {
+            operation,
+            step,
+            total,
+            metric,
+        } => format!(
+            "seloryn training.progress schema=1 operation={} step={}/{} metric={metric:.8}",
+            operation, step, total
+        ),
     }
 }
 
@@ -1876,6 +1885,34 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
             object.insert(
                 "checkpoint_step".to_owned(),
                 json::JsonValue::Number(checkpoint_step.to_string()),
+            );
+        }
+        runtime::RuntimeEvent::Progress {
+            operation,
+            step,
+            total,
+            metric,
+        } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("training.progress".to_owned()),
+            );
+            object.insert(
+                "operation".to_owned(),
+                json::JsonValue::String(operation.clone()),
+            );
+            object.insert("step".to_owned(), json::JsonValue::Number(step.to_string()));
+            object.insert(
+                "total".to_owned(),
+                json::JsonValue::Number(total.to_string()),
+            );
+            object.insert(
+                "metric".to_owned(),
+                json::JsonValue::Number(format!("{metric:.8}")),
             );
         }
     }

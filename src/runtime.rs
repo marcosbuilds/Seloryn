@@ -11,7 +11,7 @@ use crate::tensor::{Tensor, TensorError};
 use crate::tensor_autograd;
 use sha2::{Digest, Sha256};
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
@@ -358,6 +358,16 @@ pub enum RuntimeEvent {
         checkpoint_sha256: String,
         input_sha256: String,
         checkpoint_step: i64,
+    },
+    /// User-owned training progress emitted by a `.sely` loop.
+    ///
+    /// This is deliberately small: the model policy stays in source while the
+    /// CLI owns delivery, flushing and optional receipt chaining.
+    Progress {
+        operation: String,
+        step: i64,
+        total: i64,
+        metric: f64,
     },
 }
 
@@ -1424,6 +1434,155 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                     value: Box::new(Value::List(converted)),
                 })
             }
+            "from_text" => {
+                let Some(Value::Text(value)) = values.first() else {
+                    return Ok(json_error_result("from_text requires Text"));
+                };
+                Ok(Value::Json(JsonValue::String(value.clone())))
+            }
+            "from_i64" => {
+                let Some(Value::I64(value)) = values.first() else {
+                    return Ok(json_error_result("from_i64 requires I64"));
+                };
+                Ok(Value::Json(JsonValue::Number(value.to_string())))
+            }
+            "from_f64" => {
+                let Some(Value::F64(value)) = values.first() else {
+                    return Ok(json_error_result("from_f64 requires F64"));
+                };
+                if !value.is_finite() {
+                    return Ok(json_error_result("from_f64 requires a finite value"));
+                }
+                Ok(Value::Json(JsonValue::Number(format_f64(*value))))
+            }
+            "from_f64_list" => {
+                let Some(Value::List(values)) = values.first() else {
+                    return Ok(json_error_result("from_f64_list requires List[F64]"));
+                };
+                let mut result = Vec::with_capacity(values.len());
+                for value in values {
+                    let Value::F64(value) = value else {
+                        return Ok(json_error_result("from_f64_list requires List[F64]"));
+                    };
+                    if !value.is_finite() {
+                        return Ok(json_error_result("from_f64_list requires finite values"));
+                    }
+                    result.push(JsonValue::Number(format_f64(*value)));
+                }
+                Ok(Value::Json(JsonValue::Array(result)))
+            }
+            "sha256" => {
+                let Some(Value::Json(value)) = values.first() else {
+                    return Ok(json_error_result("sha256 requires a Json value"));
+                };
+                Ok(Value::Text(sha256_hex(json::encode(value).as_bytes())))
+            }
+            "object" => {
+                let (Some(Value::List(keys)), Some(Value::List(values))) =
+                    (values.first(), values.get(1))
+                else {
+                    return Ok(json_error_result(
+                        "object requires List[Text] keys and List[Json] values",
+                    ));
+                };
+                if keys.len() != values.len() {
+                    return Ok(json_error_result(
+                        "object keys and values must have the same length",
+                    ));
+                }
+                let mut object = BTreeMap::new();
+                for (key, value) in keys.iter().zip(values) {
+                    let Value::Text(key) = key else {
+                        return Ok(json_error_result("object keys must be Text"));
+                    };
+                    let Value::Json(value) = value else {
+                        return Ok(json_error_result("object values must be Json"));
+                    };
+                    if object.insert(key.clone(), value.clone()).is_some() {
+                        return Ok(json_error_result(format!(
+                            "object contains duplicate key `{key}`"
+                        )));
+                    }
+                }
+                Ok(Value::Result {
+                    ok: true,
+                    value: Box::new(Value::Json(JsonValue::Object(object))),
+                })
+            }
+            "write_file" => {
+                let (Some(Value::Text(relative)), Some(Value::Json(value))) =
+                    (values.first(), values.get(1))
+                else {
+                    return Ok(json_error_result(
+                        "write_file requires Text path and Json value",
+                    ));
+                };
+                let path = self.resolve_write_path(relative, span)?;
+                match write_json_atomic(&path, &json::encode(value)) {
+                    Ok(()) => Ok(Value::Result {
+                        ok: true,
+                        value: Box::new(Value::Unit),
+                    }),
+                    Err(message) => Ok(json_error_result(message)),
+                }
+            }
+            "values" => {
+                let Some(Value::Tensor(tensor)) = values.first() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "values requires a Tensor[F32]",
+                        span,
+                    )));
+                };
+                let values = tensor
+                    .values_f32()
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))?
+                    .into_iter()
+                    .map(|value| Value::F64(value as f64))
+                    .collect();
+                Ok(Value::List(values))
+            }
+            "progress" => {
+                let [
+                    Value::Text(operation),
+                    Value::I64(step),
+                    Value::I64(total),
+                    metric,
+                ] = values.as_slice()
+                else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "progress requires Text, I64, I64 and F32/F64",
+                        span,
+                    )));
+                };
+                let metric = match metric {
+                    Value::F64(value) => *value,
+                    _ => {
+                        return Err(Control::Runtime(self.runtime(
+                            "SEL-R203",
+                            "progress metric must be F32/F64",
+                            span,
+                        )));
+                    }
+                };
+                if !metric.is_finite() {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "progress metric must be finite",
+                        span,
+                    )));
+                }
+                self.event_sink
+                    .emit(RuntimeEvent::Progress {
+                        operation: operation.clone(),
+                        step: *step,
+                        total: *total,
+                        metric,
+                    })
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                Ok(Value::Unit)
+            }
             "ModelRequest" => {
                 let [
                     Value::Text(model),
@@ -1649,7 +1808,7 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
                 Ok(result)
             }
-            "train_linear_gpu" => {
+            "gpu" | "train_linear_gpu" => {
                 let (Some(Value::Text(train)), Some(Value::Text(test))) =
                     (values.first(), values.get(1))
                 else {
@@ -1812,7 +1971,9 @@ impl<'a, 'event> Interpreter<'a, 'event> {
         span: Span,
     ) -> Eval<Vec<Value>> {
         let parameter_names: Option<&[&str]> = match name {
-            "train_linear" | "train_linear_gpu" => Some(&["train", "test", "seed", "steps"]),
+            "train_linear" | "train_linear_gpu" | "gpu" => {
+                Some(&["train", "test", "seed", "steps"])
+            }
             "train_mlp" => Some(&[
                 "train",
                 "test",
@@ -4241,6 +4402,47 @@ fn write_checkpoint_atomic(path: &Path, source: &str) -> Result<String, String> 
         return Err(error);
     }
     Ok(sha256_hex(source.as_bytes()))
+}
+
+/// Persist a program-produced JSON value without exposing arbitrary file I/O.
+///
+/// The interpreter has already resolved `path` against the manifest's write
+/// capability before this helper runs. The same-file temporary/flush/rename
+/// discipline used by native checkpoints is retained for source-owned model
+/// artifacts.
+fn write_json_atomic(path: &Path, source: &str) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| "JSON output path has no parent directory".to_owned())?;
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "JSON output path has no valid file name".to_owned())?;
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "JSON output temporary file clock is invalid".to_owned())?
+        .as_nanos();
+    let temporary = parent.join(format!(".{file_name}.tmp-{}-{nonce}", std::process::id()));
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&temporary)
+        .map_err(|error| format!("JSON output temporary file creation failed: {error}"))?;
+    let write_result = file
+        .write_all(source.as_bytes())
+        .and_then(|()| file.flush())
+        .and_then(|()| file.sync_all());
+    if let Err(error) = write_result {
+        drop(file);
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!("JSON output temporary file flush failed: {error}"));
+    }
+    drop(file);
+    if let Err(error) = replace_checkpoint_atomically(&temporary, path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!("JSON output atomic replacement failed: {error}"));
+    }
+    Ok(())
 }
 
 #[cfg(not(windows))]

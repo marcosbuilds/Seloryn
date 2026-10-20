@@ -57,6 +57,7 @@ const BUILTINS = Object.freeze([
   ['tensor_logsumexp', 'tensor_logsumexp(tensor, axis)', 'Compute stable log-sum-exp'],
   ['tensor_sum_to_shape', 'tensor_sum_to_shape(tensor, shape)', 'Reduce a broadcasted tensor'],
   ['train_linear', 'train_linear(train, test, seed, steps)', 'Narrow linear-training fixture'],
+  ['gpu', 'gpu(train, test, seed, steps)', 'Canonical GPU linear-training profile alias'],
   ['train_mlp', 'train_mlp(train, test, checkpoint, seed, steps, batch_size, hidden_size, learning_rate)', 'Train a bounded CPU MLP with tamper-detecting resume checkpoint'],
   ['predict_mlp', 'predict_mlp(checkpoint, inputs)', 'Run bounded batch inference from a verified MLP checkpoint'],
   ['load_checkpoint', 'load_checkpoint(path)', 'Read a bounded checkpoint fixture'],
@@ -68,6 +69,7 @@ const MODULES = Object.freeze([
   ['json', 'Bounded JSON project capability'],
   ['models', 'Narrow model contract fixture'],
   ['training', 'Bounded CPU linear and MLP training'],
+  ['tensor', 'Bounded CPU tensor value export'],
   ['data', 'Bounded data iteration helpers'],
 ]);
 
@@ -84,6 +86,15 @@ const STANDARD_FUNCTIONS = Object.freeze([
   ['as_bool', 'as_bool(value)', 'Convert a Json boolean'],
   ['as_i64_list', 'as_i64_list(value)', 'Convert a JSON number array to List[I64]'],
   ['as_f64_list', 'as_f64_list(value)', 'Convert a JSON number array to List[F64]'],
+  ['from_text', 'from_text(value)', 'Create a JSON string'],
+  ['from_i64', 'from_i64(value)', 'Create a JSON integer'],
+  ['from_f64', 'from_f64(value)', 'Create a JSON number'],
+  ['from_f64_list', 'from_f64_list(values)', 'Create a JSON number array'],
+  ['sha256', 'sha256(value)', 'Hash canonical JSON text with SHA-256'],
+  ['object', 'object(keys, values)', 'Create a JSON object from bounded key/value lists'],
+  ['write_file', 'write_file(path, value)', 'Atomically persist JSON inside a granted project root'],
+  ['values', 'values(tensor)', 'Export bounded F32 tensor values'],
+  ['progress', 'progress(operation, step, total, metric)', 'Flush one source-owned training progress event'],
   ['ModelRequest', 'ModelRequest(model, prompt, max_output_tokens, seed)', 'Create the model request fixture'],
   ['ModelResponse', 'ModelResponse(status, text)', 'Create the model response fixture'],
   ['fixture_provider', 'fixture_provider(request)', 'Call the deterministic model fixture'],
@@ -103,6 +114,8 @@ const SNIPPETS = Object.freeze([
   ['match', 'Exhaustive match block', 'match ${1:value}:\n    case ${2:pattern}:\n        ${0}'],
   ['train_mlp', 'Real bounded CPU MLP training', 'from training import train_mlp\n\nfn main() -> Json:\n    return train_mlp("data/train.json", "data/test.json", "checkpoints/model.json", seed=17, steps=640, batch_size=3, hidden_size=8, learning_rate=0.02)${0}'],
   ['predict_mlp', 'Bounded MLP batch inference', 'from training import predict_mlp\n\nfn main() -> Json:\n    return predict_mlp("checkpoints/model.json", "data/inputs.json")${0}'],
+  ['self_hosted_mlp', 'Source-owned custom MLP workflow', 'from autograd import gradients\nfrom data import range\nfrom json import as_f64_list, from_f64_list, object, sha256, write_file\nfrom tensor import values\nfrom training import progress\n\nfor ${1:step} in range(${2:160}):\n    let ${3:derivatives}: List[Tensor[F32]] = gradients(${4:objective}, ${5:inputs}, ${6:first}, ${7:first_bias}, ${8:second}, ${9:second_bias}, ${10:targets})\n    ${6:first} = ${6:first} - ${11:rate} * ${3:derivatives}[1]\n    ${7:first_bias} = ${7:first_bias} - ${11:rate} * ${3:derivatives}[2]\n    ${8:second} = ${8:second} - ${11:rate} * ${3:derivatives}[3]\n    ${9:second_bias} = ${9:second_bias} - ${11:rate} * ${3:derivatives}[4]\n    progress("custom-mlp", ${1:step}, ${2:160}, tensor_item_f32(${12:loss}))${0}'],
+  ['gpu', 'Canonical GPU linear-training alias', 'from training import gpu\n\nfn main() -> Json:\n    return gpu("data/train.json", "data/test.json", seed=7, steps=300)${0}'],
   ['self_hosted_train', 'Seloryn-authored gradient loop', 'from autograd import gradients\nfrom data import range\n\nfor ${1:step} in range(${2:120}):\n    let ${3:derivatives}: List[Tensor[F32]] = gradients(${4:objective}, ${5:inputs}, ${6:weight}, ${7:bias}, ${8:targets})\n    ${9:weight} = ${9:weight} - ${10:rate} * ${3:derivatives}[1]\n    ${11:bias} = ${11:bias} - ${10:rate} * ${3:derivatives}[2]${0}'],
   ['tensor_objective', 'Tensor objective returning a scalar', 'fn ${1:objective}(input: Tensor[F32]) -> Tensor[F32]:\n    let weights: Tensor[F32] = tensor_f32([1.0], [1, 1])\n    let prediction: Tensor[F32] = matmul(input, weights)\n    return tensor_mean(prediction * prediction)${0}']
 ]);

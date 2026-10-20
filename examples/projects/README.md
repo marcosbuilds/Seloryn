@@ -12,6 +12,10 @@ capabilities; they are not packages published to a registry.
   optimizer or model framework.
 - `mlp-training/` trains a real bounded two-layer CPU MLP with mini-batches,
   evaluation, checkpoint/resume and flushed terminal events.
+- `self-hosted-mlp/` defines a custom ReLU network and owns its dataset load,
+  reverse-mode update loop, holdout evaluation, checkpoint persistence,
+  checkpoint reload and inference in `.sely`; Rust supplies only tensor kernels
+  and the gradient primitive.
 - `mlp-inference/` consumes a hash-validated MLP checkpoint with deterministic
   batch predictions; copy a checkpoint from `mlp-training/` before execution.
 - `evaluation-pipeline/` combines local modules, JSON validation, typed

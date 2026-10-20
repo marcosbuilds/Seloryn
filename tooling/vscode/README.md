@@ -91,7 +91,7 @@ npm ci
 npm run package
 ```
 
-The result is a local `seloryn-language-0.9.0.vsix`. The package contains the
+The result is a local `seloryn-language-0.10.0.vsix`. The package contains the
 extension runtime, grammar, language configuration, README, logo and file-icon
 theme; tests, fixtures and the lockfile stay out of the VSIX.
 The packaging step fixes ZIP entry ordering and timestamps, so repeated builds

@@ -1,6 +1,6 @@
 # Current capability status
 
-Seloryn `0.09` is a verified-preview language/runtime for a bounded `.sely`
+Seloryn `0.10` is a verified-preview language/runtime for a bounded `.sely`
 subset. It includes an executable CPU MLP training profile, hardened resume
 integrity, a real physical non-fallback GPU compute probe and a closed GPU
 linear-training profile in addition to the earlier
@@ -20,6 +20,7 @@ purpose ML platform.
 | Versioned checkpoint save/resume with dataset, weight, sampler-state and complete-state hashes | **Verified preview** | [`src/runtime.rs`](../../src/runtime.rs), MLP black-box probe |
 | Human/JSON/JSON2 terminal streaming with flush, identity and stdout/stderr separation | **Verified preview for bounded CPU/GPU-linear training; JSON2 chain and replay independently verified** | [`src/main.rs`](../../src/main.rs), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py), [`replay-receipt.py`](../../scripts/streaming/replay-receipt.py) |
 | Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop | **Verified preview** | [`examples/projects/self-hosted-linear`](../../examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](../../tests/self_hosted_probe.py) |
+| Custom `.sely` ReLU MLP with own dataset, training, holdout evaluation, atomic checkpoint, reload and inference | **Verified preview** | [`examples/projects/self-hosted-mlp`](../../examples/projects/self-hosted-mlp), [`tests/self_hosted_mlp_probe.py`](../../tests/self_hosted_mlp_probe.py); `train_mlp` is not used |
 | Physical hardware adapter inventory and bounded WGSL compute/readback probe | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`tests/gpu_probe.py`](../../tests/gpu_probe.py) |
 | Explicit `train_linear_gpu` scalar F32 profile with device-resident parameters and one final readback | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`examples/projects/gpu-linear-training`](../../examples/projects/gpu-linear-training), [`tests/gpu_training_probe.py`](../../tests/gpu_training_probe.py) |
 | JSON2 program/manifest/dataset/checkpoint/result identity, replay helper, structured path redaction and optional HMAC authentication | **Verified preview for bounded training receipts** | [`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py) |
@@ -29,7 +30,7 @@ purpose ML platform.
 | Runtime release provenance: source tree, toolchain, lockfile, binary and staged artifact hashes | **Verified packaging gate** | [`scripts/release/package-runtime.py`](../../scripts/release/package-runtime.py), [`scripts/release/prepare-release.py`](../../scripts/release/prepare-release.py), [`tests/release_staging_probe.py`](../../tests/release_staging_probe.py) |
 | Versioned `seloryn.bundle.v1` artifacts with build metadata hash verification | **Verified runtime patch** | [`src/project.rs`](../../src/project.rs), [`src/main.rs`](../../src/main.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
 | Four-process operational reliability, deterministic semantic receipts/checkpoints and workspace confinement | **Verified bounded CPU evidence** | [`tests/operational_reliability_probe.py`](../../tests/operational_reliability_probe.py), [`operational-reliability.md`](../benchmarks/operational-reliability.md); forced Windows termination is classified separately and graceful cancellation is not claimed |
-| VS Code `.sely` highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and canonical Seloryn file icon | **Verified editor preview on the `0.09` language line** | [`tooling/vscode`](../../tooling/vscode); headless transport/controller tests and GitHub release publication pending |
+| VS Code `.sely` highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and canonical Seloryn file icon | **Verified editor preview on the `0.10` language line** | [`tooling/vscode`](../../tooling/vscode); headless transport/controller tests and GitHub release publication pending |
 | `seloryn lsp --stdio` full-document diagnostics, completion, definition and document symbols | **Verified bounded LSP v1 lifecycle slice** | [`src/lsp.rs`](../../src/lsp.rs), [`tooling/vscode/lsp-client.js`](../../tooling/vscode/lsp-client.js), [`tests/lsp_probe.py`](../../tests/lsp_probe.py); version ordering, stale-change rejection, `didClose` cleanup and diagnostic clearing are covered; indexed analysis and incremental range parsing remain outside this gate |
 | LSP document lifecycle, monotonic versions, stale-change rejection and framed-header validation | **Verified runtime patch** | [`src/lsp.rs`](../../src/lsp.rs), [`tests/lsp_probe.py`](../../tests/lsp_probe.py) |
 | Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
@@ -76,10 +77,11 @@ authentication and a closed GPU linear trainer whose weights remain in a WGSL
 storage buffer until one final readback. It does not claim public-key signing,
 asynchronous backpressure, GPU tensor/autodiff/MLP training or distributed
 execution.
-The public comparison remains honest: Seloryn's current differentiator is a
-single typed, bounded and observable workflow with an independently verifiable
-training receipt. Broad productivity, security-authenticity or performance
-superiority over established ML runtimes has not been proved.
+The public comparison remains honest: Seloryn now has a typed, bounded and
+observable workflow whose model and optimization policy can be authored in
+`.sely`, with an independently verifiable training receipt. Broad productivity,
+security-authenticity or performance superiority over established ML runtimes
+has not been proved.
 The `0.08` gain removes one concrete data-ingestion blocker by converting
 bounded JSON numeric arrays into typed lists that ordinary Seloryn loops can
 consume; it does not create a general dataframe, package registry or model
@@ -88,6 +90,12 @@ The `0.09` gain adds a bounded CPU MLP batch-inference path that validates the
 checkpoint's model weights/state hashes and input dimensions before producing
 deterministic predictions. It does not create a general model format, serving
 runtime, registry or GPU inference backend.
+The `0.10` custom `.sely` MLP gain adds program-owned JSON construction/persistence,
+tensor value export, flushed source-owned progress events and a black-box
+workflow that defines the network, objective, gradient updates, holdout
+evaluation, checkpoint reload and inference without `train_mlp`. It does not
+create a public `Module`/`Parameter` framework, GPU tensor training or a general
+checkpoint registry.
 The runtime-only `0.9.1` patch adds read-only project diagnosis and
 no-overwrite transactional initialization. These commands improve adoption and
 failure visibility but deliberately do not convert the verified-preview channel
