@@ -185,6 +185,7 @@ assert.ok(broadItems.some((item) => item.label === 'self_hosted_language_model')
 assert.ok(broadItems.some((item) => item.label === 'sha256'));
 assert.ok(broadItems.some((item) => item.label === 'write_file'));
 assert.ok(broadItems.some((item) => item.label === 'progress'));
+assert.ok(broadItems.some((item) => item.label === 'emit'));
 assert.ok(broadItems.some((item) => item.label === 'tensor'));
 assert.ok(broadItems.some((item) => item.label === 'data'));
 

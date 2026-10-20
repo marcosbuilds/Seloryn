@@ -703,7 +703,7 @@ fn imports(program: &Program) -> Vec<Import> {
 fn is_standard_module(module: &str) -> bool {
     matches!(
         module,
-        "io" | "json" | "models" | "autograd" | "training" | "data" | "tensor"
+        "io" | "json" | "models" | "autograd" | "training" | "data" | "tensor" | "audit"
     )
 }
 

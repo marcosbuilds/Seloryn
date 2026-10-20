@@ -19,6 +19,10 @@ capabilities; they are not packages published to a registry.
 - `self-hosted-language-model/` defines a modular 14-token bigram language model
   in `.sely`, including tokenizer, dataset, cross-entropy objective, SGD,
   evaluation, hash-validated checkpoint reload, JSON streaming and inference.
+- `auditable-local-inference/` defines a contract-first four-feature ReLU MLP
+  in `.sely`, including dataset/model/run validation, source-owned training,
+  holdout evaluation, hash-bound checkpoint reload, separate inference and a
+  structured audit event.
 - `mlp-inference/` consumes a hash-validated MLP checkpoint with deterministic
   batch predictions; copy a checkpoint from `mlp-training/` before execution.
 - `evaluation-pipeline/` combines local modules, JSON validation, typed

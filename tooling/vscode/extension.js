@@ -70,6 +70,7 @@ const MODULES = Object.freeze([
   ['json', 'Bounded JSON project capability'],
   ['models', 'Narrow model contract fixture'],
   ['training', 'Bounded CPU linear and MLP training'],
+  ['audit', 'Structured JSON2 audit events'],
   ['tensor', 'Bounded CPU tensor value export'],
   ['data', 'Bounded data iteration helpers'],
 ]);
@@ -97,6 +98,7 @@ const STANDARD_FUNCTIONS = Object.freeze([
   ['write_file', 'write_file(path, value)', 'Atomically persist JSON inside a granted project root'],
   ['values', 'values(tensor)', 'Export bounded F32 tensor values'],
   ['progress', 'progress(operation, step, total, metric)', 'Flush one source-owned training progress event'],
+  ['emit', 'emit(kind, payload)', 'Append a structured source-owned audit event to the JSON2 receipt'],
   ['len', 'len(value)', 'Count a List or Text value'],
   ['to_f64', 'to_f64(value)', 'Convert a numeric value to F64'],
   ['ModelRequest', 'ModelRequest(model, prompt, max_output_tokens, seed)', 'Create the model request fixture'],

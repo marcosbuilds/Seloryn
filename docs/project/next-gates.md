@@ -69,6 +69,12 @@ promise that every design proposal already exists.
   textual dataset ingestion, tokenizer, fused cross-entropy, reusable parameter
   and SGD modules, held-out evaluation, checkpoint hash validation, reload,
   JSON2 progress and a separate inference request.
+- The `auditable-local-inference` proof now owns a complete small ReLU MLP
+  workflow in `.sely`, including explicit dataset/model/run contracts, its own
+  data ingestion, source-owned updates, holdout evaluation, hash-bound JSON
+  checkpoint, separate inference, structured audit event and six negative
+  boundary cases. A pure-Python standard-library implementation is used only
+  as an independent numerical oracle.
 
 ## Next gates
 
@@ -87,10 +93,12 @@ promise that every design proposal already exists.
    `seloryn.lsp.enabled=false` preserves the saved-file CLI bridge with its
    timeout, output bound and cancellation fixtures. Incremental/indexed project
    analysis, range-change support and rename remain the next editor gates.
-3. **AI workflow evidence:** compare one small Seloryn AI-development workflow
-   with an equivalent conventional workflow. Measure invalid states,
-   development/production adaptations and diagnostic effort before making an
-   advantage claim.
+3. **AI workflow evidence — first slice completed:** the auditable local-
+   inference proof compares numerical results with a pure-Python oracle and
+   measures contract rejection, checkpoint tampering, receipt validity and
+   source ownership. The next study must compare development/production
+   adaptations and diagnostic effort against a real MLflow/DVC-style workflow
+   without claiming superiority from the fixture alone.
 4. **Numerical continuation:** turn the proven Seloryn-authored loop into
    reusable `Parameter`/`Module`/`Dataset`/`Optimizer` APIs with explicit state
    and checkpoint compatibility. The current loop proves ownership of the

@@ -67,6 +67,10 @@ jobs:
         run: python tests/self_hosted_probe.py
       - name: Independent self-hosted language-model proof
         run: python tests/self_hosted_language_model_probe.py
+      - name: Independent auditable local-inference proof
+        run: python tests/auditable_local_inference_probe.py
+      - name: Operational reliability and workspace confinement proof
+        run: python tests/operational_reliability_probe.py
       - name: Python/Seloryn language-model comparison
         run: python tests/compare_language_model.py
       - name: GPU compute probe when an adapter exists

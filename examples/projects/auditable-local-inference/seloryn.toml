@@ -1,0 +1,13 @@
+[package]
+name = "auditable-local-inference"
+language = "0.12"
+source_root = "src"
+entry = "auditable-local-inference-entry.sely"
+
+[capabilities]
+read = ["contracts", "data", "checkpoints"]
+write = ["checkpoints"]
+
+[limits]
+json_max_bytes = 1048576
+json_max_depth = 32

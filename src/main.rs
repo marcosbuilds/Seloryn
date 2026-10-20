@@ -131,7 +131,7 @@ fn main() -> ExitCode {
 fn run(args: &[OsString]) -> u8 {
     match classify(args) {
         Action::Help => write_stdout(&format!(
-            "{HELP_TEXT}CPU training remains the verified path for the MLP;\n"
+            "{HELP_TEXT}Source-owned workflows can emit structured audit events through `from audit import emit`; JSON2 includes them in the same hash-chained receipt.\nCPU training remains the verified path for the MLP;\n"
         )),
         Action::Version => write_stdout(&format!(
             "seloryn {LANGUAGE_VERSION} package={PACKAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=verified-preview\n"
@@ -1150,6 +1150,11 @@ fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
             "seloryn training.progress schema=1 operation={} step={}/{} metric={metric:.8}",
             operation, step, total
         ),
+        runtime::RuntimeEvent::Audit { kind, payload } => format!(
+            "seloryn audit.record schema=1 kind={} payload={}",
+            kind,
+            json::encode(payload)
+        ),
     }
 }
 
@@ -1914,6 +1919,21 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
                 "metric".to_owned(),
                 json::JsonValue::Number(format!("{metric:.8}")),
             );
+        }
+        runtime::RuntimeEvent::Audit { kind, payload } => {
+            object.insert(
+                "schema_version".to_owned(),
+                json::JsonValue::Number("1".to_owned()),
+            );
+            object.insert(
+                "event".to_owned(),
+                json::JsonValue::String("audit.record".to_owned()),
+            );
+            object.insert(
+                "audit_kind".to_owned(),
+                json::JsonValue::String(kind.clone()),
+            );
+            object.insert("payload".to_owned(), payload.clone());
         }
     }
     json::encode(&json::JsonValue::Object(object))

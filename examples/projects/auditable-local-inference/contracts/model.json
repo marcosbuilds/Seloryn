@@ -1,0 +1,13 @@
+{
+  "schema": "seloryn.model.v1",
+  "model_id": "equipment-health-mlp",
+  "architecture": "dense_relu_dense_score",
+  "dtype": "f32",
+  "input_size": 4,
+  "hidden_size": 4,
+  "output_size": 1,
+  "loss": "mean_squared_error",
+  "learning_rate": 0.05,
+  "steps": 320,
+  "threshold": 0.5
+}

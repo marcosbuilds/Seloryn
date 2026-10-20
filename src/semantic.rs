@@ -1626,6 +1626,16 @@ impl<'a> Checker<'a> {
                 }
                 Type::Unit
             }
+            "emit" => {
+                self.check_standard_arity(name, arguments, 2, span);
+                if let Some(kind) = arguments.first() {
+                    self.ensure_expr_assignable(kind, &Type::Text, "audit event kind");
+                }
+                if let Some(payload) = arguments.get(1) {
+                    self.ensure_expr_assignable(payload, &Type::Json, "audit record payload");
+                }
+                Type::Unit
+            }
             "ModelRequest" => {
                 self.check_standard_arity(name, arguments, 4, span);
                 Type::ModelRequest
@@ -2177,6 +2187,7 @@ fn is_supported_standard_directive(text: &str) -> bool {
             "progress",
         ]
         .as_slice(),
+        "audit" => ["emit"].as_slice(),
         "tensor" => ["values"].as_slice(),
         _ => return false,
     };

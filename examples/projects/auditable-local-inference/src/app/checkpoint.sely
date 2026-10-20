@@ -1,0 +1,49 @@
+module app.checkpoint
+
+from app.contracts import Contract
+from app.data import Dataset
+from app.model import Model
+from data import len
+from json import as_f64_list, as_i64, as_text, from_f64, from_f64_list, from_i64, from_text, get, object, read_file, sha256, write_file
+from tensor import values
+
+pub fn save(path: Text, model: Model, contract: Contract, train_data: Dataset, test_data: Dataset, steps: I64) -> Result[Text, JsonIoError]:
+    let weights: Json = from_f64_list(values(model.first) + values(model.first_bias) + values(model.second) + values(model.second_bias))
+    let weights_hash: Text = sha256(weights)
+    let fields: List[Json] = [from_text("seloryn.checkpoint.v1"), from_text(contract.model_id), from_text(contract.architecture), from_i64(contract.feature_count), from_i64(contract.hidden_size), from_i64(contract.output_size), from_text(contract.dataset_spec_hash), from_text(contract.model_spec_hash), from_text(contract.run_spec_hash), from_text(train_data.source_hash), from_text(test_data.source_hash), from_i64(steps), from_f64(contract.learning_rate), weights, from_text(weights_hash)]
+    let checkpoint: Json = object(["schema", "model_id", "architecture", "input_size", "hidden_size", "output_size", "dataset_spec_sha256", "model_spec_sha256", "run_spec_sha256", "train_data_sha256", "test_data_sha256", "steps", "learning_rate", "weights", "weights_sha256"], fields)?
+    write_file(path, checkpoint)?
+    return Ok(sha256(checkpoint))
+
+pub fn restore(path: Text, contract: Contract, train_data: Dataset, test_data: Dataset) -> Result[Model, JsonIoError]:
+    let checkpoint: Json = read_file(path)?
+    let schema: Text = as_text(get(checkpoint, ["schema"])?)?
+    let model_id: Text = as_text(get(checkpoint, ["model_id"])?)?
+    let architecture: Text = as_text(get(checkpoint, ["architecture"])?)?
+    let input_size: I64 = as_i64(get(checkpoint, ["input_size"])?)?
+    let hidden_size: I64 = as_i64(get(checkpoint, ["hidden_size"])?)?
+    let output_size: I64 = as_i64(get(checkpoint, ["output_size"])?)?
+    let dataset_hash: Text = as_text(get(checkpoint, ["dataset_spec_sha256"])?)?
+    let model_hash: Text = as_text(get(checkpoint, ["model_spec_sha256"])?)?
+    let run_hash: Text = as_text(get(checkpoint, ["run_spec_sha256"])?)?
+    let train_hash: Text = as_text(get(checkpoint, ["train_data_sha256"])?)?
+    let test_hash: Text = as_text(get(checkpoint, ["test_data_sha256"])?)?
+    let steps: I64 = as_i64(get(checkpoint, ["steps"])?)?
+    let learning_rate: F64 = as_f64(get(checkpoint, ["learning_rate"])?)?
+    let weights: Json = get(checkpoint, ["weights"])?
+    let expected_weights_hash: Text = as_text(get(checkpoint, ["weights_sha256"])?)?
+    require schema == "seloryn.checkpoint.v1" else JsonIoError("unsupported checkpoint schema")
+    require model_id == contract.model_id else JsonIoError("checkpoint model id does not match contract")
+    require architecture == contract.architecture else JsonIoError("checkpoint architecture does not match contract")
+    require input_size == contract.feature_count and hidden_size == contract.hidden_size and output_size == contract.output_size else JsonIoError("checkpoint tensor shapes do not match contract")
+    require dataset_hash == contract.dataset_spec_hash else JsonIoError("dataset contract hash does not match checkpoint")
+    require model_hash == contract.model_spec_hash else JsonIoError("model contract hash does not match checkpoint")
+    require run_hash == contract.run_spec_hash else JsonIoError("run contract hash does not match checkpoint")
+    require train_hash == train_data.source_hash else JsonIoError("training dataset changed since checkpoint")
+    require test_hash == test_data.source_hash else JsonIoError("test dataset changed since checkpoint")
+    require steps == contract.steps else JsonIoError("checkpoint steps do not match contract")
+    require learning_rate == contract.learning_rate else JsonIoError("checkpoint learning rate does not match contract")
+    require expected_weights_hash == sha256(weights) else JsonIoError("checkpoint weights hash does not match payload")
+    let packed: List[F64] = as_f64_list(weights)?
+    require len(packed) == 25 else JsonIoError("checkpoint weight count does not match architecture")
+    return Ok(Model(tensor_f32([packed[0], packed[1], packed[2], packed[3], packed[4], packed[5], packed[6], packed[7], packed[8], packed[9], packed[10], packed[11], packed[12], packed[13], packed[14], packed[15]], [4, 4]), tensor_f32([packed[16], packed[17], packed[18], packed[19]], [1, 4]), tensor_f32([packed[20], packed[21], packed[22], packed[23]], [4, 1]), tensor_f32([packed[24]], [1, 1])))

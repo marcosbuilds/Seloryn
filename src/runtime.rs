@@ -369,6 +369,11 @@ pub enum RuntimeEvent {
         total: i64,
         metric: f64,
     },
+    /// User-owned audit record emitted by a `.sely` workflow.
+    ///
+    /// The payload is structured JSON and is delivered through the same CLI
+    /// sink as training events without granting any additional capability.
+    Audit { kind: String, payload: JsonValue },
 }
 
 /// Receives runtime events while execution is in progress.
@@ -1628,6 +1633,29 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                         step: *step,
                         total: *total,
                         metric,
+                    })
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                Ok(Value::Unit)
+            }
+            "emit" => {
+                let [Value::Text(kind), Value::Json(payload)] = values.as_slice() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "audit.emit requires Text and Json",
+                        span,
+                    )));
+                };
+                if kind.is_empty() || kind.len() > 128 {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "audit.emit kind must contain 1 to 128 bytes",
+                        span,
+                    )));
+                }
+                self.event_sink
+                    .emit(RuntimeEvent::Audit {
+                        kind: kind.clone(),
+                        payload: payload.clone(),
                     })
                     .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
                 Ok(Value::Unit)

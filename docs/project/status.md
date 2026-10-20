@@ -22,6 +22,7 @@ purpose ML platform.
 | Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop | **Verified preview** | [`examples/projects/self-hosted-linear`](../../examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](../../tests/self_hosted_probe.py) |
 | Custom `.sely` ReLU MLP with own dataset, training, holdout evaluation, atomic checkpoint, reload and inference | **Verified preview** | [`examples/projects/self-hosted-mlp`](../../examples/projects/self-hosted-mlp), [`tests/self_hosted_mlp_probe.py`](../../tests/self_hosted_mlp_probe.py); `train_mlp` is not used |
 | Complete source-owned `.sely` bigram language model with runtime-loaded vocabulary/datasets, reusable parameters/SGD, training, held-out evaluation, hash-validated checkpoint reload and separate inference | **Verified preview** | [`examples/projects/self-hosted-language-model`](../../examples/projects/self-hosted-language-model), [`tests/self_hosted_language_model_probe.py`](../../tests/self_hosted_language_model_probe.py), [`docs/compute/language-model.md`](../compute/language-model.md); CPU-only and one-token context |
+| Source-owned auditable local-inference workflow with explicit dataset/model/run contracts, hash-bound checkpoint persistence, separate inference and structured audit event | **Verified preview** | [`examples/projects/auditable-local-inference`](../../examples/projects/auditable-local-inference), [`tests/auditable_local_inference_probe.py`](../../tests/auditable_local_inference_probe.py), [`docs/benchmarks/auditable-local-inference.md`](../benchmarks/auditable-local-inference.md); bounded CPU fixture |
 | Physical hardware adapter inventory and bounded WGSL compute/readback probe | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`tests/gpu_probe.py`](../../tests/gpu_probe.py) |
 | Explicit `train_linear_gpu` scalar F32 profile with device-resident parameters and one final readback | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`examples/projects/gpu-linear-training`](../../examples/projects/gpu-linear-training), [`tests/gpu_training_probe.py`](../../tests/gpu_training_probe.py) |
 | JSON2 program/manifest/dataset/checkpoint/result identity, replay helper, structured path redaction and optional HMAC authentication | **Verified preview for bounded training receipts** | [`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py) |
@@ -109,6 +110,12 @@ datasets, reusable source-level parameters and SGD, fused cross-entropy with
 finite-difference coverage, and a repeated benchmark plus installed-terminal
 proof. It still does not claim a transformer, context larger than one token,
 GPU tensor training, HTTP serving or stable ABI.
+The first auditable local-inference proof adds a separate source-owned ReLU MLP
+workflow with explicit dataset/model/run contracts, hash-bound checkpoint
+metadata, a second-process inference request, structured audit events inside
+the JSON2 receipt and six negative boundary cases. It proves the contract and
+receipt shape for this fixture; it does not claim general model interchange,
+serving, performance superiority or production-ready runtime status.
 The runtime-only `0.9.1` patch adds read-only project diagnosis and
 no-overwrite transactional initialization. These commands improve adoption and
 failure visibility but deliberately do not convert the verified-preview channel

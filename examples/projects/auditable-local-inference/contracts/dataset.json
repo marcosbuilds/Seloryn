@@ -1,0 +1,13 @@
+{
+  "schema": "seloryn.dataset.v1",
+  "dataset_id": "equipment-health",
+  "revision": "fixture-1",
+  "task": "binary_score",
+  "dtype": "f32",
+  "feature_names": ["temperature", "vibration", "load", "age_days"],
+  "feature_count": 4,
+  "train_rows": 8,
+  "test_rows": 4,
+  "target_name": "requires_review",
+  "target_values": [0.0, 1.0]
+}

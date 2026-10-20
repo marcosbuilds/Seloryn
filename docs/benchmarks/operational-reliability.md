@@ -40,17 +40,17 @@ the temporary absolute workspace path.
 
 ## Observed run
 
-Executed on 2026-10-16 from `D:\Project\Seloryn\seloryn`:
+Executed on 2026-10-20 from `D:\Project\Seloryn\seloryn`:
 
 ```text
 python --version
 Python 3.10.0
 
 target\release\seloryn.exe --version
-seloryn 0.09 package=0.9.4 build=local-development status=verified-preview
+seloryn 0.12 package=0.12.0 build=local-development status=verified-preview
 
 SHA-256(target\release\seloryn.exe)
-48EC29DFC766ACCFE9A1D5C971295C241D18529CA7AA74615A1E133BC82E1488
+8DD3E37AF79D6F3FB47E594EA69F381C4C2C13DF2558C8C2E93E01373B37CE11
 
 python tests/operational_reliability_probe.py
 ```

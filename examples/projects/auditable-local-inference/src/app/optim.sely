@@ -1,0 +1,17 @@
+module app.optim
+
+pub record Parameter:
+    name: Text
+    value: Tensor[F32]
+
+pub record Sgd:
+    learning_rate: Tensor[F32]
+
+pub fn parameter(name: Text, value: Tensor[F32]) -> Parameter:
+    return Parameter(name, value)
+
+pub fn sgd(learning_rate: F64) -> Sgd:
+    return Sgd(tensor_f32([learning_rate], []))
+
+pub fn step(optimizer: Sgd, parameter_value: Parameter, gradient: Tensor[F32]) -> Parameter:
+    return Parameter(parameter_value.name, parameter_value.value - optimizer.learning_rate * gradient)
