@@ -1467,15 +1467,17 @@ impl<'a> Checker<'a> {
                 };
                 result(value)
             }
-            "as_i64_list" | "as_f64_list" => {
+            "as_i64_list" | "as_f64_list" | "as_text_list" => {
                 self.check_standard_arity(name, arguments, 1, span);
                 if let Some(value) = arguments.first() {
                     self.ensure_expr_assignable(value, &Type::Json, "JSON value");
                 }
                 let value = if name == "as_i64_list" {
                     Type::I64
-                } else {
+                } else if name == "as_f64_list" {
                     Type::F64
+                } else {
+                    Type::Text
                 };
                 result(Type::List(Box::new(value)))
             }
@@ -2105,6 +2107,7 @@ fn is_supported_standard_directive(text: &str) -> bool {
             "as_bool",
             "as_i64_list",
             "as_f64_list",
+            "as_text_list",
             "from_text",
             "from_i64",
             "from_f64",

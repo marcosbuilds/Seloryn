@@ -3,7 +3,9 @@
 Commands:
 
 ```text
+cargo build --release
 python tests/self_hosted_language_model_probe.py
+python tests/compare_language_model.py
 ```
 
 The probe runs the release binary directly. It checks this project, trains from

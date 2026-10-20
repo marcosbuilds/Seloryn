@@ -1401,7 +1401,7 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                         Ok,
                     )
             }
-            "as_i64_list" | "as_f64_list" => {
+            "as_i64_list" | "as_f64_list" | "as_text_list" => {
                 let Some(Value::Json(JsonValue::Array(values))) = values.first() else {
                     return Ok(json_error_result(format!("{name} requires a JSON array")));
                 };
@@ -1412,19 +1412,26 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 }
                 let mut converted = Vec::with_capacity(values.len());
                 for value in values {
-                    let JsonValue::Number(number) = value else {
-                        return Ok(json_error_result(format!(
-                            "{name} requires an array of numbers"
-                        )));
-                    };
-                    let converted_value = if name == "as_i64_list" {
-                        number.parse::<i64>().ok().map(Value::I64)
+                    let converted_value = if name == "as_text_list" {
+                        match value {
+                            JsonValue::String(text) => Some(Value::Text(text.clone())),
+                            _ => None,
+                        }
                     } else {
-                        number.parse::<f64>().ok().map(Value::F64)
+                        let JsonValue::Number(number) = value else {
+                            return Ok(json_error_result(format!(
+                                "{name} requires an array of numbers"
+                            )));
+                        };
+                        if name == "as_i64_list" {
+                            number.parse::<i64>().ok().map(Value::I64)
+                        } else {
+                            number.parse::<f64>().ok().map(Value::F64)
+                        }
                     };
                     let Some(converted_value) = converted_value else {
                         return Ok(json_error_result(format!(
-                            "{name} received an incompatible JSON number"
+                            "{name} received an incompatible JSON value"
                         )));
                     };
                     converted.push(converted_value);

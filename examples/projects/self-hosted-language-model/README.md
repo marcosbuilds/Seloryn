@@ -7,15 +7,15 @@ inteiramente em `.sely`.
 data/*.json
     -> app.tokenizer        vocabulário e IDs próprios
     -> app.data             pares bigram e one-hot
-    -> app.model            matmul -> softmax -> log -> cross-entropy
+    -> app.model            matmul -> logsumexp - logit-alvo
     -> app.training         gradients + SGD + avaliação + persistência
     -> app.checkpoint       JSON versionado e hash SHA-256
     -> app.serving          recarga e geração gulosa
     -> app.production       stdin: train | infer
 ```
 
-O limite é intencional e honesto: a entrada é JSON com uma lista de tokens
-inteiros pertencentes ao vocabulário fixo de 14 palavras/símbolos. Não há
+O limite é intencional e honesto: a entrada é JSON com uma lista textual de
+tokens pertencentes ao vocabulário fixo de 14 palavras/símbolos. Não há
 tokenização Unicode, subwords, batching dinâmico ou contexto maior que um
 token. O modelo aprende a distribuição do próximo token (`bigram`) e gera
 texto seguindo essa distribuição.
@@ -61,7 +61,8 @@ produziram os mesmos resultados dentro de `3e-6`:
 
 O treino saiu com código `0`, emitiu 160 eventos `training.progress` em uma
 cadeia JSON2 válida, salvou e recarregou o checkpoint, e a segunda invocação
-de inferência retornou `park <eos>` com `status=ok`. O caso negativo com um
+de inferência com o prompt `<bos> the cat` retornou `sat on the park` com
+`status=ok`. O caso negativo com um
 token desconhecido saiu com código diferente de zero e a mensagem
 `unknown token in dataset`. Os hashes e o quadro completo estão em
 [`evidence.md`](evidence.md).
