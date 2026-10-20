@@ -75,6 +75,13 @@ promise that every design proposal already exists.
   checkpoint, separate inference, structured audit event and six negative
   boundary cases. A pure-Python standard-library implementation is used only
   as an independent numerical oracle.
+- The next continuation is also closed with evidence: the contiguous tensor
+  access fast path reduced the recorded five-run median from `0.182768 s` to
+  `0.157362 s` (`13.9%`) without changing the numerical result; both source-
+  owned training projects now share the same `Parameter`/`Sgd` contract;
+  multi-symbol local imports validate every requested export; and source-owned
+  training receipts replay successfully in an isolated copy while rejecting a
+  changed dataset.
 
 ## Next gates
 
@@ -99,20 +106,24 @@ promise that every design proposal already exists.
    source ownership. The next study must compare development/production
    adaptations and diagnostic effort against a real MLflow/DVC-style workflow
    without claiming superiority from the fixture alone.
-4. **Numerical continuation:** turn the proven Seloryn-authored loop into
-   reusable `Parameter`/`Module`/`Dataset`/`Optimizer` APIs with explicit state
-   and checkpoint compatibility. The current loop proves ownership of the
-   orchestration, not yet a public object framework.
+4. **Numerical continuation — first contract slice completed:** `Parameter`,
+   `replace`, `Sgd`, `sgd(Tensor[F32])`, `sgd_rate(F64)` and `step` are now a
+   shared source-level contract exercised by the MLP and language-model
+   projects. The next gate is explicit parameter collections, optimizer state
+   and checkpoint compatibility; a public `Module`/`Dataset` framework is not
+   claimed yet.
 5. **Runtime release:** the local 0.12.0 candidate now has supported Windows
    x64 staging, checksums, provenance, installer failure-path evidence and the
    bounded operational reliability evidence. Public binaries, cross-platform
    installer execution, upgrade/rollback behavior and a release remain pending
    explicit publication authorization and corresponding platform evidence.
-6. **Receipt continuation — first slice completed:** identity, successful
-   isolated replay, structured path redaction and keyed HMAC authentication
-   are now tested. Remaining gates are pre-run failure receipts, initial
-   checkpoint snapshots for resume replay, public-key signatures, async
-   backpressure, slow/disconnected consumer evidence and measured overhead.
+6. **Receipt continuation — source-owned training slice completed:** identity,
+   successful isolated replay for native and source-owned CPU training,
+   semantic-event comparison, structured path redaction and keyed HMAC
+   authentication are now tested. Remaining gates are pre-run failure receipts,
+   initial checkpoint snapshots for resume replay, filesystem-wide output
+   snapshots, public-key signatures, async backpressure and
+   slow/disconnected consumer evidence.
 7. **GPU continuation — first slice completed:** the closed `train_linear_gpu`
    proof is real on a declared physical adapter. The next gate is a reusable
    device-resident Tensor/F32 abstraction, then GPU autodiff and MLP training;

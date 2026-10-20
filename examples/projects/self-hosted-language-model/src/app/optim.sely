@@ -8,5 +8,8 @@ pub record Sgd:
 pub fn sgd(learning_rate: Tensor[F32]) -> Sgd:
     return Sgd(learning_rate)
 
+pub fn sgd_rate(learning_rate: F64) -> Sgd:
+    return Sgd(tensor_f32([learning_rate], []))
+
 pub fn step(optimizer: Sgd, parameter: Parameter, gradient: Tensor[F32]) -> Parameter:
     return replace(parameter, parameter.value - optimizer.learning_rate * gradient)

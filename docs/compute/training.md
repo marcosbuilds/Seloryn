@@ -152,8 +152,10 @@ manifest, exact dataset bytes, the checkpoint before training and the canonical
 `{stdout,value}` result. Structured dataset/checkpoint paths are replaced by
 non-reversible path identifiers in JSON2. The helper
 [`replay-receipt.py`](../../scripts/streaming/replay-receipt.py) re-executes a
-successful bounded receipt in an isolated copy and compares these identities
-and the final result. Resume replay requires the original pre-run checkpoint
+successful native or source-owned training receipt in an isolated copy and compares
+these identities, semantic source events and the final result. Source-owned
+replay requires the recorded train request and explicit dataset contract event.
+Resume replay requires the original pre-run checkpoint
 snapshot to still be supplied; a post-run checkpoint is rejected instead of
 silently treated as the input.
 The MLP lifecycle in both JSON formats is:

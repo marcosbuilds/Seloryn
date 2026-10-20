@@ -58,6 +58,31 @@ def softmax(row: list[float]) -> list[float]:
     return [value / total for value in exponents]
 
 
+def replay_receipt(receipt: str, project: Path) -> subprocess.CompletedProcess[str]:
+    with tempfile.NamedTemporaryFile("w", suffix=".json2", encoding="utf-8", delete=False) as handle:
+        handle.write(receipt)
+        receipt_path = Path(handle.name)
+    try:
+        return subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "streaming" / "replay-receipt.py"),
+                "--receipt",
+                str(receipt_path),
+                "--project",
+                str(project),
+                "--binary",
+                str(BINARY),
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    finally:
+        receipt_path.unlink(missing_ok=True)
+
+
 def reference_train(train_pairs: list[tuple[int, int]], test_pairs: list[tuple[int, int]], steps: int = 160) -> dict:
     vocabulary_size = len(VOCAB)
     weights = [[0.0 for _ in range(vocabulary_size)] for _ in range(vocabulary_size)]
@@ -123,9 +148,11 @@ def main() -> None:
     assert CHECKPOINT.is_file(), CHECKPOINT
 
     receipt_lines = [json.loads(line) for line in trained.stderr.splitlines() if line.strip()]
-    assert len(receipt_lines) == 23, len(receipt_lines)
+    assert len(receipt_lines) == 25, len(receipt_lines)
     assert receipt_lines[0]["kind"] == "run.start", receipt_lines[0]
     assert receipt_lines[-1]["kind"] == "run.end", receipt_lines[-1]
+    assert len(receipt_lines[0]["data"]["identity"]["train_sha256"]) == 64
+    assert len(receipt_lines[0]["data"]["identity"]["test_sha256"]) == 64
     progress = [event for event in receipt_lines if event["kind"] == "training.progress"]
     assert len(progress) == 21, len(progress)
     assert progress[0]["data"]["step"] == 1, progress[0]
@@ -146,6 +173,9 @@ def main() -> None:
     finally:
         receipt_path.unlink(missing_ok=True)
     assert verified.returncode == 0, (verified.returncode, verified.stdout, verified.stderr)
+    replayed = replay_receipt(trained.stderr, PROJECT)
+    assert replayed.returncode == 0, (replayed.stdout, replayed.stderr)
+    assert "program, datasets, result and checkpoint identity match" in replayed.stdout
 
     checkpoint = json.loads(CHECKPOINT.read_text(encoding="utf-8"))
     assert checkpoint["schema"] == "seloryn.sely.language-model.v1", checkpoint
@@ -241,7 +271,7 @@ def main() -> None:
     bars = " ".join("#" * max(1, round(20 * (value - minimum) / max(maximum - minimum, 1e-12))) for value in points)
     print("Seloryn self-hosted language-model proof: PASS")
     print(f"check_exit=0 train_exit=0 streaming_verify_exit={verified.returncode} infer_exit=0 negative_dataset_exit={malformed_run.returncode} variable_vocab=5_exit={variant_run.returncode}")
-    print(f"events=23 progress=21 receipt={verified.stdout.strip()}")
+    print(f"events=25 progress=21 receipt={verified.stdout.strip()} replay_exit={replayed.returncode}")
     print("comparison | backend | initial_loss | final_loss | test_loss | accuracy | seconds")
     print(f"comparison | Seloryn/.sely | {report['initial_loss']:.8f} | {report['final_loss']:.8f} | {report['test_loss']:.8f} | {report['test_accuracy']:.6f} | {seloryn_seconds:.4f}")
     print(f"comparison | Python/pure  | {reference['initial_loss']:.8f} | {reference['final_loss']:.8f} | {reference['test_loss']:.8f} | {reference['accuracy']:.6f} | {python_seconds:.4f}")

@@ -564,19 +564,19 @@ impl Loader {
             match import {
                 Import::Local {
                     module,
-                    symbol,
+                    symbols,
                     alias,
                 } => {
-                    let module_path = self.resolve_module(&module, symbol.is_some())?;
+                    let module_path = self.resolve_module(&module, !symbols.is_empty())?;
                     self.visit(&module_path, false)?;
-                    if let Some(symbol) = symbol
-                        && !self.is_exported(&module_path, &symbol)
-                    {
-                        return Err(Diagnostic::new(
-                            "SEL-M004",
-                            format!("`{symbol}` is not exported by module `{module}`"),
-                            Span::new(0, 0),
-                        ));
+                    for symbol in symbols {
+                        if !self.is_exported(&module_path, &symbol) {
+                            return Err(Diagnostic::new(
+                                "SEL-M004",
+                                format!("`{symbol}` is not exported by module `{module}`"),
+                                Span::new(0, 0),
+                            ));
+                        }
                     }
                     if is_entry && let Some(alias) = alias {
                         self.aliases.insert(alias, module);
@@ -648,7 +648,7 @@ impl Loader {
 enum Import {
     Local {
         module: String,
-        symbol: Option<String>,
+        symbols: Vec<String>,
         alias: Option<String>,
     },
     Standard,
@@ -675,7 +675,7 @@ fn imports(program: &Program) -> Vec<Import> {
                 } else {
                     Import::Local {
                         module,
-                        symbol: None,
+                        symbols: Vec::new(),
                         alias,
                     }
                 });
@@ -684,13 +684,19 @@ fn imports(program: &Program) -> Vec<Import> {
                 let mut parts = text.split_whitespace();
                 let module = parts.next()?.to_owned();
                 let _import = parts.next()?;
-                let symbol = parts.next()?.trim_end_matches(',').to_owned();
+                let symbols = parts
+                    .map(|part| part.trim_end_matches(',').to_owned())
+                    .filter(|part| !part.is_empty())
+                    .collect::<Vec<_>>();
+                if symbols.is_empty() {
+                    return None;
+                }
                 return Some(if is_standard_module(&module) {
                     Import::Standard
                 } else {
                     Import::Local {
                         module,
-                        symbol: Some(symbol),
+                        symbols,
                         alias: None,
                     }
                 });

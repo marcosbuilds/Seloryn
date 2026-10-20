@@ -28,16 +28,25 @@ The probe uses a temporary copy of the project and checks all of the following:
 | Evaluation | Reloaded checkpoint reaches the holdout target | loss `0.03375852`, accuracy `1.0` |
 | Persistence | Checkpoint contains 25 weights and a SHA-256 payload hash | pass; `f164a947…776fc` |
 | Inference | A second request loads the checkpoint and returns a decision | `review`, score `1.15945053` |
-| Streaming | Training and inference receipts verify independently | `23` and `3` events; both valid |
+| Streaming | Training and inference receipts verify independently | `25` and `3` events; both valid |
+| Source-owned replay | A second isolated run receives the recorded train request and matches identity, result, checkpoint and semantic events | pass; dataset tamper rejected |
+| Reusable source API | The MLP and language-model projects share `app.parameters` plus `Sgd`, `sgd(Tensor[F32])`, `sgd_rate(F64)` and `step` contracts | pass |
+| Performance gate | Five cold process runs against the same fixture and independent Python oracle | `0.182768 s → 0.157362 s` median after contiguous-access fast path; `13.9%` lower |
+| Performance artifacts | Baseline/current release binaries are identified by SHA-256 | `8dd3e37a…b37ce11` → `8ad4ff7b…6fcc1834` |
 | Audit event | Inference emits structured model/decision/checkpoint evidence | one `audit.record` event |
 | Negative boundaries | Wrong feature order/count, dataset shape/target, model contract and checkpoint tampering fail | all six exit `65` |
 
-The exact wall time is not a product claim. On the first local run, the
-Seloryn process took `0.2596 s` and the independent pure-Python reference took
-`0.0225 s` for this tiny fixture. That result is useful because it exposes the
-current overhead; it is not evidence that Seloryn is faster. The next
-performance gate is to profile process startup, tensor allocation and the
-training loop separately before changing the semantics.
+The exact wall time is hardware- and load-dependent, so it is not a product
+claim. The reproducible benchmark is `python tests/performance_probe.py`; the
+reported five-run comparison used the pre-fast-path release binary
+`8dd3e37af79d6f3fb47e594ea69f381c4c2c13df2558c8c2e93e01373b37ce11` as the
+baseline, the current release binary
+`8ad4ff7b315d585887b83bb6254196930d94e8a036db04bf7f96d2606fcc1834`, and the
+same temporary fixture for every run. Median/P95 were `0.182768/0.188539 s`
+for the baseline and `0.157362/0.165186 s` for the current binary. The
+pure-Python oracle measured
+`0.022318 s` median and is a numerical reference, not a speed claim. Both
+implementations still produce the same loss and accuracy.
 
 ## Independent numerical comparison
 

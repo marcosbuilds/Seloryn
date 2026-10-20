@@ -65,23 +65,25 @@ python tests/compare_language_model.py
 The proof also executes negative paths for an unknown token, malformed dataset
 and mismatched prompt count. It then copies the project, changes the vocabulary
 to five tokens and trains that variant without source changes. Training emits 21
-sampled `training.progress` events inside a 23-event hash-chained JSON2 receipt.
-The final checkpoint is loaded by a fresh inference process, not read from the
-training object in memory.
+sampled `training.progress` events plus source-owned contract/completion records
+inside a 25-event hash-chained JSON2 receipt, and the receipt is replayed in an
+isolated copy. The final checkpoint is loaded by a fresh inference process, not
+read from the training object in memory.
 
 ## Measured comparison
 
 The reference loads the same vocabulary and datasets, then uses the same 14x14
 full-batch bigram and 160 updates in Python's standard library. This is a
 correctness comparison. After fused cross-entropy and sampled loss evaluation,
-three cold process runs measured 0.1704–0.1760 s for Python and 0.7902–0.9004 s
-for Seloryn on this Windows host; process and filesystem noise is material at
-this size.
+the latest independent probe measured `0.0331 s` for Python and `0.3712 s` for
+Seloryn on this Windows host for one cold process. Process and filesystem noise
+is material at this size; the measurement is evidence of current overhead, not
+a speed claim.
 
 | implementation | initial loss | final loss | held-out loss | accuracy | generation | wall time |
 |---|---:|---:|---:|---:|---|---:|
-| Python stdlib | 2.639057330 | 0.829485686 | 1.532877856 | 0.533333 | `the park <eos>` | 0.173277 s median |
-| Seloryn `.sely` | 2.639057398 | 0.829485774 | 1.532877922 | 0.533333 | `the park <eos>` | 0.810498 s median |
+| Python stdlib | 2.639057330 | 0.829485686 | 1.532877856 | 0.533333 | `the park <eos>` | `0.0331 s` latest run |
+| Seloryn `.sely` | 2.639057398 | 0.829485774 | 1.532877922 | 0.533333 | `the park <eos>` | `0.3712 s` latest run |
 
 The exact wall time varies by machine. The acceptance invariant is numerical:
 final-loss and held-out-loss differences are below `1e-5`, and accuracy is
@@ -90,5 +92,5 @@ tensor dimensions are no longer fixed in source. The checkpoint does not
 revalidate dataset files during inference. This is not a transformer, Unicode tokenizer,
 GPU trainer, HTTP server or stable production runtime.
 
-The complete hashes, exit codes and receipt details are recorded beside the
+The complete hashes, exit codes, replay result and receipt details are recorded beside the
 project in [`evidence.md`](../../examples/projects/self-hosted-language-model/evidence.md).

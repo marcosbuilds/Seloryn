@@ -60,7 +60,7 @@ try {
         throw 'installed binary did not execute the language-model training project'
     }
     $verified = & python (Join-Path $root 'scripts\streaming\verify-event-chain.py') $streamStderr | Out-String
-    if ($LASTEXITCODE -ne 0 -or $verified -notmatch 'stream valid: 23 events') {
+    if ($LASTEXITCODE -ne 0 -or $verified -notmatch 'stream valid: 25 events') {
         throw 'installed binary JSON2 receipt did not verify'
     }
 

@@ -67,6 +67,30 @@ def verify_receipt(receipt: str) -> str:
     return verified.stdout.strip()
 
 
+def replay_receipt(receipt: str, project: Path) -> subprocess.CompletedProcess[str]:
+    receipt_path = project.parent / "training.json2"
+    receipt_path.write_text(receipt, encoding="utf-8")
+    try:
+        return subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "streaming" / "replay-receipt.py"),
+                "--receipt",
+                str(receipt_path),
+                "--project",
+                str(project),
+                "--binary",
+                str(BINARY),
+            ],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+    finally:
+        receipt_path.unlink(missing_ok=True)
+
+
 def copy_fixture(root: Path, name: str) -> Path:
     destination = root / name
     shutil.copytree(PROJECT, destination)
@@ -102,15 +126,46 @@ def main() -> None:
         assert report["test_accuracy"] == 1.0, report
 
         receipt_lines = [json.loads(line) for line in trained.stderr.splitlines() if line.strip()]
-        assert len(receipt_lines) == 23, len(receipt_lines)
+        assert len(receipt_lines) == 25, len(receipt_lines)
         assert receipt_lines[0]["kind"] == "run.start", receipt_lines[0]
         assert receipt_lines[-1]["kind"] == "run.end", receipt_lines[-1]
+        identity = receipt_lines[0]["data"]["identity"]
+        assert len(identity["train_sha256"]) == 64, identity
+        assert len(identity["test_sha256"]) == 64, identity
         progress = [event for event in receipt_lines if event["kind"] == "training.progress"]
         assert len(progress) == 21, len(progress)
         assert progress[0]["data"]["step"] == 1, progress[0]
         assert progress[-1]["data"]["step"] == 320, progress[-1]
         assert progress[0]["data"]["metric"] > progress[-1]["data"]["metric"], progress
         receipt_verification = verify_receipt(trained.stderr)
+        contract_events = [
+            event
+            for event in receipt_lines
+            if event["kind"] == "audit.record"
+            and event["data"]["audit_kind"] == "training.contract"
+        ]
+        assert len(contract_events) == 1, receipt_lines
+        assert contract_events[0]["data"]["payload"]["request"] == {"mode": "train"}
+        completion_events = [
+            event
+            for event in receipt_lines
+            if event["kind"] == "audit.record"
+            and event["data"]["audit_kind"] == "training.complete"
+        ]
+        assert len(completion_events) == 1, receipt_lines
+
+        replayed = replay_receipt(trained.stderr, project)
+        assert replayed.returncode == 0, (replayed.stdout, replayed.stderr)
+        assert "program, datasets, result and checkpoint identity match" in replayed.stdout
+
+        tampered_replay_project = copy_fixture(root, "tampered-replay")
+        tampered_replay_train = tampered_replay_project / "data" / "train.json"
+        tampered_replay_data = json.loads(tampered_replay_train.read_text(encoding="utf-8"))
+        tampered_replay_data["inputs"][0] = tampered_replay_data["inputs"][0] + 0.01
+        tampered_replay_train.write_text(json.dumps(tampered_replay_data), encoding="utf-8")
+        rejected_replay = replay_receipt(trained.stderr, tampered_replay_project)
+        assert rejected_replay.returncode != 0, rejected_replay.stdout
+        assert "replay identity differs" in (rejected_replay.stdout + rejected_replay.stderr)
 
         checkpoint = project / "checkpoints" / "equipment-health.json"
         assert checkpoint.is_file(), checkpoint

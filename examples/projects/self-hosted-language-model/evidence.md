@@ -20,7 +20,8 @@ project to train a five-token vocabulary variant without source changes.
 | streaming verification exit code | `0` |
 | inference exit code | `0` |
 | training progress events | `21` (steps 1, multiples of 8, and final) |
-| receipt events | `23` (`run.start`, 21 progress, `run.end`) |
+| receipt events | `25` (`run.start`, source-owned contract, 21 progress, source-owned completion, `run.end`) |
+| source-owned replay | exit `0`; isolated replay matched identity, result, checkpoint and semantic events |
 | initial loss | `2.6390573978424072` |
 | final train loss | `0.8294857740402222` |
 | test loss | `1.5328779220581055` |

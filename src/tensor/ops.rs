@@ -69,6 +69,7 @@ pub struct Tensor {
     pub(crate) dtype: TensorDtype,
     pub(crate) shape: Vec<usize>,
     pub(crate) strides: Vec<usize>,
+    contiguous: bool,
     pub(crate) data: TensorData,
     allocation: Arc<TensorAllocation>,
 }
@@ -191,6 +192,7 @@ impl Tensor {
             dtype,
             strides: contiguous_strides(&shape),
             shape,
+            contiguous: true,
             data,
             allocation,
         })
@@ -214,6 +216,7 @@ impl Tensor {
             dtype,
             strides: contiguous_strides(&shape),
             shape,
+            contiguous: true,
             data,
             allocation,
         })
@@ -277,6 +280,7 @@ impl Tensor {
         &self.shape
     }
 
+    #[allow(dead_code)]
     pub fn strides(&self) -> &[usize] {
         &self.strides
     }
@@ -428,7 +432,7 @@ impl Tensor {
     }
 
     fn is_contiguous(&self) -> bool {
-        self.strides() == contiguous_strides(&self.shape)
+        self.contiguous
     }
 
     fn to_contiguous(&self) -> Result<Self, TensorError> {
@@ -450,6 +454,9 @@ impl Tensor {
     }
 
     fn storage_index(&self, index: usize) -> usize {
+        if self.contiguous {
+            return index;
+        }
         let logical_strides = contiguous_strides(&self.shape);
         self.shape
             .iter()
@@ -745,6 +752,7 @@ impl Tensor {
             dtype: self.dtype,
             shape: vec![self.shape[1], self.shape[0]],
             strides: vec![self.strides[1], self.strides[0]],
+            contiguous: false,
             data: self.data.clone(),
             allocation: self.allocation.clone(),
         })

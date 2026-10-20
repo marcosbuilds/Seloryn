@@ -27,7 +27,9 @@ def load_verifier():
     return module
 
 
-def read_receipt(path: Path, verifier, hmac_key: bytes | None) -> tuple[list[str], list[dict]]:
+def read_receipt(
+    path: Path, verifier, hmac_key: bytes | None
+) -> tuple[list[str], list[dict], dict | None]:
     lines = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     valid, message, _ = verifier.verify(lines, hmac_key)
     if not valid:
@@ -48,11 +50,55 @@ def read_receipt(path: Path, verifier, hmac_key: bytes | None) -> tuple[list[str
         for event in events
         if event.get("kind") == "training.start"
     ]
-    if not operations or operations[0] not in {"train_linear", "train_mlp"}:
-        raise ValueError("replay is limited to the bounded CPU training profiles")
+    request = None
+    if operations:
+        if operations[0] not in {"train_linear", "train_mlp"}:
+            raise ValueError("replay is limited to the bounded CPU training profiles")
+    else:
+        contracts = [
+            event
+            for event in events
+            if event.get("kind") == "audit.record"
+            and event["data"].get("audit_kind") == "training.contract"
+        ]
+        if len(contracts) != 1:
+            raise ValueError(
+                "replay requires a native training.start or one source-owned training.contract"
+            )
+        payload = contracts[0]["data"].get("payload")
+        if not isinstance(payload, dict):
+            raise ValueError("source-owned training contract has no object payload")
+        request = payload.get("request")
+        if not isinstance(request, dict) or request.get("mode") != "train":
+            raise ValueError("source-owned replay requires a recorded train request")
+        completions = [
+            event
+            for event in events
+            if event.get("kind") == "audit.record"
+            and event["data"].get("audit_kind") == "training.complete"
+        ]
+        if len(completions) != 1:
+            raise ValueError("source-owned replay requires one training.complete event")
+        completion_payload = completions[0]["data"].get("payload")
+        if not isinstance(completion_payload, dict) or not isinstance(
+            completion_payload.get("checkpoint_sha256"), str
+        ):
+            raise ValueError("source-owned replay requires a checkpoint completion hash")
+        checkpoint_after = events[-1]["data"].get("checkpoint_after_sha256")
+        if not isinstance(checkpoint_after, str) or checkpoint_after != completion_payload["checkpoint_sha256"]:
+            raise ValueError("source-owned replay requires checkpoint identity in run.end")
     if not isinstance(events[-1]["data"].get("result_sha256"), str):
         raise ValueError("receipt has no result identity")
-    return lines, events
+    return lines, events, request
+
+
+def semantic_projection(events: list[dict]) -> list[tuple[str, dict]]:
+    """Compare source event meaning while ignoring per-attempt chain metadata."""
+    return [
+        (event["kind"], event["data"])
+        for event in events
+        if event["kind"] not in {"run.start", "run.end"}
+    ]
 
 
 def remove_initial_checkpoints(project: Path) -> None:
@@ -87,7 +133,7 @@ def main(argv: list[str]) -> int:
     verifier = load_verifier()
     hmac_key = args.hmac_key.encode("utf-8") if args.hmac_key is not None else None
     try:
-        _, original_events = read_receipt(args.receipt, verifier, hmac_key)
+        _, original_events, request = read_receipt(args.receipt, verifier, hmac_key)
         original_start = original_events[0]["data"]
         original_identity = original_start["identity"]
         original_end = original_events[-1]["data"]
@@ -113,6 +159,7 @@ def main(argv: list[str]) -> int:
             process = subprocess.run(
                 [str(args.binary), "run", str(replay_project), "--log=json2-signed" if args.hmac_key else "--log=json2"],
                 cwd=ROOT,
+                input="" if request is None else json.dumps(request, sort_keys=True),
                 text=True,
                 encoding="utf-8",
                 errors="replace",
@@ -134,6 +181,8 @@ def main(argv: list[str]) -> int:
             for field in ("result_sha256", "checkpoint_after_sha256"):
                 if original_end.get(field) != replay_end.get(field):
                     raise ValueError(f"replay {field} differs from the original receipt")
+            if semantic_projection(original_events) != semantic_projection(replay_events):
+                raise ValueError("replay source events differ from the original receipt")
     except (OSError, ValueError, json.JSONDecodeError) as error:
         print(f"Seloryn replay FAILED: {error}", file=sys.stderr)
         return 1

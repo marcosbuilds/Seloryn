@@ -8,7 +8,9 @@ from app.parameters import Parameter, parameter
 from app.serving import accuracy, generate
 from app.tokenizer import Vocabulary, load_vocabulary, token_id
 from autograd import gradients
+from audit import emit
 from data import range
+from json import from_text, object
 from training import progress
 
 pub record LanguageReport:
@@ -42,6 +44,8 @@ fn train(train_data: Dataset, test_data: Dataset, vocabulary: Vocabulary, eos: I
     let test_loss: F32 = tensor_item_f32(objective(test_data.inputs, model.weights, test_data.targets))
     let test_accuracy: F64 = accuracy(test_data.inputs, test_data.targets, model, test_data.rows, vocabulary.size)
     let checkpoint_hash: Text = save_checkpoint("checkpoints/language-model.json", model, steps, train_data.source_hash, test_data.source_hash)?
+    let completion_event: Json = object(["checkpoint_sha256"], [from_text(checkpoint_hash)])?
+    emit("training.complete", completion_event)
     let reloaded: LanguageModel = restore_checkpoint("checkpoints/language-model.json", vocabulary)?
     let reloaded_loss: F32 = tensor_item_f32(objective(test_data.inputs, reloaded.weights, test_data.targets))
     let generated: Text = generate(reloaded, vocabulary, eos, 8)
@@ -51,5 +55,8 @@ pub fn run() -> Result[LanguageReport, JsonIoError]:
     let vocabulary: Vocabulary = load_vocabulary("data/vocab.json")?
     let train_data: Dataset = load_dataset("data/train.json", vocabulary)?
     let test_data: Dataset = load_dataset("data/test.json", vocabulary)?
+    let request: Json = object(["mode"], [from_text("train")])?
+    let contract_event: Json = object(["operation", "request", "train_sha256", "test_sha256"], [from_text("source_owned_training"), request, from_text(train_data.source_hash), from_text(test_data.source_hash)])?
+    emit("training.contract", contract_event)
     let eos: I64 = token_id(vocabulary, "<eos>")?
     return train(train_data, test_data, vocabulary, eos, 160)

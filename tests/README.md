@@ -11,6 +11,10 @@
   independent matrix/mean derivative oracle.
 - `release_probe.py` executes a typed tensor-index example, public projects and
   a bundle with declared JSON data on the locally built release binary.
+- `import_contract_probe.py` proves that every symbol in a local multi-symbol
+  import is checked and that missing exports fail closed with `SEL-M004`.
+- `performance_probe.py` runs the source-owned training fixture repeatedly and
+  reports median/P95 wall time alongside the pure-Python numerical oracle.
 
 Only sanitized public fixtures that are executable against this checkout belong
 here.

@@ -151,11 +151,13 @@ records and closes with `run.end`. The start identity covers program, manifest,
 datasets and the checkpoint before training; the end identity covers the result
 and checkpoint after training. Structured path fields are redacted. The helper
 [`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py)
-re-executes successful bounded receipts in an isolated copy. The external verifier at
+re-executes successful bounded native or source-owned training receipts in an isolated copy. The external verifier at
 [`scripts/streaming/verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py)
 detects changed fields, missing or reordered records, truncation, append-after-
 completion and duplicate JSON keys. `json2-signed` authenticates the receipt
-with a shared HMAC key, but is not a public-key signature. The stream does not
+with a shared HMAC key, but is not a public-key signature. Source-owned training
+replay is accepted only when the receipt contains its explicit dataset hashes,
+recorded `{"mode":"train"}` request and checkpoint completion event. The stream does not
 replay arbitrary executions or imply GPU,
 distributed, serving or general runtime telemetry support. Preflight failures
 before `run.start` remain normal CLI diagnostics and do not claim to have a

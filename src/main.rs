@@ -792,6 +792,13 @@ impl runtime::EventSink for CliEventSink {
                             identity.insert(key.to_owned(), value.clone());
                         }
                     }
+                    if let Some(json::JsonValue::Object(payload)) = object.get("payload") {
+                        for key in ["train_sha256", "test_sha256", "checkpoint_before_sha256"] {
+                            if let Some(value) = payload.get(key) {
+                                identity.insert(key.to_owned(), value.clone());
+                            }
+                        }
+                    }
                     identity.insert(
                         "schema".to_owned(),
                         json::JsonValue::String("seloryn.run-identity.v1".to_owned()),
@@ -835,11 +842,21 @@ impl runtime::EventSink for CliEventSink {
                     data.insert("identity".to_owned(), json::JsonValue::Object(identity));
                     self.write_v2_record("run.start", json::JsonValue::Object(data));
                 }
-                if kind == "training.complete"
-                    && let Some(json::JsonValue::String(checkpoint_sha256)) =
-                        object.get("checkpoint_sha256")
-                {
-                    self.checkpoint_after_sha256 = Some(checkpoint_sha256.clone());
+                let audit_kind_is_training_complete = matches!(
+                    object.get("audit_kind"),
+                    Some(json::JsonValue::String(audit_kind))
+                        if audit_kind == "training.complete"
+                );
+                if kind == "training.complete" || audit_kind_is_training_complete {
+                    let checkpoint = object.get("checkpoint_sha256").or_else(|| {
+                        let Some(json::JsonValue::Object(payload)) = object.get("payload") else {
+                            return None;
+                        };
+                        payload.get("checkpoint_sha256")
+                    });
+                    if let Some(json::JsonValue::String(checkpoint_sha256)) = checkpoint {
+                        self.checkpoint_after_sha256 = Some(checkpoint_sha256.clone());
+                    }
                 }
                 self.write_v2_record(&kind, json::JsonValue::Object(object));
                 return self.emit_result();

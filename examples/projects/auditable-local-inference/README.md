@@ -24,6 +24,18 @@ The project deliberately keeps its contract files separate from source:
 - `data/*.json` are the immutable fixture inputs;
 - `checkpoints/equipment-health.json` is generated and ignored by Git.
 
+The reusable source boundary is explicit:
+
+- `src/app/parameters.sely` owns `Parameter`, `parameter` and `replace`;
+- `src/app/optim.sely` owns `Sgd`, `sgd(Tensor[F32])`, `sgd_rate(F64)` and
+  `step`, matching the language-model project's contract;
+- `src/app/training.sely` owns dataset loading, gradients, updates, evaluation,
+  persistence and source-owned `training.contract`/`training.complete` events.
+
+The JSON2 training receipt can be replayed with
+`python scripts/streaming/replay-receipt.py`; the probe proves an isolated
+replay and rejects a changed dataset before accepting a result.
+
 The negative probe mutates one boundary at a time and requires a structured
 non-zero failure: feature order, feature count, dataset shape, target values,
 model contract and checkpoint weights. It also compares a standalone Python

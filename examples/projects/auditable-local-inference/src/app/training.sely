@@ -4,9 +4,12 @@ from app.checkpoint import restore, save
 from app.contracts import Contract, load_contract
 from app.data import Dataset, load_dataset
 from app.model import Model, initial, objective, forward
-from app.optim import Parameter, Sgd, parameter, sgd, step
+from app.optim import Sgd, sgd_rate, step
+from app.parameters import Parameter, parameter
 from autograd import gradients
 from data import range, to_f64
+from audit import emit
+from json import from_text, object
 from training import progress
 
 pub record TrainingReport:
@@ -39,7 +42,10 @@ pub fn run() -> Result[TrainingReport, JsonIoError]:
     let contract: Contract = load_contract()?
     let train_data: Dataset = load_dataset("data/train.json", contract.train_rows, contract)?
     let test_data: Dataset = load_dataset("data/test.json", contract.test_rows, contract)?
-    let optimizer: Sgd = sgd(contract.learning_rate)
+    let request: Json = object(["mode"], [from_text("train")])?
+    let contract_event: Json = object(["operation", "request", "train_sha256", "test_sha256"], [from_text("source_owned_training"), request, from_text(train_data.source_hash), from_text(test_data.source_hash)])?
+    emit("training.contract", contract_event)
+    let optimizer: Sgd = sgd_rate(contract.learning_rate)
     let seed_model: Model = initial()
     var first: Parameter = parameter("first", seed_model.first)
     var first_bias: Parameter = parameter("first_bias", seed_model.first_bias)
@@ -61,6 +67,8 @@ pub fn run() -> Result[TrainingReport, JsonIoError]:
     let final_loss: F32 = evaluate(train_data, model)
     let test_loss: F32 = evaluate(test_data, model)
     let checkpoint_sha256: Text = save("checkpoints/equipment-health.json", model, contract, train_data, test_data, contract.steps)?
+    let completion_event: Json = object(["checkpoint_sha256"], [from_text(checkpoint_sha256)])?
+    emit("training.complete", completion_event)
     let reloaded: Model = restore("checkpoints/equipment-health.json", contract, train_data, test_data)?
     let reloaded_loss: F32 = evaluate(test_data, reloaded)
     return Ok(TrainingReport("seloryn.auditable-training.v1", contract.model_id, contract.steps, initial_loss, final_loss, test_loss, reloaded_loss, accuracy(test_data, reloaded), checkpoint_sha256, contract.dataset_spec_hash, contract.model_spec_hash))

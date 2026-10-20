@@ -66,8 +66,9 @@ produziram os mesmos resultados dentro de `3e-6`:
 | Python stdlib | 2.639057330 | 0.829485686 | 1.532877856 | 0.533333 | `the park <eos>` |
 | Seloryn `.sely` | 2.639057398 | 0.829485774 | 1.532877922 | 0.533333 | `the park <eos>` |
 
-O treino saiu com código `0`, emitiu 21 eventos `training.progress` em uma
-cadeia JSON2 válida, salvou e recarregou o checkpoint, e a segunda invocação
+O treino saiu com código `0`, emitiu 21 eventos `training.progress` mais os
+eventos source-owned de contrato e conclusão em uma cadeia JSON2 válida de 25
+eventos, e o probe também reproduziu o treino em cópia isolada. Salvou e recarregou o checkpoint, e a segunda invocação
 de inferência com o prompt `<bos> the cat` retornou o campo JSON
 `sat on the park` com `status=ok`. O caso negativo com um token desconhecido
 saiu com código diferente de zero e a mensagem `unknown token in vocabulary`.
