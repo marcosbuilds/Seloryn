@@ -891,6 +891,95 @@ impl Tensor {
         )
     }
 
+    /// Compute the mean softmax cross-entropy for a rank-2 batch and retain
+    /// the stable probability/log-probability buffers for reverse-mode use.
+    ///
+    /// The fused path avoids materializing logsumexp, selected logits, and
+    /// their reduction as separate graph nodes in the training loop. Targets
+    /// are dense one-hot (or probability) rows with the same shape as logits.
+    pub fn cross_entropy(&self, targets: &Self, axis: usize) -> Result<Self, TensorError> {
+        let (loss, _, _) = self.cross_entropy_with_cache(targets, axis)?;
+        Ok(loss)
+    }
+
+    pub(crate) fn cross_entropy_with_cache(
+        &self,
+        targets: &Self,
+        axis: usize,
+    ) -> Result<(Self, Self, Self), TensorError> {
+        self.check_f32_axis(axis, "cross_entropy")?;
+        if targets.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: targets.dtype.name(),
+            });
+        }
+        if self.rank() != 2 || axis != 1 {
+            return Err(TensorError::InvalidAxis {
+                axis,
+                rank: self.rank(),
+            });
+        }
+        if targets.shape != self.shape {
+            return Err(TensorError::BroadcastMismatch {
+                left: self.shape.clone(),
+                right: targets.shape.clone(),
+            });
+        }
+        let rows = self.shape[0];
+        let classes = self.shape[1];
+        if rows == 0 || classes == 0 {
+            return Err(TensorError::EmptyReduction {
+                operation: "cross_entropy",
+            });
+        }
+
+        let mut probabilities = vec![0.0f32; self.element_count()];
+        let mut log_probabilities = vec![0.0f32; self.element_count()];
+        let mut total_loss = 0.0f64;
+        for row in 0..rows {
+            let offset = row * classes;
+            let maximum = (0..classes)
+                .map(|class| self.f32_at_flat(offset + class))
+                .fold(f32::NEG_INFINITY, f32::max);
+            let normalizer = (0..classes).try_fold(0.0f64, |sum, class| {
+                let next =
+                    sum + (f64::from(self.f32_at_flat(offset + class)) - f64::from(maximum)).exp();
+                next.is_finite()
+                    .then_some(next)
+                    .ok_or(TensorError::NonFinite)
+            })?;
+            if normalizer <= 0.0 || !normalizer.is_finite() {
+                return Err(TensorError::NonFinite);
+            }
+            let log_normalizer = f64::from(maximum) + normalizer.ln();
+            if !log_normalizer.is_finite() {
+                return Err(TensorError::NonFinite);
+            }
+            for class in 0..classes {
+                let index = offset + class;
+                let log_probability = f64::from(self.f32_at_flat(index)) - log_normalizer;
+                let probability = log_probability.exp();
+                let target = f64::from(targets.f32_at_flat(index));
+                if !log_probability.is_finite() || !probability.is_finite() || !target.is_finite() {
+                    return Err(TensorError::NonFinite);
+                }
+                log_probabilities[index] = log_probability as f32;
+                probabilities[index] = probability as f32;
+                total_loss -= target * log_probability;
+            }
+        }
+        let loss = total_loss / rows as f64;
+        if !loss.is_finite() {
+            return Err(TensorError::NonFinite);
+        }
+        Ok((
+            Self::from_f32(vec![loss as f32], &[])?,
+            Self::from_f32(probabilities, &[rows as i64, classes as i64])?,
+            Self::from_f32(log_probabilities, &[rows as i64, classes as i64])?,
+        ))
+    }
+
     pub fn sum_to_shape(&self, target_shape: &[i64]) -> Result<Self, TensorError> {
         if self.dtype != TensorDtype::F32 {
             return Err(TensorError::DtypeMismatch {
@@ -1395,6 +1484,36 @@ mod tests {
             broadcasted.sum_to_shape(&[]).expect("sum all").render(),
             "Tensor[F32, shape=[], values=[21.0]]"
         );
+
+        let small_logits =
+            Tensor::from_f32(vec![0.0, 1.0, 2.0, 0.0], &[2, 2]).expect("small logits");
+        let targets = Tensor::from_f32(vec![0.0, 1.0, 1.0, 0.0], &[2, 2]).expect("targets");
+        let loss = small_logits
+            .cross_entropy(&targets, 1)
+            .expect("cross entropy")
+            .scalar_f32()
+            .expect("scalar loss");
+        let expected =
+            ((1.0f64 + 1.0f64.exp()).ln() - 1.0 + (1.0f64 + 2.0f64.exp()).ln() - 2.0) / 2.0;
+        assert!((f64::from(loss) - expected).abs() < 1e-6);
+        assert!(matches!(
+            small_logits.cross_entropy(&targets, 0),
+            Err(TensorError::InvalidAxis { .. })
+        ));
+        assert!(matches!(
+            small_logits.cross_entropy(
+                &Tensor::from_f32(vec![0.0, 1.0, 1.0, 0.0], &[1, 4]).expect("bad targets"),
+                1,
+            ),
+            Err(TensorError::BroadcastMismatch { .. })
+        ));
+        assert!(matches!(
+            small_logits.cross_entropy(
+                &Tensor::from_i64(vec![0, 1, 1, 0], &[2, 2]).expect("integer targets"),
+                1,
+            ),
+            Err(TensorError::DtypeMismatch { .. })
+        ));
     }
 
     #[test]

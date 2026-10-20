@@ -1,9 +1,12 @@
 module app.training
 
-from app.data import Dataset, load
-from app.checkpoint import restore, save
+from app.checkpoint import restore_checkpoint, save_checkpoint
+from app.data import Dataset, load_dataset
 from app.model import LanguageModel, objective
+from app.optim import Sgd, sgd, step
+from app.parameters import Parameter, parameter
 from app.serving import accuracy, generate
+from app.tokenizer import Vocabulary, load_vocabulary, token_id
 from autograd import gradients
 from data import range
 from training import progress
@@ -22,28 +25,31 @@ pub record LanguageReport:
     test_hash: Text
     checkpoint_hash: Text
 
-fn initial_model() -> LanguageModel:
-    return LanguageModel(tensor_zeros_f32([14, 14]))
-
-pub fn train(train_data: Dataset, test_data: Dataset, steps: I64) -> Result[LanguageReport, JsonIoError]:
+fn train(train_data: Dataset, test_data: Dataset, vocabulary: Vocabulary, eos: I64, steps: I64) -> Result[LanguageReport, JsonIoError]:
     let rate: Tensor[F32] = tensor_f32([0.5], [])
-    var model: LanguageModel = initial_model()
-    let initial_loss: F32 = tensor_item_f32(objective(train_data.inputs, model.weights, train_data.targets))
-    for step in range(steps):
-        let derivatives: List[Tensor[F32]] = gradients(objective, train_data.inputs, model.weights, train_data.targets)
-        model = LanguageModel(model.weights - rate * derivatives[1])
-        let live_loss: F32 = tensor_item_f32(objective(train_data.inputs, model.weights, train_data.targets))
-        progress("bigram_language_model", step + 1, steps, live_loss)
+    let optimizer: Sgd = sgd(rate)
+    var weights: Parameter = parameter("language-model.weights", tensor_zeros_f32([vocabulary.size, vocabulary.size]))
+    let initial_loss: F32 = tensor_item_f32(objective(train_data.inputs, weights.value, train_data.targets))
+    for step_index in range(steps):
+        let derivatives: List[Tensor[F32]] = gradients(objective, train_data.inputs, weights.value, train_data.targets)
+        weights = step(optimizer, weights, derivatives[1])
+        let current_step: I64 = step_index + 1
+        if current_step == 1 or current_step % 8 == 0 or current_step == steps:
+            let live_loss: F32 = tensor_item_f32(objective(train_data.inputs, weights.value, train_data.targets))
+            progress("bigram_language_model", current_step, steps, live_loss)
+    let model: LanguageModel = LanguageModel(weights.value, vocabulary.size)
     let final_loss: F32 = tensor_item_f32(objective(train_data.inputs, model.weights, train_data.targets))
     let test_loss: F32 = tensor_item_f32(objective(test_data.inputs, model.weights, test_data.targets))
-    let test_accuracy: F64 = accuracy(test_data.inputs, test_data.targets, model, test_data.rows, 15.0)
-    let checkpoint_hash: Text = save("checkpoints/language-model.json", model, steps, train_data.source_hash, test_data.source_hash)?
-    let reloaded: LanguageModel = restore("checkpoints/language-model.json")?
+    let test_accuracy: F64 = accuracy(test_data.inputs, test_data.targets, model, test_data.rows, vocabulary.size)
+    let checkpoint_hash: Text = save_checkpoint("checkpoints/language-model.json", model, steps, train_data.source_hash, test_data.source_hash)?
+    let reloaded: LanguageModel = restore_checkpoint("checkpoints/language-model.json", vocabulary)?
     let reloaded_loss: F32 = tensor_item_f32(objective(test_data.inputs, reloaded.weights, test_data.targets))
-    let generated: Text = generate(reloaded, 8)
-    return Ok(LanguageReport("bigram_softmax", 14, steps, initial_loss, final_loss, test_loss, reloaded_loss, test_accuracy, generated, train_data.source_hash, test_data.source_hash, checkpoint_hash))
+    let generated: Text = generate(reloaded, vocabulary, eos, 8)
+    return Ok(LanguageReport("bigram_softmax", vocabulary.size, steps, initial_loss, final_loss, test_loss, reloaded_loss, test_accuracy, generated, train_data.source_hash, test_data.source_hash, checkpoint_hash))
 
 pub fn run() -> Result[LanguageReport, JsonIoError]:
-    let train_data: Dataset = load("data/train.json", 40, 39)?
-    let test_data: Dataset = load("data/test.json", 16, 15)?
-    return train(train_data, test_data, 160)
+    let vocabulary: Vocabulary = load_vocabulary("data/vocab.json")?
+    let train_data: Dataset = load_dataset("data/train.json", vocabulary)?
+    let test_data: Dataset = load_dataset("data/test.json", vocabulary)?
+    let eos: I64 = token_id(vocabulary, "<eos>")?
+    return train(train_data, test_data, vocabulary, eos, 160)

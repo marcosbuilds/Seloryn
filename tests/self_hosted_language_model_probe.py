@@ -13,27 +13,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BINARY = ROOT / "target" / "release" / "seloryn.exe"
+BINARY = ROOT / "target" / "release" / ("seloryn.exe" if sys.platform == "win32" else "seloryn")
 PROJECT = ROOT / "examples" / "projects" / "self-hosted-language-model"
 TRAIN = PROJECT / "data" / "train.json"
 TEST = PROJECT / "data" / "test.json"
 CHECKPOINT = PROJECT / "checkpoints" / "language-model.json"
-VOCAB = [
-    "<bos>",
-    "the",
-    "cat",
-    "sat",
-    "on",
-    "mat",
-    "dog",
-    "ran",
-    "in",
-    "park",
-    "<eos>",
-    "a",
-    "fox",
-    "jumped",
-]
+VOCAB = json.loads((PROJECT / "data" / "vocab.json").read_text(encoding="utf-8"))["tokens"]
 TOKEN_ID = {token: index for index, token in enumerate(VOCAB)}
 
 
@@ -111,7 +96,7 @@ def main() -> None:
     source_text = "\n".join(path.read_text(encoding="utf-8") for path in source_files)
     for forbidden in ("train_mlp", "train_linear", "predict_mlp", "load_checkpoint"):
         assert forbidden not in source_text, forbidden
-    expected_modules = {"checkpoint.sely", "data.sely", "model.sely", "production.sely", "serving.sely", "tokenizer.sely", "training.sely"}
+    expected_modules = {"checkpoint.sely", "data.sely", "model.sely", "optim.sely", "parameters.sely", "production.sely", "serving.sely", "tokenizer.sely", "training.sely"}
     assert {path.name for path in source_files} >= expected_modules, source_files
 
     checked = run_seloryn("check", str(PROJECT), "--format=json")
@@ -138,11 +123,11 @@ def main() -> None:
     assert CHECKPOINT.is_file(), CHECKPOINT
 
     receipt_lines = [json.loads(line) for line in trained.stderr.splitlines() if line.strip()]
-    assert len(receipt_lines) == 162, len(receipt_lines)
+    assert len(receipt_lines) == 23, len(receipt_lines)
     assert receipt_lines[0]["kind"] == "run.start", receipt_lines[0]
     assert receipt_lines[-1]["kind"] == "run.end", receipt_lines[-1]
     progress = [event for event in receipt_lines if event["kind"] == "training.progress"]
-    assert len(progress) == 160, len(progress)
+    assert len(progress) == 21, len(progress)
     assert progress[0]["data"]["step"] == 1, progress[0]
     assert progress[-1]["data"]["step"] == 160, progress[-1]
     assert progress[0]["data"]["metric"] > progress[-1]["data"]["metric"], (progress[0], progress[-1])
@@ -190,7 +175,7 @@ def main() -> None:
         stdin='{"mode":"infer","tokens":["unknown"],"prompt_count":1,"generation_steps":2}',
     )
     assert invalid.returncode != 0, invalid.stdout
-    assert "unknown token in dataset" in invalid.stdout or "unknown token in dataset" in invalid.stderr, (invalid.stdout, invalid.stderr)
+    assert "unknown token in vocabulary" in invalid.stdout or "unknown token in vocabulary" in invalid.stderr, (invalid.stdout, invalid.stderr)
 
     mismatch = run_seloryn(
         "run",
@@ -206,7 +191,7 @@ def main() -> None:
         shutil.copytree(PROJECT, bad_project)
         bad_train = bad_project / "data" / "train.json"
         malformed = json.loads(bad_train.read_text(encoding="utf-8"))
-        malformed["tokens"].pop()
+        malformed["tokens"] = ["<bos>"]
         bad_train.write_text(json.dumps(malformed), encoding="utf-8")
         malformed_run = run_seloryn(
             "run",
@@ -215,7 +200,32 @@ def main() -> None:
             stdin='{"mode":"train"}',
         )
     assert malformed_run.returncode != 0, malformed_run.stdout
-    assert "dataset token count does not match manifest" in malformed_run.stdout or "dataset token count does not match manifest" in malformed_run.stderr, (malformed_run.stdout, malformed_run.stderr)
+    assert "dataset must contain at least two tokens" in malformed_run.stdout or "dataset must contain at least two tokens" in malformed_run.stderr, (malformed_run.stdout, malformed_run.stderr)
+
+    with tempfile.TemporaryDirectory(prefix="seloryn-language-variable-vocabulary-") as variant_directory:
+        variant_project = Path(variant_directory) / "language-model"
+        shutil.copytree(PROJECT, variant_project)
+        variant_tokens = ["<bos>", "a", "b", "c", "<eos>"]
+        (variant_project / "data" / "vocab.json").write_text(
+            json.dumps({"tokens": variant_tokens}), encoding="utf-8"
+        )
+        (variant_project / "data" / "train.json").write_text(
+            json.dumps({"tokens": variant_tokens * 8}), encoding="utf-8"
+        )
+        (variant_project / "data" / "test.json").write_text(
+            json.dumps({"tokens": variant_tokens * 4}), encoding="utf-8"
+        )
+        variant_run = run_seloryn(
+            "run",
+            str(variant_project),
+            "--format=json",
+            "--log=off",
+            stdin='{"mode":"train"}',
+        )
+    assert variant_run.returncode == 0, (variant_run.stdout, variant_run.stderr)
+    variant_report = response_record(variant_run.stdout)
+    assert variant_report["vocabulary_size"] == 5, variant_report
+    assert variant_report["initial_loss"] > variant_report["final_loss"] > 0.0, variant_report
 
     reference_start = time.perf_counter()
     reference = reference_train(pairs(load_tokens(TRAIN)), pairs(load_tokens(TEST)))
@@ -224,13 +234,14 @@ def main() -> None:
     assert abs(reference["test_loss"] - report["test_loss"]) < 1e-4, (reference, report)
     assert reference["accuracy"] >= 0.5, reference
 
-    points = [progress[index]["data"]["metric"] for index in (0, 39, 79, 119, 159)]
+    progress_by_step = {event["data"]["step"]: event["data"]["metric"] for event in progress}
+    points = [progress_by_step[step] for step in (1, 40, 80, 120, 160)]
     minimum = min(points)
     maximum = max(points)
     bars = " ".join("#" * max(1, round(20 * (value - minimum) / max(maximum - minimum, 1e-12))) for value in points)
     print("Seloryn self-hosted language-model proof: PASS")
-    print(f"check_exit=0 train_exit=0 streaming_verify_exit={verified.returncode} infer_exit=0 negative_dataset_exit={malformed_run.returncode}")
-    print(f"events=162 progress=160 receipt={verified.stdout.strip()}")
+    print(f"check_exit=0 train_exit=0 streaming_verify_exit={verified.returncode} infer_exit=0 negative_dataset_exit={malformed_run.returncode} variable_vocab=5_exit={variant_run.returncode}")
+    print(f"events=23 progress=21 receipt={verified.stdout.strip()}")
     print("comparison | backend | initial_loss | final_loss | test_loss | accuracy | seconds")
     print(f"comparison | Seloryn/.sely | {report['initial_loss']:.8f} | {report['final_loss']:.8f} | {report['test_loss']:.8f} | {report['test_accuracy']:.6f} | {seloryn_seconds:.4f}")
     print(f"comparison | Python/pure  | {reference['initial_loss']:.8f} | {reference['final_loss']:.8f} | {reference['test_loss']:.8f} | {reference['accuracy']:.6f} | {python_seconds:.4f}")

@@ -78,7 +78,7 @@
     },
     "builtins": {
       "patterns": [
-        { "name": "support.function.builtin.seloryn", "match": "\\b(?:tensor_f32|tensor_i64|tensor_zeros_f32|tensor_zeros_i64|tensor_shape|tensor_rank|tensor_elements|tensor_dtype|tensor_to_f32|tensor_to_i64|tensor_item_f32|tensor_get_f32|tensor_get_i64|reshape|tensor_sum|sum|tensor_mean|matmul|transpose|tensor_relu|tensor_exp|tensor_log|tensor_softmax|tensor_logsumexp|tensor_sum_to_shape|train_linear|train_mlp|load_checkpoint|read_stdin|read_file|parse|encode|get|as_text|as_i64|as_f32|as_f64|as_bool|ModelRequest|ModelResponse|fixture_provider|slow_fixture_provider|backward|gradcheck|print)\\b" }
+        { "name": "support.function.builtin.seloryn", "match": "\\b(?:tensor_f32|tensor_i64|tensor_zeros_f32|tensor_zeros_i64|tensor_shape|tensor_rank|tensor_elements|tensor_dtype|tensor_to_f32|tensor_to_i64|tensor_item_f32|tensor_get_f32|tensor_get_i64|reshape|tensor_sum|sum|tensor_mean|matmul|transpose|tensor_relu|tensor_exp|tensor_log|tensor_softmax|tensor_logsumexp|tensor_cross_entropy|tensor_sum_to_shape|train_linear|train_mlp|load_checkpoint|read_stdin|read_file|parse|encode|get|as_text|as_i64|as_f32|as_f64|as_bool|ModelRequest|ModelResponse|fixture_provider|slow_fixture_provider|backward|gradcheck|print)\\b" }
       ]
     },
     "functions": {

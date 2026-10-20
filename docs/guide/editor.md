@@ -38,7 +38,7 @@ Build and install the local editor preview with:
 ```text
 npm ci --prefix tooling/vscode
 npm run package --prefix tooling/vscode
-code --install-extension tooling/vscode/seloryn-language-0.11.0.vsix
+code --install-extension tooling/vscode/seloryn-language-0.12.0.vsix
 ```
 
 In VS Code, choose `Seloryn File Icons` from `Preferences: File Icon Theme` to

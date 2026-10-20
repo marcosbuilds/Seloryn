@@ -1216,6 +1216,7 @@ impl<'a> Checker<'a> {
             Builtin::TensorGetF32 | Builtin::TensorGetI64 => 2,
             Builtin::Sum | Builtin::Mean => 0,
             Builtin::Matmul | Builtin::Softmax | Builtin::LogSumExp | Builtin::SumToShape => 2,
+            Builtin::CrossEntropy => 3,
             Builtin::Transpose | Builtin::Relu | Builtin::Exp | Builtin::Log => 1,
         };
         let valid_arity = if matches!(builtin, Builtin::Sum | Builtin::Mean) {
@@ -1398,6 +1399,20 @@ impl<'a> Checker<'a> {
                 self.ensure_expr_assignable(&arguments[1], &Type::I64, "reduction axis");
                 Type::Tensor(TensorDtype::F32)
             }
+            Builtin::CrossEntropy => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::Tensor(TensorDtype::F32),
+                    "cross_entropy logits",
+                );
+                self.ensure_expr_assignable(
+                    &arguments[1],
+                    &Type::Tensor(TensorDtype::F32),
+                    "cross_entropy targets",
+                );
+                self.ensure_expr_assignable(&arguments[2], &Type::I64, "cross_entropy axis");
+                Type::Tensor(TensorDtype::F32)
+            }
             Builtin::SumToShape => {
                 self.ensure_expr_assignable(&arguments[0], &Type::Tensor(TensorDtype::F32), name);
                 self.ensure_expr_assignable(
@@ -1480,6 +1495,32 @@ impl<'a> Checker<'a> {
                     Type::Text
                 };
                 result(Type::List(Box::new(value)))
+            }
+            "len" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    let value_type = self.type_of_expr(value);
+                    if !matches!(
+                        value_type,
+                        Type::List(_) | Type::Text | Type::Unknown | Type::Error
+                    ) {
+                        self.error("SEL-T003", "len expects a List or Text", value.span());
+                    }
+                }
+                Type::I64
+            }
+            "to_f64" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    let value_type = self.type_of_expr(value);
+                    if !matches!(
+                        value_type,
+                        Type::I64 | Type::F32 | Type::F64 | Type::Unknown | Type::Error
+                    ) {
+                        self.error("SEL-T003", "to_f64 expects a numeric value", value.span());
+                    }
+                }
+                Type::F64
             }
             "from_text" => {
                 self.check_standard_arity(name, arguments, 1, span);
@@ -2125,7 +2166,7 @@ fn is_supported_standard_directive(text: &str) -> bool {
         ]
         .as_slice(),
         "autograd" => ["backward", "gradcheck", "gradients"].as_slice(),
-        "data" => ["range"].as_slice(),
+        "data" => ["range", "len", "to_f64"].as_slice(),
         "training" => [
             "train_linear",
             "train_linear_gpu",
@@ -2222,6 +2263,7 @@ fn builtin_name(builtin: Builtin) -> &'static str {
         Builtin::Log => "tensor_log",
         Builtin::Softmax => "tensor_softmax",
         Builtin::LogSumExp => "tensor_logsumexp",
+        Builtin::CrossEntropy => "tensor_cross_entropy",
         Builtin::SumToShape => "tensor_sum_to_shape",
     }
 }

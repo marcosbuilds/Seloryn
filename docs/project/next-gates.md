@@ -1,6 +1,6 @@
 # Next executable gates
 
-Seloryn is currently `0.11`: a bounded verified-preview language and runtime for
+Seloryn is currently `0.12`: a bounded verified-preview language and runtime for
 AI development and integration. The next steps are executable gates, not a
 promise that every design proposal already exists.
 
@@ -64,15 +64,16 @@ promise that every design proposal already exists.
 - The `self-hosted-mlp` proof now owns a complete custom ReLU network in `.sely`,
   including its dataset, objective, updates, holdout evaluation, persisted
   JSON checkpoint, reload and inference, with source-owned progress events.
-- The `self-hosted-language-model` proof now owns a complete 14-token bigram
-  next-token workflow in modular `.sely` files, including textual dataset
-  ingestion, tokenizer, cross-entropy, SGD, held-out evaluation, checkpoint
-  hash validation, reload, JSON2 progress and a separate inference request.
+- The `self-hosted-language-model` proof now owns a complete runtime-sized
+  bigram next-token workflow in modular `.sely` files, including vocabulary and
+  textual dataset ingestion, tokenizer, fused cross-entropy, reusable parameter
+  and SGD modules, held-out evaluation, checkpoint hash validation, reload,
+  JSON2 progress and a separate inference request.
 
 ## Next gates
 
-1. **Editor distribution — completed locally:** the `0.11.0` package is on the
-   same compatibility line as language `0.11` and runtime `0.11.0`. It contains
+1. **Editor distribution — completed locally:** the `0.12.0` package is on the
+   same compatibility line as language `0.12` and runtime `0.12.0`. It contains
    a deterministic self-contained VSIX, the canonical Seloryn symbol and the
    optional `.sely` file-icon theme. A real VS Code host still needs an
    interactive rendering check; that is a validation task, not an unbuilt
@@ -94,7 +95,7 @@ promise that every design proposal already exists.
    reusable `Parameter`/`Module`/`Dataset`/`Optimizer` APIs with explicit state
    and checkpoint compatibility. The current loop proves ownership of the
    orchestration, not yet a public object framework.
-5. **Runtime release:** the local 0.11.0 candidate now has supported Windows
+5. **Runtime release:** the local 0.12.0 candidate now has supported Windows
    x64 staging, checksums, provenance, installer failure-path evidence and the
    bounded operational reliability evidence. Public binaries, cross-platform
    installer execution, upgrade/rollback behavior and a release remain pending

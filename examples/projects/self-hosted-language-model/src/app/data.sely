@@ -1,6 +1,7 @@
 module app.data
 
-from app.tokenizer import tokenize
+from app.tokenizer import Vocabulary, tokenize
+from data import len, range
 from json import as_text_list, get, read_file, sha256
 
 pub record Dataset:
@@ -14,29 +15,25 @@ fn indicator(token: I64, expected: I64) -> F64:
         return 1.0
     return 0.0
 
-pub fn one_hot(token: I64) -> List[F64]:
-    return [indicator(token, 0), indicator(token, 1), indicator(token, 2), indicator(token, 3), indicator(token, 4), indicator(token, 5), indicator(token, 6), indicator(token, 7), indicator(token, 8), indicator(token, 9), indicator(token, 10), indicator(token, 11), indicator(token, 12), indicator(token, 13)]
-
-fn rows_as_one_hot(tokens: List[I64], rows: I64, offset: I64) -> List[F64]:
+pub fn one_hot(token: I64, vocabulary_size: I64) -> List[F64]:
     var encoded: List[F64] = []
-    for row in range(rows):
-        encoded = encoded + one_hot(tokens[row + offset])
+    for expected in range(vocabulary_size):
+        encoded = encoded + [indicator(token, expected)]
     return encoded
 
-fn count_tokens(tokens: List[I64]) -> I64:
-    var count: I64 = 0
-    for _token in tokens:
-        count = count + 1
-    return count
+fn rows_as_one_hot(tokens: List[I64], rows: I64, vocabulary_size: I64, offset: I64) -> List[F64]:
+    var encoded: List[F64] = []
+    for row in range(rows):
+        encoded = encoded + one_hot(tokens[row + offset], vocabulary_size)
+    return encoded
 
-pub fn load(path: Text, token_count: I64, rows: I64) -> Result[Dataset, JsonIoError]:
-    require token_count > 1 else JsonIoError("dataset token_count must be greater than one")
-    require rows > 0 else JsonIoError("dataset rows must be greater than zero")
-    require token_count == rows + 1 else JsonIoError("dataset token_count must equal rows plus one")
+pub fn load_dataset(path: Text, vocabulary: Vocabulary) -> Result[Dataset, JsonIoError]:
     let document: Json = read_file(path)?
     let raw_tokens: List[Text] = as_text_list(get(document, ["tokens"])?)?
-    let tokens: List[I64] = tokenize(raw_tokens)?
-    require count_tokens(tokens) == token_count else JsonIoError("dataset token count does not match manifest")
-    let input_values: List[F64] = rows_as_one_hot(tokens, rows, 0)
-    let target_values: List[F64] = rows_as_one_hot(tokens, rows, 1)
-    return Ok(Dataset(tensor_f32(input_values, [rows, 14]), tensor_f32(target_values, [rows, 14]), rows, sha256(document)))
+    let token_count: I64 = len(raw_tokens)
+    require token_count > 1 else JsonIoError("dataset must contain at least two tokens")
+    let rows: I64 = token_count - 1
+    let tokens: List[I64] = tokenize(vocabulary, raw_tokens)?
+    let input_values: List[F64] = rows_as_one_hot(tokens, rows, vocabulary.size, 0)
+    let target_values: List[F64] = rows_as_one_hot(tokens, rows, vocabulary.size, 1)
+    return Ok(Dataset(tensor_f32(input_values, [rows, vocabulary.size]), tensor_f32(target_values, [rows, vocabulary.size]), rows, sha256(document)))

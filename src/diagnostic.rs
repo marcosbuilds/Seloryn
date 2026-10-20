@@ -1,7 +1,7 @@
 use std::path::Path;
 
 pub const ANALYSIS_SCHEMA: &str = "seloryn.analysis.v1";
-pub const LANGUAGE_VERSION: &str = "0.11";
+pub const LANGUAGE_VERSION: &str = "0.12";
 pub const RUNTIME_PACKAGE: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

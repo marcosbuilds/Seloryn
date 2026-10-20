@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import shutil
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -14,8 +15,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / "target" / "release" / ("seloryn.exe" if sys.platform == "win32" else "seloryn")
 PROJECT = ROOT / "examples" / "projects" / "self-hosted-language-model"
-TOKENS = ["<bos>", "the", "cat", "sat", "on", "mat", "dog", "ran", "in", "park", "<eos>", "a", "fox", "jumped"]
+BENCHMARK_RUNS = 3
+TOKENS = json.loads((PROJECT / "data" / "vocab.json").read_text(encoding="utf-8"))["tokens"]
 TOKEN_ID = {token: index for index, token in enumerate(TOKENS)}
+EOS = TOKEN_ID["<eos>"]
 
 
 def pairs(path: Path) -> list[tuple[int, int]]:
@@ -41,10 +44,10 @@ def generate(weights: list[list[float]], steps: int) -> str:
     output: list[str] = []
     for _ in range(steps):
         current = max(range(len(weights[current])), key=weights[current].__getitem__)
-        output.append(TOKENS[current] if current == 10 else TOKENS[current] + " ")
-        if current == 10:
+        output.append(TOKENS[current])
+        if current == EOS:
             break
-    return "".join(output)
+    return " ".join(output)
 
 
 def python_model(train: list[tuple[int, int]], test: list[tuple[int, int]]) -> dict[str, object]:
@@ -67,21 +70,61 @@ def python_model(train: list[tuple[int, int]], test: list[tuple[int, int]]) -> d
     return {"language": "Python stdlib", "initial_loss": initial, "final_loss": loss(weights, train), "test_loss": loss(weights, test), "test_accuracy": accuracy(weights, test), "generated": generate(weights, 8)}
 
 
+def python_worker() -> int:
+    result = python_model(pairs(PROJECT / "data" / "train.json"), pairs(PROJECT / "data" / "test.json"))
+    print(json.dumps(result, sort_keys=True))
+    return 0
+
+
 def main() -> int:
     train = pairs(PROJECT / "data" / "train.json")
     test = pairs(PROJECT / "data" / "test.json")
-    started = time.perf_counter()
-    python_result = python_model(train, test)
-    python_result["wall_seconds"] = time.perf_counter() - started
-    with tempfile.TemporaryDirectory(prefix="seloryn-language-comparison-") as directory:
-        project = Path(directory) / "language-model"
-        shutil.copytree(PROJECT, project)
+    if sys.argv[1:] == ["--python-worker"]:
+        return python_worker()
+
+    python_seconds_samples: list[float] = []
+    python_result: dict[str, object] | None = None
+    for _ in range(BENCHMARK_RUNS):
         started = time.perf_counter()
-        process = subprocess.run([str(BINARY), "run", str(project), "--format=json", "--log=off"], cwd=ROOT, input=json.dumps({"mode": "train"}), text=True, encoding="utf-8", capture_output=True, check=False, timeout=60)
-        seloryn_seconds = time.perf_counter() - started
+        process = subprocess.run(
+            [sys.executable, __file__, "--python-worker"],
+            cwd=ROOT,
+            text=True,
+            encoding="utf-8",
+            capture_output=True,
+            check=False,
+            timeout=60,
+        )
+        python_seconds_samples.append(time.perf_counter() - started)
         assert process.returncode == 0, process.stderr
-        report = json.loads(process.stdout)["value"]["value"]["fields"][0]["fields"]
+        current = json.loads(process.stdout)
+        if python_result is None:
+            python_result = current
+        else:
+            assert current == python_result
+    assert python_result is not None
+    python_result["wall_seconds"] = statistics.median(python_seconds_samples)
+    python_result["wall_seconds_samples"] = python_seconds_samples
+
+    seloryn_seconds_samples: list[float] = []
+    report: dict[str, object] | None = None
+    for _ in range(BENCHMARK_RUNS):
+        with tempfile.TemporaryDirectory(prefix="seloryn-language-comparison-") as directory:
+            project = Path(directory) / "language-model"
+            shutil.copytree(PROJECT, project)
+            started = time.perf_counter()
+            process = subprocess.run([str(BINARY), "run", str(project), "--format=json", "--log=off"], cwd=ROOT, input=json.dumps({"mode": "train"}), text=True, encoding="utf-8", capture_output=True, check=False, timeout=60)
+            seloryn_seconds_samples.append(time.perf_counter() - started)
+            assert process.returncode == 0, process.stderr
+            current = json.loads(process.stdout)["value"]["value"]["fields"][0]["fields"]
+            if report is None:
+                report = current
+            else:
+                assert current == report
+    assert report is not None
+    seloryn_seconds = statistics.median(seloryn_seconds_samples)
     seloryn_result = {"language": "Seloryn .sely", "initial_loss": report["initial_loss"], "final_loss": report["final_loss"], "test_loss": report["test_loss"], "test_accuracy": report["test_accuracy"], "generated": report["generated"], "wall_seconds": seloryn_seconds}
+    seloryn_result["wall_seconds_samples"] = seloryn_seconds_samples
     print(json.dumps({"python": python_result, "seloryn": seloryn_result}, indent=2, sort_keys=True))
     print("| implementation | initial loss | final loss | test loss | test accuracy | generation | wall seconds |")
     print("|---|---:|---:|---:|---:|---|---:|")

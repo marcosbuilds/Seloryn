@@ -7,7 +7,9 @@ param(
     [string]$ExpectedSha256,
     [string]$ProvenancePath,
     [string]$ExpectedLanguageVersion,
-    [string]$ExpectedRuntimeVersion
+    [string]$ExpectedRuntimeVersion,
+    [switch]$AddToPath,
+    [switch]$RemoveFromPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -85,6 +87,36 @@ function Write-Result($Value) {
     $Value | ConvertTo-Json -Compress -Depth 8
 }
 
+function User-PathEntries() {
+    $value = [Environment]::GetEnvironmentVariable('Path', 'User')
+    if ([string]::IsNullOrWhiteSpace($value)) { return @() }
+    return @($value -split [IO.Path]::PathSeparator | Where-Object { $_ })
+}
+
+function Set-User-PathEntries([string[]]$Entries) {
+    $value = if ($Entries.Count -gt 0) { $Entries -join [IO.Path]::PathSeparator } else { $null }
+    [Environment]::SetEnvironmentVariable('Path', $value, 'User')
+}
+
+function Same-PathEntry([string]$Left, [string]$Right) {
+    return $Left.Trim().TrimEnd('\') -ieq $Right.Trim().TrimEnd('\')
+}
+
+function Ensure-User-PathEntry([string]$Entry) {
+    $entries = @(User-PathEntries)
+    if ($entries | Where-Object { Same-PathEntry $_ $Entry }) { return $false }
+    Set-User-PathEntries ([string[]]($entries + $Entry))
+    return $true
+}
+
+function Remove-User-PathEntry([string]$Entry) {
+    $entries = @(User-PathEntries)
+    $remaining = @($entries | Where-Object { -not (Same-PathEntry $_ $Entry) })
+    if ($remaining.Count -eq $entries.Count) { return $false }
+    Set-User-PathEntries ([string[]]$remaining)
+    return $true
+}
+
 Assert-SafeRoot $InstallRoot
 $root = FullPath $InstallRoot
 $manifest = ManifestPath $root
@@ -126,6 +158,11 @@ switch ($Action) {
             Copy-Item -LiteralPath $destination -Destination (Safe-InstalledPath $root $backupRelative)
         }
         Copy-Item -LiteralPath $source -Destination $destination -Force
+        $pathEntry = Join-Path $root 'bin'
+        $pathAdded = $false
+        if ($AddToPath) {
+            $pathAdded = Ensure-User-PathEntry $pathEntry
+        }
         $record = [ordered]@{
             schema = 1
             artifact = 'seloryn-cli'
@@ -140,17 +177,24 @@ switch ($Action) {
             installed_utc = [DateTime]::UtcNow.ToString('o')
             backup_relative = $backupRelative
             provenance = $provenance
-            path_entry = (Join-Path $root 'bin')
+            path_entry = $pathEntry
+            path_scope = 'User'
+            path_added = $pathAdded
         }
         $record | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $manifest -Encoding UTF8
-        Write-Result ([ordered]@{ action = 'install'; artifact = 'seloryn-cli'; platform = 'windows-x64'; sha256 = $hash; language_version = $languageVersion; runtime_package = $runtimeVersion; path_entry = (Join-Path $root 'bin'); rollback = [bool]$backupRelative })
+        Write-Result ([ordered]@{ action = 'install'; artifact = 'seloryn-cli'; platform = 'windows-x64'; sha256 = $hash; language_version = $languageVersion; runtime_package = $runtimeVersion; path_entry = $pathEntry; path_scope = 'User'; path_added = $pathAdded; rollback = [bool]$backupRelative })
     }
     'Uninstall' {
         $record = Read-Manifest $root
         $destination = Safe-InstalledPath $root ([string]$record.binary_relative)
         if (Test-Path -LiteralPath $destination -PathType Leaf) { Remove-Item -LiteralPath $destination -Force }
+        $pathEntry = [string]$record.path_entry
+        $pathRemoved = $false
+        if ($RemoveFromPath -and $pathEntry) {
+            $pathRemoved = Remove-User-PathEntry $pathEntry
+        }
         Remove-Item -LiteralPath $manifest -Force
-        Write-Result ([ordered]@{ action = 'uninstall'; artifact = 'seloryn-cli'; platform = 'windows-x64'; path_entry_preserved = $true })
+        Write-Result ([ordered]@{ action = 'uninstall'; artifact = 'seloryn-cli'; platform = 'windows-x64'; path_entry = $pathEntry; path_removed = $pathRemoved; path_entry_preserved = -not $RemoveFromPath })
     }
     'Rollback' {
         $record = Read-Manifest $root
@@ -167,8 +211,10 @@ switch ($Action) {
     }
     'DiagnosePath' {
         $bin = Join-Path $root 'bin'
-        $entries = @($env:PATH -split [IO.Path]::PathSeparator | Where-Object { $_ })
-        $present = $entries | Where-Object { (FullPath $_) -eq (FullPath $bin) }
-        Write-Result ([ordered]@{ action = 'diagnose-path'; bin = $bin; on_path = [bool]$present; fix = "Add $bin to PATH for this user or shell" })
+        $processEntries = @($env:PATH -split [IO.Path]::PathSeparator | Where-Object { $_ })
+        $userEntries = @(User-PathEntries)
+        $processPresent = @($processEntries | Where-Object { Same-PathEntry $_ $bin }).Count -gt 0
+        $userPresent = @($userEntries | Where-Object { Same-PathEntry $_ $bin }).Count -gt 0
+        Write-Result ([ordered]@{ action = 'diagnose-path'; bin = $bin; on_path = $processPresent; user_path = $userPresent; fix = "Run Install -AddToPath or add $bin to PATH for this user or shell" })
     }
 }

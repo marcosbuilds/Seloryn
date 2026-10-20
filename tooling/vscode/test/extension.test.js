@@ -254,8 +254,8 @@ assert.equal(extension.sanitizeGhostText('abcdefgh', 4), 'abcd');
 const diagnosticDocument = documentFor('🙂\nfn main() -> Unit:\n    return\n');
 const diagnosticPayload = JSON.stringify({
   schema: 'seloryn.analysis.v1',
-  language_version: '0.11',
-  runtime_package: '0.11.0',
+  language_version: '0.12',
+  runtime_package: '0.12.0',
   diagnostics: [{
     code: 'SEL-P001',
     severity: 'error',
@@ -336,8 +336,8 @@ const diagnosticVscode = {
 
   const unicodePayload = JSON.stringify({
     schema: 'seloryn.analysis.v1',
-  language_version: '0.11',
-  runtime_package: '0.11.0',
+  language_version: '0.12',
+  runtime_package: '0.12.0',
     diagnostics: [{
       code: 'SEL-P001',
       severity: 'error',

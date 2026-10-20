@@ -18,7 +18,7 @@ seloryn exec <bundle.selyapp|directory>
 seloryn lsp --stdio
 ```
 
-The preview version reports `0.11`, `package=0.11.0` and
+The preview version reports `0.12`, `package=0.12.0` and
 `build=local-development`; this is
 not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
@@ -102,7 +102,8 @@ bundle evidence rather than an installer or supported release.
 human output. `gpu-probe` is a bounded hardware smoke test: it requires a
 physical non-fallback adapter and validates a real compute dispatch/readback, but it
 does not move general model training to the GPU. A `.sely` project can explicitly
-import `train_linear_gpu` for the closed scalar F32 proof profile; it never
+import the canonical `gpu` profile for the closed scalar F32 proof (the older
+`train_linear_gpu` name remains accepted); it never
 silently falls back to CPU.
 
 `doctor [project]` performs read-only manifest, source graph, capability and

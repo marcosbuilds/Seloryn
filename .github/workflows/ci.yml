@@ -65,6 +65,10 @@ jobs:
         run: python tests/streaming_v2_probe.py
       - name: Independent Seloryn-authored training proof
         run: python tests/self_hosted_probe.py
+      - name: Independent self-hosted language-model proof
+        run: python tests/self_hosted_language_model_probe.py
+      - name: Python/Seloryn language-model comparison
+        run: python tests/compare_language_model.py
       - name: GPU compute probe when an adapter exists
         run: python tests/gpu_probe.py
       - name: GPU linear training proof when an adapter exists
@@ -113,3 +117,7 @@ jobs:
           if errorlevel 66 exit /b 1
           if not errorlevel 65 exit /b 1
           exit /b 0
+      - name: Windows installer and terminal lifecycle
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\tests\installer_probe.ps1

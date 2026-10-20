@@ -1441,6 +1441,48 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                     value: Box::new(Value::List(converted)),
                 })
             }
+            "len" => {
+                let Some(value) = values.first() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "len requires a List or Text",
+                        span,
+                    )));
+                };
+                let length = match value {
+                    Value::List(values) => values.len(),
+                    Value::Text(text) => text.chars().count(),
+                    _ => {
+                        return Err(Control::Runtime(self.runtime(
+                            "SEL-R203",
+                            "len requires a List or Text",
+                            span,
+                        )));
+                    }
+                };
+                let length = i64::try_from(length).map_err(|_| {
+                    Control::Runtime(self.runtime("SEL-R203", "len result exceeds I64", span))
+                })?;
+                Ok(Value::I64(length))
+            }
+            "to_f64" => {
+                let Some(value) = values.first() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "to_f64 requires a numeric value",
+                        span,
+                    )));
+                };
+                match value {
+                    Value::I64(value) => Ok(Value::F64(*value as f64)),
+                    Value::F64(value) if value.is_finite() => Ok(Value::F64(*value)),
+                    _ => Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "to_f64 requires a finite numeric value",
+                        span,
+                    ))),
+                }
+            }
             "from_text" => {
                 let Some(Value::Text(value)) = values.first() else {
                     return Ok(json_error_result("from_text requires Text"));
@@ -2183,6 +2225,7 @@ impl<'a, 'event> Interpreter<'a, 'event> {
             Builtin::Sum | Builtin::Mean => 0,
             Builtin::Transpose | Builtin::Relu | Builtin::Exp | Builtin::Log => 1,
             Builtin::Softmax | Builtin::LogSumExp | Builtin::SumToShape => 2,
+            Builtin::CrossEntropy => 3,
         };
         let valid_arity = if matches!(builtin, Builtin::Sum | Builtin::Mean) {
             arguments.len() == 1 || arguments.len() == 2
@@ -2399,6 +2442,15 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 let axis = self.reduction_axis(&values[1], tensor.rank(), span)?;
                 tensor
                     .logsumexp(axis)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::CrossEntropy => {
+                let logits = tensor_value(&values[0], span, self)?;
+                let targets = tensor_value(&values[1], span, self)?;
+                let axis = self.reduction_axis(&values[2], logits.rank(), span)?;
+                logits
+                    .cross_entropy(targets, axis)
                     .map(Value::Tensor)
                     .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
             }

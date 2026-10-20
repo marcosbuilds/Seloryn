@@ -33,7 +33,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 
-pub(crate) const LANGUAGE_VERSION: &str = "0.11";
+pub(crate) const LANGUAGE_VERSION: &str = "0.12";
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEVELOPMENT_BUILD_ID: &str = "local-development";
 pub(crate) const EXIT_OK: u8 = 0;

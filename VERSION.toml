@@ -2,15 +2,15 @@
 # The language version is a capability count (M.mm), not a decimal float.
 
 [current]
-language = "0.11"
-runtime_package = "0.11.0"
-extension_package = "0.11.0"
+language = "0.12"
+runtime_package = "0.12.0"
+extension_package = "0.12.0"
 channel = "verified-preview"
 
 [comparison]
-previous_language = "0.10"
-previous_runtime_package = "0.10.0"
-previous_extension_package = "0.10.0"
+previous_language = "0.11"
+previous_runtime_package = "0.11.0"
+previous_extension_package = "0.11.0"
 
 [[gains]]
 id = "N3B-TENSOR-AUTODIFF"
@@ -110,8 +110,14 @@ evidence = "src/runtime.rs; src/semantic.rs; examples/projects/self-hosted-mlp; 
 [[gains]]
 id = "N13-SELF-HOSTED-LANGUAGE-MODEL"
 language = "0.11"
-summary = "A complete fixed-vocabulary next-token language model can be authored in modular .sely source with owned data, training, held-out evaluation, checkpoint reload and inference"
+summary = "A complete next-token language model can be authored in modular .sely source with runtime-sized vocabulary and datasets, reusable parameters and SGD, fused cross-entropy, held-out evaluation, checkpoint reload and inference"
 evidence = "src/runtime.rs; src/semantic.rs; examples/projects/self-hosted-language-model; tests/self_hosted_language_model_probe.py; tests/compare_language_model.py; docs/compute/language-model.md; docs/project/status.md"
+
+[[gains]]
+id = "N14-GENERIC-SELF-HOSTED-LANGUAGE-MODEL"
+language = "0.12"
+summary = "Generalized the source-owned language-model workflow to runtime-sized vocabularies and datasets, reusable .sely Parameter/Sgd modules, fused cross-entropy/autograd and sampled real JSON2 training evidence"
+evidence = "src/runtime.rs; src/semantic.rs; src/tensor/ops.rs; src/tensor_autograd.rs; examples/projects/self-hosted-language-model; tests/self_hosted_language_model_probe.py; tests/compare_language_model.py; docs/compute/language-model.md"
 
 [[extension_gains]]
 id = "EXT-N10-JSON-TYPED-ARRAY-INGESTION"
@@ -147,6 +153,13 @@ language = "0.11"
 package = "0.11.0"
 summary = "VS Code completions expose text-array JSON ingestion and the source-owned modular language-model workflow on the language 0.11 line"
 evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; examples/projects/self-hosted-language-model; docs/releases/vscode-0.11.0.md"
+
+[[extension_gains]]
+id = "EXT-N15-GENERIC-SELF-HOSTED-LANGUAGE-MODEL"
+language = "0.12"
+package = "0.12.0"
+summary = "VS Code completions expose fused cross-entropy and the runtime-sized source-owned language-model workflow on the language 0.12 line"
+evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/syntaxes/seloryn.tmLanguage.json; docs/releases/vscode-0.12.0.md"
 
 [[runtime_gains]]
 id = "R1-WORKSPACE-CONTRACTS"

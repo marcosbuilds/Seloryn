@@ -1,6 +1,6 @@
 # Current capability status
 
-Seloryn `0.11` is a verified-preview language/runtime for a bounded `.sely`
+Seloryn `0.12` is a verified-preview language/runtime for a bounded `.sely`
 subset. It includes an executable CPU MLP training profile, hardened resume
 integrity, a real physical non-fallback GPU compute probe and a closed GPU
 linear-training profile in addition to the earlier
@@ -21,7 +21,7 @@ purpose ML platform.
 | Human/JSON/JSON2 terminal streaming with flush, identity and stdout/stderr separation | **Verified preview for bounded CPU/GPU-linear training; JSON2 chain and replay independently verified** | [`src/main.rs`](../../src/main.rs), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py), [`replay-receipt.py`](../../scripts/streaming/replay-receipt.py) |
 | Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop | **Verified preview** | [`examples/projects/self-hosted-linear`](../../examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](../../tests/self_hosted_probe.py) |
 | Custom `.sely` ReLU MLP with own dataset, training, holdout evaluation, atomic checkpoint, reload and inference | **Verified preview** | [`examples/projects/self-hosted-mlp`](../../examples/projects/self-hosted-mlp), [`tests/self_hosted_mlp_probe.py`](../../tests/self_hosted_mlp_probe.py); `train_mlp` is not used |
-| Complete source-owned `.sely` 14-token bigram language model with owned dataset, training, held-out evaluation, hash-validated checkpoint reload and separate inference | **Verified preview** | [`examples/projects/self-hosted-language-model`](../../examples/projects/self-hosted-language-model), [`tests/self_hosted_language_model_probe.py`](../../tests/self_hosted_language_model_probe.py), [`docs/compute/language-model.md`](../compute/language-model.md); CPU-only and fixed-vocabulary |
+| Complete source-owned `.sely` bigram language model with runtime-loaded vocabulary/datasets, reusable parameters/SGD, training, held-out evaluation, hash-validated checkpoint reload and separate inference | **Verified preview** | [`examples/projects/self-hosted-language-model`](../../examples/projects/self-hosted-language-model), [`tests/self_hosted_language_model_probe.py`](../../tests/self_hosted_language_model_probe.py), [`docs/compute/language-model.md`](../compute/language-model.md); CPU-only and one-token context |
 | Physical hardware adapter inventory and bounded WGSL compute/readback probe | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`tests/gpu_probe.py`](../../tests/gpu_probe.py) |
 | Explicit `train_linear_gpu` scalar F32 profile with device-resident parameters and one final readback | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`examples/projects/gpu-linear-training`](../../examples/projects/gpu-linear-training), [`tests/gpu_training_probe.py`](../../tests/gpu_training_probe.py) |
 | JSON2 program/manifest/dataset/checkpoint/result identity, replay helper, structured path redaction and optional HMAC authentication | **Verified preview for bounded training receipts** | [`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py) |
@@ -31,7 +31,7 @@ purpose ML platform.
 | Runtime release provenance: source tree, toolchain, lockfile, binary and staged artifact hashes | **Verified packaging gate** | [`scripts/release/package-runtime.py`](../../scripts/release/package-runtime.py), [`scripts/release/prepare-release.py`](../../scripts/release/prepare-release.py), [`tests/release_staging_probe.py`](../../tests/release_staging_probe.py) |
 | Versioned `seloryn.bundle.v1` artifacts with build metadata hash verification | **Verified runtime patch** | [`src/project.rs`](../../src/project.rs), [`src/main.rs`](../../src/main.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
 | Four-process operational reliability, deterministic semantic receipts/checkpoints and workspace confinement | **Verified bounded CPU evidence** | [`tests/operational_reliability_probe.py`](../../tests/operational_reliability_probe.py), [`operational-reliability.md`](../benchmarks/operational-reliability.md); forced Windows termination is classified separately and graceful cancellation is not claimed |
-| VS Code `.sely` highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and canonical Seloryn file icon | **Verified editor preview on the `0.11` language line** | [`tooling/vscode`](../../tooling/vscode); headless transport/controller tests and Marketplace publication pending |
+| VS Code `.sely` highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and canonical Seloryn file icon | **Verified editor preview on the `0.12` language line** | [`tooling/vscode`](../../tooling/vscode); headless transport/controller tests and Marketplace publication pending |
 | `seloryn lsp --stdio` full-document diagnostics, completion, definition and document symbols | **Verified bounded LSP v1 lifecycle slice** | [`src/lsp.rs`](../../src/lsp.rs), [`tooling/vscode/lsp-client.js`](../../tooling/vscode/lsp-client.js), [`tests/lsp_probe.py`](../../tests/lsp_probe.py); version ordering, stale-change rejection, `didClose` cleanup and diagnostic clearing are covered; indexed analysis and incremental range parsing remain outside this gate |
 | LSP document lifecycle, monotonic versions, stale-change rejection and framed-header validation | **Verified runtime patch** | [`src/lsp.rs`](../../src/lsp.rs), [`tests/lsp_probe.py`](../../tests/lsp_probe.py) |
 | Local modules, bounded JSON capabilities and deterministic bundles | Experimental implemented and tested | [`src/project.rs`](../../src/project.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
@@ -41,10 +41,10 @@ purpose ML platform.
 
 | Capability | State | Consequence |
 |---|---|---|
-| Public `Module`/`Parameter`/`Dataset` APIs and optimizer families | Not implemented | Seloryn can now own a bounded optimization loop, but the reusable object API is still not exposed |
+| Public package-wide `Module`/`Dataset` APIs and optimizer families | Not implemented | The language-model project now demonstrates reusable `.sely` `Parameter` and `Sgd` modules; a registry-wide API is still not exposed |
 | GPU tensor/autodiff training, GPU MLP, distributed execution, mixed precision and memory sharding | Not implemented | `train_linear_gpu` is a closed scalar F32 profile; it does not make `Tensor` or MLP device-resident |
-| Transformer/LLM-scale training, Unicode/subword tokenizers and HTTP serving | Not implemented | the current language-model proof is a fixed-vocabulary CPU bigram with JSON CLI integration |
-| Runtime installer, registry, broad package ecosystem and stable ABI | Not implemented | use a built binary or the source checkout; the preview is not a stable distribution |
+| Transformer/LLM-scale training, Unicode/subword tokenizers and HTTP serving | Not implemented | the current language-model proof is a CPU bigram with one-token context and JSON CLI integration |
+| Runtime installer, registry, broad package ecosystem and stable ABI | Experimental implemented | the Windows installer can verify and install a local binary with optional user PATH integration; the preview is not a stable ABI |
 | Indexed/incremental editor analysis and interactive VS Code training panel | Not implemented | the extension now uses the bounded full-document LSP by default, retains the saved-file CLI fallback, and training still runs through CLI/terminal |
 | Public-key signatures, asynchronous backpressure protocol and general execution telemetry | Not implemented | JSON2 now supports deterministic identity/replay for bounded training and optional keyed HMAC authentication; it is not a public Ed25519 signature or async queue |
 
@@ -97,12 +97,18 @@ workflow that defines the network, objective, gradient updates, holdout
 evaluation, checkpoint reload and inference without `train_mlp`. It does not
 create a public `Module`/`Parameter` framework, GPU tensor training or a general
 checkpoint registry.
-The `0.11` language-model gain adds a complete source-owned next-token baseline:
-modular imports, textual dataset ingestion, tokenizer, softmax cross-entropy,
-reverse-mode gradient updates, held-out evaluation, checkpoint hash validation,
-reload and a second-process inference request. Its independent comparison matches
-a stdlib reference within `1e-5` for loss and exactly for accuracy. It does not
+The `0.11` language-model gain added the first complete source-owned next-token baseline:
+modular imports, runtime-sized textual dataset ingestion, tokenizer, fused
+softmax cross-entropy, reverse-mode gradient updates, named parameters,
+reusable `.sely` SGD, held-out evaluation, checkpoint hash validation, reload
+and a second-process inference request. Its independent comparison matches a
+stdlib reference within `1e-5` for loss and exactly for accuracy. It does not
 claim a transformer, subword tokenizer, GPU training, HTTP serving or stable ABI.
+The `0.12` gain generalizes that workflow to runtime-sized vocabularies and
+datasets, reusable source-level parameters and SGD, fused cross-entropy with
+finite-difference coverage, and a repeated benchmark plus installed-terminal
+proof. It still does not claim a transformer, context larger than one token,
+GPU tensor training, HTTP serving or stable ABI.
 The runtime-only `0.9.1` patch adds read-only project diagnosis and
 no-overwrite transactional initialization. These commands improve adoption and
 failure visibility but deliberately do not convert the verified-preview channel

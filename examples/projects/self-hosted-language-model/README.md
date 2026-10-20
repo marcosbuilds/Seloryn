@@ -7,7 +7,9 @@ inteiramente em `.sely`.
 data/*.json
     -> app.tokenizer        vocabulário e IDs próprios
     -> app.data             pares bigram e one-hot
-    -> app.model            matmul -> logsumexp - logit-alvo
+    -> app.model            matmul -> cross-entropy fundida
+    -> app.parameters       parâmetros nomeados reutilizáveis
+    -> app.optim            SGD reutilizável
     -> app.training         gradients + SGD + avaliação + persistência
     -> app.checkpoint       JSON versionado e hash SHA-256
     -> app.serving          recarga e geração gulosa
@@ -15,10 +17,13 @@ data/*.json
 ```
 
 O limite é intencional e honesto: a entrada é JSON com uma lista textual de
-tokens pertencentes ao vocabulário fixo de 14 palavras/símbolos. Não há
-tokenização Unicode, subwords, batching dinâmico ou contexto maior que um
-token. O modelo aprende a distribuição do próximo token (`bigram`) e gera
-texto seguindo essa distribuição.
+tokens e `data/vocab.json` define o vocabulário. As dimensões das matrizes e os
+one-hot são derivados de `len(tokens)`, portanto o mesmo código aceita datasets
+e vocabulários de tamanhos diferentes. O fixture principal tem 14 tokens; o
+probe também treina uma variante independente de 5 tokens. Não há tokenização
+Unicode, subwords, batching dinâmico ou contexto maior que um token. O modelo
+aprende a distribuição do próximo token (`bigram`) e gera texto seguindo essa
+distribuição.
 
 ## Executar
 
@@ -47,7 +52,9 @@ resultado do runtime:
 | Inferência | stdin de produção + checkpoint | chamada local |
 
 Os números exatos, curva de loss, hashes e códigos de saída são impressos pelo
-probe e só são aceitos quando os invariantes passam.
+probe e só são aceitos quando os invariantes passam. O log de treino é real e
+encadeado; para evitar uma segunda avaliação cara em cada atualização, a perda
+é emitida nos passos 1, múltiplos de 8 e 160 (21 eventos para 160 updates).
 
 ## Evidência medida
 
@@ -57,15 +64,14 @@ produziram os mesmos resultados dentro de `3e-6`:
 | implementação | loss inicial | loss final | loss de teste | acurácia | geração |
 |---|---:|---:|---:|---:|---|
 | Python stdlib | 2.639057330 | 0.829485686 | 1.532877856 | 0.533333 | `the park <eos>` |
-| Seloryn `.sely` | 2.639058590 | 0.829485893 | 1.532878041 | 0.533333 | `the park <eos>` |
+| Seloryn `.sely` | 2.639057398 | 0.829485774 | 1.532877922 | 0.533333 | `the park <eos>` |
 
-O treino saiu com código `0`, emitiu 160 eventos `training.progress` em uma
+O treino saiu com código `0`, emitiu 21 eventos `training.progress` em uma
 cadeia JSON2 válida, salvou e recarregou o checkpoint, e a segunda invocação
 de inferência com o prompt `<bos> the cat` retornou o campo JSON
-`sat on the park ` (com espaço final preservado pela decodificação de tokens)
-com `status=ok`. O caso negativo com um
-token desconhecido saiu com código diferente de zero e a mensagem
-`unknown token in dataset`. Os hashes e o quadro completo estão em
+`sat on the park` com `status=ok`. O caso negativo com um token desconhecido
+saiu com código diferente de zero e a mensagem `unknown token in vocabulary`.
+Os hashes e o quadro completo estão em
 [`evidence.md`](evidence.md).
 
 ```text
@@ -74,8 +80,8 @@ python tests/self_hosted_language_model_probe.py
 python tests/compare_language_model.py
 ```
 
-O limite permanece explícito: este é um baseline bigram com vocabulário fixo,
-dimensões definidas pelo projeto, sem transformer, subwords, batching dinâmico,
-GPU ou servidor HTTP. A fronteira de integração comprovada é a API CLI JSON por
-stdin/stdout com checkpoint persistido e validado por hash; a inferência não
-revalida os hashes dos datasets porque não carrega datasets nessa operação.
+O limite permanece explícito: este é um baseline bigram com contexto de um
+token, sem transformer, subwords, batching dinâmico, GPU ou servidor HTTP. A
+fronteira de integração comprovada é a API CLI JSON por stdin/stdout com
+checkpoint persistido e validado por hash; a inferência não revalida os hashes
+dos datasets porque não carrega datasets nessa operação.

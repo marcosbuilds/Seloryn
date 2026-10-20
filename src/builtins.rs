@@ -23,6 +23,7 @@ pub enum Builtin {
     Log,
     Softmax,
     LogSumExp,
+    CrossEntropy,
     SumToShape,
 }
 
@@ -51,6 +52,7 @@ pub fn lookup(name: &str) -> Option<Builtin> {
         "tensor_log" => Some(Builtin::Log),
         "tensor_softmax" => Some(Builtin::Softmax),
         "tensor_logsumexp" => Some(Builtin::LogSumExp),
+        "tensor_cross_entropy" => Some(Builtin::CrossEntropy),
         "tensor_sum_to_shape" => Some(Builtin::SumToShape),
         _ => None,
     }

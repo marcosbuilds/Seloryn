@@ -20,7 +20,7 @@ The long-range goal is **real foundation-model and LLM training/inference**, thr
 
 1. Scalar autodiff and matrix tests.
 2. CPU multilayer perceptron training on real data.
-3. Bounded 14-token bigram next-token baseline on CPU — **verified preview**.
+3. Bounded runtime-sized bigram next-token baseline on CPU — **verified preview**.
 4. Minimal next-token transformer (small vocabulary, short context) on CPU.
 5. Efficient accelerator kernels and correct mixed precision.
 6. Save/resume checkpoints and interoperable model I/O.

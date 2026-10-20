@@ -129,6 +129,14 @@ enum Rule {
         input_value: Tensor,
         axis: usize,
     },
+    CrossEntropy {
+        logits: Option<usize>,
+        targets: Option<usize>,
+        targets_value: Tensor,
+        probabilities: Tensor,
+        log_probabilities: Tensor,
+        rows: usize,
+    },
     SumToShape {
         input: Option<usize>,
         input_shape: Vec<i64>,
@@ -357,6 +365,24 @@ impl Tape {
                 let probabilities = input_value.softmax(*axis).map_err(tensor_error)?;
                 let expanded = expand_reduction(gradient, &shape(input_value)?, Some(*axis))?;
                 Self::accumulate(gradients, *input, multiply(&probabilities, &expanded)?)
+            }
+            Rule::CrossEntropy {
+                logits,
+                targets,
+                targets_value,
+                probabilities,
+                log_probabilities,
+                rows,
+            } => {
+                let expanded = broadcast(gradient, &shape(probabilities)?)?;
+                let scale =
+                    Tensor::from_f32(vec![1.0 / *rows as f32], &[]).map_err(tensor_error)?;
+                let scaled = multiply(&expanded, &scale)?;
+                let logits_gradient = multiply(&subtract(probabilities, targets_value)?, &scaled)?;
+                let targets_gradient =
+                    multiply(&multiply(log_probabilities, &scaled)?, &scalar_minus_one()?)?;
+                Self::accumulate(gradients, *logits, logits_gradient)?;
+                Self::accumulate(gradients, *targets, targets_gradient)
             }
             Rule::SumToShape { input, input_shape } => {
                 Self::accumulate(gradients, *input, broadcast(gradient, input_shape)?)
@@ -809,6 +835,34 @@ impl<'a> Evaluator<'a> {
                     node: Some(node),
                 })
             }
+            "tensor_cross_entropy" => {
+                let (logits, logits_node) = tensor_arg(0)?;
+                let (targets, targets_node) = tensor_arg(1)?;
+                let reduction_axis = axis(2)?;
+                let (output, probabilities, log_probabilities) = logits
+                    .cross_entropy_with_cache(&targets, reduction_axis)
+                    .map_err(tensor_error)?;
+                let rows = logits
+                    .shape()
+                    .first()
+                    .copied()
+                    .ok_or_else(|| Error::new("cross_entropy requires rank-2 logits"))?;
+                let node = self.tape.push(
+                    output.clone(),
+                    Rule::CrossEntropy {
+                        logits: logits_node,
+                        targets: targets_node,
+                        targets_value: targets.clone(),
+                        probabilities,
+                        log_probabilities,
+                        rows,
+                    },
+                )?;
+                Ok(TracedValue::Tensor {
+                    value: output,
+                    node: Some(node),
+                })
+            }
             "tensor_sum_to_shape" => {
                 let (input, input_node) = tensor_arg(0)?;
                 let target = shape_argument(values.get(1))?;
@@ -931,6 +985,7 @@ fn is_tensor_builtin(name: &str) -> bool {
             | "tensor_log"
             | "tensor_softmax"
             | "tensor_logsumexp"
+            | "tensor_cross_entropy"
             | "tensor_sum_to_shape"
             | "reshape"
             | "tensor_f32"
@@ -1117,5 +1172,62 @@ mod tests {
             gradients[1].values_f32().expect("right gradient"),
             vec![2.0, 3.0]
         );
+    }
+
+    #[test]
+    fn differentiates_fused_cross_entropy_for_logits_and_targets() {
+        let source = "fn f(logits: Tensor[F32], targets: Tensor[F32]) -> Tensor[F32]:\n    return tensor_cross_entropy(logits, targets, 1)\n";
+        let parsed = parser::parse(source);
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        let program = ir::lower(&parsed.program.expect("program"));
+        let gradients = differentiate_tensors(
+            &program,
+            "f",
+            vec![
+                Tensor::from_f32(vec![0.0, 1.0, 2.0, 0.0], &[2, 2]).expect("logits"),
+                Tensor::from_f32(vec![0.0, 1.0, 1.0, 0.0], &[2, 2]).expect("targets"),
+            ],
+        )
+        .expect("cross-entropy gradients");
+        let logits = gradients[0].values_f32().expect("logits gradient");
+        let expected = [0.1344707, -0.1344707, -0.0596015, 0.0596015];
+        for (actual, expected) in logits.iter().zip(expected) {
+            assert!((actual - expected).abs() < 1e-5, "{actual} != {expected}");
+        }
+        let targets = gradients[1].values_f32().expect("target gradient");
+        assert!(targets.iter().all(|value| value.is_finite()));
+
+        let epsilon = 1.0e-3f32;
+        let base = vec![0.0f32, 1.0, 2.0, 0.0];
+        for index in 0..base.len() {
+            let mut plus = base.clone();
+            plus[index] += epsilon;
+            let mut minus = base.clone();
+            minus[index] -= epsilon;
+            let plus_loss = Tensor::from_f32(plus, &[2, 2])
+                .expect("plus logits")
+                .cross_entropy(
+                    &Tensor::from_f32(vec![0.0, 1.0, 1.0, 0.0], &[2, 2]).expect("plus targets"),
+                    1,
+                )
+                .expect("plus loss")
+                .scalar_f32()
+                .expect("plus scalar");
+            let minus_loss = Tensor::from_f32(minus, &[2, 2])
+                .expect("minus logits")
+                .cross_entropy(
+                    &Tensor::from_f32(vec![0.0, 1.0, 1.0, 0.0], &[2, 2]).expect("minus targets"),
+                    1,
+                )
+                .expect("minus loss")
+                .scalar_f32()
+                .expect("minus scalar");
+            let numerical = (plus_loss - minus_loss) / (2.0 * epsilon);
+            assert!(
+                (numerical - logits[index]).abs() < 2.0e-4,
+                "finite difference {index}: {numerical} != {}",
+                logits[index]
+            );
+        }
     }
 }
