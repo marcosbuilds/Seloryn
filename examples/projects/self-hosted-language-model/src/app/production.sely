@@ -1,0 +1,20 @@
+module app.production
+
+from app.serving import InferenceReport, infer
+from app.training import LanguageReport, run
+from json import as_text, get, read_stdin
+
+pub enum Response:
+    Training(LanguageReport)
+    Inference(InferenceReport)
+
+pub fn request() -> Result[Response, JsonIoError]:
+    let document: Json = read_stdin()?
+    let mode: Text = as_text(get(document, ["mode"])?)?
+    if mode == "train":
+        let report: LanguageReport = run()?
+        return Ok(Training(report))
+    if mode == "infer":
+        let report: InferenceReport = infer(document)?
+        return Ok(Inference(report))
+    return Err(JsonIoError("mode must be train or infer"))

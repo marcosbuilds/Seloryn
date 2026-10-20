@@ -1,0 +1,71 @@
+module app.serving
+
+from app.checkpoint import restore
+from app.data import one_hot
+from app.model import LanguageModel, probabilities
+from app.tokenizer import token_text, tokenize
+from data import range
+from json import as_i64, as_text_list, get, read_file, sha256
+
+pub record InferenceReport:
+    mode: Text
+    prompt_tokens: I64
+    generation_steps: I64
+    generated: Text
+    checkpoint_sha256: Text
+    status: Text
+
+fn argmax(probabilities: Tensor[F32], row: I64) -> I64:
+    var best: I64 = 0
+    var best_value: F32 = tensor_get_f32(probabilities, [row, 0])
+    for token in range(14):
+        let candidate: F32 = tensor_get_f32(probabilities, [row, token])
+        if candidate > best_value:
+            best = token
+            best_value = candidate
+    return best
+
+pub fn accuracy(inputs: Tensor[F32], targets: Tensor[F32], model: LanguageModel, rows: I64, rows_as_f64: F64) -> F64:
+    let predictions: Tensor[F32] = probabilities(inputs, model)
+    var correct: F64 = 0.0
+    for row in range(rows):
+        let predicted: I64 = argmax(predictions, row)
+        let expected: I64 = argmax(targets, row)
+        if predicted == expected:
+            correct = correct + 1.0
+    return correct / rows_as_f64
+
+pub fn generate(model: LanguageModel, steps: I64) -> Text:
+    return generate_from(model, 0, steps)
+
+pub fn generate_from(model: LanguageModel, start: I64, steps: I64) -> Text:
+    var current: I64 = start
+    var output: Text = ""
+    var finished: Bool = false
+    for step in range(steps):
+        if not finished:
+            let input: Tensor[F32] = tensor_f32(one_hot(current), [1, 14])
+            let next: I64 = argmax(probabilities(input, model), 0)
+            output = output + token_text(next)
+            current = next
+            if next == 10:
+                finished = true
+    return output
+
+pub fn infer(request: Json) -> Result[InferenceReport, JsonIoError]:
+    let prompt: List[Text] = as_text_list(get(request, ["tokens"])?)?
+    let prompt_count: I64 = as_i64(get(request, ["prompt_count"])?)?
+    let generation_steps: I64 = as_i64(get(request, ["generation_steps"])?)?
+    require prompt_count > 0 else JsonIoError("inference prompt_count must be positive")
+    require generation_steps > 0 else JsonIoError("inference generation_steps must be positive")
+    let encoded: List[I64] = tokenize(prompt)?
+    var actual_count: I64 = 0
+    var last_token: I64 = 0
+    for token in encoded:
+        actual_count = actual_count + 1
+        last_token = token
+    require actual_count == prompt_count else JsonIoError("prompt_count must match tokens")
+    let model: LanguageModel = restore("checkpoints/language-model.json")?
+    let checkpoint: Json = read_file("checkpoints/language-model.json")?
+    let generated: Text = generate_from(model, last_token, generation_steps)
+    return Ok(InferenceReport("infer", prompt_count, generation_steps, generated, sha256(checkpoint), "ok"))

@@ -1,0 +1,49 @@
+module app.training
+
+from app.data import Dataset, load
+from app.checkpoint import restore, save
+from app.model import LanguageModel, objective
+from app.serving import accuracy, generate
+from autograd import gradients
+from data import range
+from training import progress
+
+pub record LanguageReport:
+    architecture: Text
+    vocabulary_size: I64
+    steps: I64
+    initial_loss: F32
+    final_loss: F32
+    test_loss: F32
+    reloaded_loss: F32
+    test_accuracy: F64
+    generated: Text
+    train_hash: Text
+    test_hash: Text
+    checkpoint_hash: Text
+
+fn initial_model() -> LanguageModel:
+    return LanguageModel(tensor_zeros_f32([14, 14]))
+
+pub fn train(train_data: Dataset, test_data: Dataset, steps: I64) -> Result[LanguageReport, JsonIoError]:
+    let rate: Tensor[F32] = tensor_f32([0.5], [])
+    var model: LanguageModel = initial_model()
+    let initial_loss: F32 = tensor_item_f32(objective(train_data.inputs, model.weights, train_data.targets))
+    for step in range(steps):
+        let derivatives: List[Tensor[F32]] = gradients(objective, train_data.inputs, model.weights, train_data.targets)
+        model = LanguageModel(model.weights - rate * derivatives[1])
+        let live_loss: F32 = tensor_item_f32(objective(train_data.inputs, model.weights, train_data.targets))
+        progress("bigram_language_model", step + 1, steps, live_loss)
+    let final_loss: F32 = tensor_item_f32(objective(train_data.inputs, model.weights, train_data.targets))
+    let test_loss: F32 = tensor_item_f32(objective(test_data.inputs, model.weights, test_data.targets))
+    let test_accuracy: F64 = accuracy(test_data.inputs, test_data.targets, model, test_data.rows, 15.0)
+    let checkpoint_hash: Text = save("checkpoints/language-model.json", model, steps, train_data.source_hash, test_data.source_hash)?
+    let reloaded: LanguageModel = restore("checkpoints/language-model.json")?
+    let reloaded_loss: F32 = tensor_item_f32(objective(test_data.inputs, reloaded.weights, test_data.targets))
+    let generated: Text = generate(reloaded, 8)
+    return Ok(LanguageReport("bigram_softmax", 14, steps, initial_loss, final_loss, test_loss, reloaded_loss, test_accuracy, generated, train_data.source_hash, test_data.source_hash, checkpoint_hash))
+
+pub fn run() -> Result[LanguageReport, JsonIoError]:
+    let train_data: Dataset = load("data/train.json", 40, 39)?
+    let test_data: Dataset = load("data/test.json", 16, 15)?
+    return train(train_data, test_data, 160)

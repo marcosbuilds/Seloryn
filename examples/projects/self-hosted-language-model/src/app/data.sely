@@ -1,0 +1,32 @@
+module app.data
+
+from app.tokenizer import tokenize
+from json import as_text_list, get, read_file, sha256
+
+pub record Dataset:
+    inputs: Tensor[F32]
+    targets: Tensor[F32]
+    rows: I64
+    source_hash: Text
+
+fn indicator(token: I64, expected: I64) -> F64:
+    if token == expected:
+        return 1.0
+    return 0.0
+
+pub fn one_hot(token: I64) -> List[F64]:
+    return [indicator(token, 0), indicator(token, 1), indicator(token, 2), indicator(token, 3), indicator(token, 4), indicator(token, 5), indicator(token, 6), indicator(token, 7), indicator(token, 8), indicator(token, 9), indicator(token, 10), indicator(token, 11), indicator(token, 12), indicator(token, 13)]
+
+fn rows_as_one_hot(tokens: List[I64], rows: I64, offset: I64) -> List[F64]:
+    var encoded: List[F64] = []
+    for row in range(rows):
+        encoded = encoded + one_hot(tokens[row + offset])
+    return encoded
+
+pub fn load(path: Text, token_count: I64, rows: I64) -> Result[Dataset, JsonIoError]:
+    let document: Json = read_file(path)?
+    let raw_tokens: List[Text] = as_text_list(get(document, ["tokens"])?)?
+    let tokens: List[I64] = tokenize(raw_tokens)?
+    let input_values: List[F64] = rows_as_one_hot(tokens, rows, 0)
+    let target_values: List[F64] = rows_as_one_hot(tokens, rows, 1)
+    return Ok(Dataset(tensor_f32(input_values, [rows, 14]), tensor_f32(target_values, [rows, 14]), rows, sha256(document)))

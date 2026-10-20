@@ -1,0 +1,4 @@
+from app.production import Response, request
+
+fn main() -> Result[Response, JsonIoError]:
+    return request()

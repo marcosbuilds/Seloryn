@@ -1,0 +1,13 @@
+module app.model
+
+pub record LanguageModel:
+    weights: Tensor[F32]
+
+pub fn objective(inputs: Tensor[F32], weights: Tensor[F32], targets: Tensor[F32]) -> Tensor[F32]:
+    let logits: Tensor[F32] = matmul(inputs, weights)
+    let normalizer: Tensor[F32] = tensor_logsumexp(logits, 1)
+    let selected_logits: Tensor[F32] = tensor_sum(targets * logits, 1)
+    return tensor_mean(normalizer - selected_logits)
+
+pub fn probabilities(inputs: Tensor[F32], model: LanguageModel) -> Tensor[F32]:
+    return tensor_softmax(matmul(inputs, model.weights), 1)

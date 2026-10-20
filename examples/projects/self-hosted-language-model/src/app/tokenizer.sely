@@ -1,0 +1,74 @@
+module app.tokenizer
+
+pub record Vocabulary:
+    size: I64
+
+pub fn vocabulary() -> Vocabulary:
+    return Vocabulary(14)
+
+pub fn token_id(token: Text) -> Result[I64, JsonIoError]:
+    if token == "<bos>":
+        return Ok(0)
+    if token == "the":
+        return Ok(1)
+    if token == "cat":
+        return Ok(2)
+    if token == "sat":
+        return Ok(3)
+    if token == "on":
+        return Ok(4)
+    if token == "mat":
+        return Ok(5)
+    if token == "dog":
+        return Ok(6)
+    if token == "ran":
+        return Ok(7)
+    if token == "in":
+        return Ok(8)
+    if token == "park":
+        return Ok(9)
+    if token == "<eos>":
+        return Ok(10)
+    if token == "a":
+        return Ok(11)
+    if token == "fox":
+        return Ok(12)
+    if token == "jumped":
+        return Ok(13)
+    return Err(JsonIoError("unknown token in dataset"))
+
+pub fn tokenize(tokens: List[Text]) -> Result[List[I64], JsonIoError]:
+    var encoded: List[I64] = []
+    for token in tokens:
+        let id: I64 = token_id(token)?
+        encoded = encoded + [id]
+    return Ok(encoded)
+
+pub fn token_text(token: I64) -> Text:
+    if token == 0:
+        return "<bos> "
+    if token == 1:
+        return "the "
+    if token == 2:
+        return "cat "
+    if token == 3:
+        return "sat "
+    if token == 4:
+        return "on "
+    if token == 5:
+        return "mat "
+    if token == 6:
+        return "dog "
+    if token == 7:
+        return "ran "
+    if token == 8:
+        return "in "
+    if token == 9:
+        return "park "
+    if token == 10:
+        return "<eos>"
+    if token == 11:
+        return "a "
+    if token == 12:
+        return "fox "
+    return "jumped "
