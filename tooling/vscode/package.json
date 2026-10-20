@@ -2,7 +2,7 @@
   "name": "seloryn-language",
   "displayName": "Seloryn Language",
   "description": "Seloryn .sely tooling with syntax highlighting, real code completions, diagnostics, CPU training and hardware probes.",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "publisher": "seloryn",
   "icon": "./assets/seloryn-icon.png",
   "repository": {

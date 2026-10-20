@@ -180,6 +180,8 @@ assert.ok(broadItems.some((item) => item.label === 'gpu'));
 assert.ok(broadItems.some((item) => item.label === 'gradients'));
 assert.ok(broadItems.some((item) => item.label === 'range'));
 assert.ok(broadItems.some((item) => item.label === 'as_f64_list'));
+assert.ok(broadItems.some((item) => item.label === 'as_text_list'));
+assert.ok(broadItems.some((item) => item.label === 'self_hosted_language_model'));
 assert.ok(broadItems.some((item) => item.label === 'sha256'));
 assert.ok(broadItems.some((item) => item.label === 'write_file'));
 assert.ok(broadItems.some((item) => item.label === 'progress'));
@@ -252,8 +254,8 @@ assert.equal(extension.sanitizeGhostText('abcdefgh', 4), 'abcd');
 const diagnosticDocument = documentFor('🙂\nfn main() -> Unit:\n    return\n');
 const diagnosticPayload = JSON.stringify({
   schema: 'seloryn.analysis.v1',
-  language_version: '0.10',
-  runtime_package: '0.10.0',
+  language_version: '0.11',
+  runtime_package: '0.11.0',
   diagnostics: [{
     code: 'SEL-P001',
     severity: 'error',
@@ -334,8 +336,8 @@ const diagnosticVscode = {
 
   const unicodePayload = JSON.stringify({
     schema: 'seloryn.analysis.v1',
-  language_version: '0.10',
-  runtime_package: '0.10.0',
+  language_version: '0.11',
+  runtime_package: '0.11.0',
     diagnostics: [{
       code: 'SEL-P001',
       severity: 'error',

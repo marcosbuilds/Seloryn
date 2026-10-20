@@ -58,15 +58,17 @@ and checked by [`verify-version.py`](../../scripts/release/verify-version.py):
 
 | Surface | Previous | Current | Reason |
 |---|---:|---:|---|
-| Language capability | `0.09` | `0.10` | N12 complete custom `.sely` MLP workflow with persistence, reload and inference |
-| Runtime package | `0.9.4` | `0.10.0` | Runtime follows the new language compatibility line |
-| VS Code extension | `0.9.0` | `0.10.0` | `0.10.0` exposes the source-owned MLP, persistence/progress and GPU alias workflow |
+| Language capability | `0.10` | `0.11` | N13 complete source-owned `.sely` language-model workflow with data, training, evaluation, persistence, reload and inference |
+| Runtime package | `0.10.0` | `0.11.0` | Runtime follows the new language compatibility line |
+| VS Code extension | `0.10.0` | `0.11.0` | `0.11.0` exposes text-array ingestion and the modular language-model workflow snippet |
 
 The comparison is intentionally visible: a new commit alone cannot advance
 the language version. N3B remains the historical reason for `0.01`; N6 is the
 historical `0.04` gain, N7 is the `0.05` reliability gain, N8 is the `0.06`
 streaming/reliability gain and N9 was the `0.07` identity/replay/GPU
 gain. The `0.10` gain is independently evidenced by a black-box CLI probe and
-an independent subagent review. The extension ledger is checked separately
+an independent subagent review. The `0.11` gain is independently evidenced by
+the language-model black-box probe, the stdlib comparison and a separate review.
+The extension ledger is checked separately
 because an editor patch must carry its own evidence while remaining compatible
 with the language line.

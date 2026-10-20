@@ -23,10 +23,20 @@ fn rows_as_one_hot(tokens: List[I64], rows: I64, offset: I64) -> List[F64]:
         encoded = encoded + one_hot(tokens[row + offset])
     return encoded
 
+fn count_tokens(tokens: List[I64]) -> I64:
+    var count: I64 = 0
+    for _token in tokens:
+        count = count + 1
+    return count
+
 pub fn load(path: Text, token_count: I64, rows: I64) -> Result[Dataset, JsonIoError]:
+    require token_count > 1 else JsonIoError("dataset token_count must be greater than one")
+    require rows > 0 else JsonIoError("dataset rows must be greater than zero")
+    require token_count == rows + 1 else JsonIoError("dataset token_count must equal rows plus one")
     let document: Json = read_file(path)?
     let raw_tokens: List[Text] = as_text_list(get(document, ["tokens"])?)?
     let tokens: List[I64] = tokenize(raw_tokens)?
+    require count_tokens(tokens) == token_count else JsonIoError("dataset token count does not match manifest")
     let input_values: List[F64] = rows_as_one_hot(tokens, rows, 0)
     let target_values: List[F64] = rows_as_one_hot(tokens, rows, 1)
     return Ok(Dataset(tensor_f32(input_values, [rows, 14]), tensor_f32(target_values, [rows, 14]), rows, sha256(document)))

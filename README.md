@@ -5,7 +5,7 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current local candidate: language 0.10 / runtime package 0.10.0, verified-preview CPU training, a custom `.sely` MLP workflow, hash-validated batch inference, read-only `doctor` diagnostics, transactional `init` templates and reproducible release provenance.** The release also retains identity-bearing replay receipts, typed JSON-array ingestion, an explicit device-resident GPU linear-training profile, hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles. GPU tensor/MLP training, distributed, registry, installer publication and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md) and [training reference](docs/compute/training.md).
+> **Current local candidate: language 0.11 / runtime package 0.11.0, verified-preview CPU training, a complete source-owned `.sely` bigram language-model workflow, custom MLP workflow, hash-validated inference and reproducible release provenance.** The release also retains identity-bearing replay receipts, typed JSON-array ingestion, an explicit device-resident GPU linear-training profile, hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles. Transformer training, GPU tensor/MLP training, distributed, registry, installer publication and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md), [language-model proof](docs/compute/language-model.md) and [training reference](docs/compute/training.md).
 
 > **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Local preview artifacts are generated and validated, but they carry the exact platform, version and boundary claims documented below; GitHub publication remains explicit and separate.
 
@@ -15,7 +15,7 @@ is documented in [the production-niche benchmark](docs/benchmarks/production-nic
 ## Public preview artifacts
 
 - [Seloryn runtime 0.7.0 / language 0.07](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07): the last published runtime line.
-- [Seloryn VS Code extension package 0.10.0](tooling/vscode): local candidate with syntax highlighting, parser-backed LSP diagnostics/completion/definition, source-owned MLP and GPU-alias completions, CLI fallback and `.sely` file icons on the language `0.10` line. GitHub publication is pending.
+- [Seloryn VS Code extension package 0.11.0](tooling/vscode): local candidate with syntax highlighting, parser-backed LSP diagnostics/completion/definition, source-owned MLP and language-model completions, CLI fallback and `.sely` file icons on the language `0.11` line. Marketplace publication is pending.
 
 These are verified previews, not a stable ABI or a claim of GPU tensor/MLP
 training, distributed execution, package registry, HTTP runtime or a general
@@ -37,7 +37,7 @@ claim. If equivalent workloads do not show the proposed reduction in failures,
 integration drift or diagnostic cost, the architecture must be reconsidered
 instead of gaining features by default.
 
-| Capability | Availability in 0.10 | Evidence or boundary |
+| Capability | Availability in 0.11 | Evidence or boundary |
 |:--|:--|:--|
 | UTF-8 lexer, layout and parser subset | Implemented and tested | [`src/parser.rs`](src/parser.rs), parser tests |
 | Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | [`src/semantic.rs`](src/semantic.rs), semantic tests |
@@ -57,9 +57,10 @@ instead of gaining features by default.
 | Opt-in human/JSON/JSON2 training event stream | Verified preview for CPU and bounded GPU-linear training | `seloryn run ... --log=human|json|json2`; JSON2 carries program/manifest/dataset/checkpoint/result identity, structured path redaction, replay verification and flushed stderr; [`verify-event-chain.py`](scripts/streaming/verify-event-chain.py), [`replay-receipt.py`](scripts/streaming/replay-receipt.py) and [`streaming_v2_probe.py`](tests/streaming_v2_probe.py) |
 | Seloryn-authored multi-input gradients, bounded `range` and SGD loop | Verified preview | [`examples/projects/self-hosted-linear`](examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](tests/self_hosted_probe.py); model/objective/update orchestration is `.sely` source |
 | Custom `.sely` ReLU MLP with own dataset, training, holdout evaluation, atomic JSON checkpoint, reload and inference | **Verified preview** | [`examples/projects/self-hosted-mlp`](examples/projects/self-hosted-mlp), [`tests/self_hosted_mlp_probe.py`](tests/self_hosted_mlp_probe.py); no `train_mlp` call and real JSON2 progress stream |
+| Complete source-owned `.sely` next-token language model with tokenizer, owned dataset, training, held-out evaluation, checkpoint reload and inference | **Verified preview** | [`examples/projects/self-hosted-language-model`](examples/projects/self-hosted-language-model), [`tests/self_hosted_language_model_probe.py`](tests/self_hosted_language_model_probe.py), [`docs/compute/language-model.md`](docs/compute/language-model.md); fixed 14-token bigram, CPU-only |
 | Physical hardware inventory, non-fallback GPU compute/readback probe and explicit GPU linear training | Verified preview on the declared host; capability-aware elsewhere | [`src/gpu.rs`](src/gpu.rs), [`tests/gpu_probe.py`](tests/gpu_probe.py), [`tests/gpu_training_probe.py`](tests/gpu_training_probe.py); the GPU trainer is scalar F32 linear only, device-resident parameters, one final readback, no silent CPU fallback |
 | `build`/`exec` `.selyapp` bundle path | Experimental | Deterministic bundle and clean terminal fixtures; not an installer |
-| HTTP, general GPU tensor/MLP training, packages and distributed execution | Not implemented or verified | `train_linear_gpu` is a closed proof profile, not a general GPU tensor backend |
+| Transformer/LLM-scale training, HTTP serving, general GPU tensor/MLP training, packages and distributed execution | Not implemented or verified | The language-model project is a closed CPU bigram proof, and `train_linear_gpu` is a closed scalar profile, not a general backend |
 | Local installer scripts | Development-only; Windows x64 lifecycle verified here | No public download, signing or cross-OS binary support |
 
 | AI development | AI integration | AI serving | Evidence |
@@ -83,7 +84,7 @@ The function above is intentionally illustrative beyond the current callable API
 
 ## Read next
 
-[Getting started](docs/guide/start.md) · [Editor support](docs/guide/editor.md) · [Next executable gates](docs/project/next-gates.md) · [Architecture](docs/project/architecture.md) · [Grammar](docs/reference/grammar.md) · [Types](docs/reference/types.md) · [Errors](docs/reference/errors.md) · [Tensors](docs/compute/tensors.md) · [Training](docs/compute/training.md) · [LLM path](docs/compute/llms.md) · [Servers](docs/systems/http.md) · [Platform support](docs/guide/platforms.md) · [Releases](docs/project/versions.md) · [License](docs/project/licensing.md)
+[Getting started](docs/guide/start.md) · [Editor support](docs/guide/editor.md) · [Next executable gates](docs/project/next-gates.md) · [Architecture](docs/project/architecture.md) · [Grammar](docs/reference/grammar.md) · [Types](docs/reference/types.md) · [Errors](docs/reference/errors.md) · [Tensors](docs/compute/tensors.md) · [Training](docs/compute/training.md) · [Executable language model](docs/compute/language-model.md) · [LLM path](docs/compute/llms.md) · [Servers](docs/systems/http.md) · [Platform support](docs/guide/platforms.md) · [Releases](docs/project/versions.md) · [License](docs/project/licensing.md)
 
 ## References and visuals
 

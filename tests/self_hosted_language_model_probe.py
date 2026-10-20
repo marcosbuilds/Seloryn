@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import math
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -200,6 +201,22 @@ def main() -> None:
     assert mismatch.returncode != 0, mismatch.stdout
     assert "prompt_count must match tokens" in mismatch.stdout or "prompt_count must match tokens" in mismatch.stderr, (mismatch.stdout, mismatch.stderr)
 
+    with tempfile.TemporaryDirectory(prefix="seloryn-language-bad-dataset-") as bad_directory:
+        bad_project = Path(bad_directory) / "language-model"
+        shutil.copytree(PROJECT, bad_project)
+        bad_train = bad_project / "data" / "train.json"
+        malformed = json.loads(bad_train.read_text(encoding="utf-8"))
+        malformed["tokens"].pop()
+        bad_train.write_text(json.dumps(malformed), encoding="utf-8")
+        malformed_run = run_seloryn(
+            "run",
+            str(bad_project),
+            "--format=json",
+            stdin='{"mode":"train"}',
+        )
+    assert malformed_run.returncode != 0, malformed_run.stdout
+    assert "dataset token count does not match manifest" in malformed_run.stdout or "dataset token count does not match manifest" in malformed_run.stderr, (malformed_run.stdout, malformed_run.stderr)
+
     reference_start = time.perf_counter()
     reference = reference_train(pairs(load_tokens(TRAIN)), pairs(load_tokens(TEST)))
     python_seconds = time.perf_counter() - reference_start
@@ -212,7 +229,7 @@ def main() -> None:
     maximum = max(points)
     bars = " ".join("#" * max(1, round(20 * (value - minimum) / max(maximum - minimum, 1e-12))) for value in points)
     print("Seloryn self-hosted language-model proof: PASS")
-    print(f"check_exit=0 train_exit=0 streaming_verify_exit={verified.returncode} infer_exit=0")
+    print(f"check_exit=0 train_exit=0 streaming_verify_exit={verified.returncode} infer_exit=0 negative_dataset_exit={malformed_run.returncode}")
     print(f"events=162 progress=160 receipt={verified.stdout.strip()}")
     print("comparison | backend | initial_loss | final_loss | test_loss | accuracy | seconds")
     print(f"comparison | Seloryn/.sely | {report['initial_loss']:.8f} | {report['final_loss']:.8f} | {report['test_loss']:.8f} | {report['test_accuracy']:.6f} | {seloryn_seconds:.4f}")

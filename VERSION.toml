@@ -2,15 +2,15 @@
 # The language version is a capability count (M.mm), not a decimal float.
 
 [current]
-language = "0.10"
-runtime_package = "0.10.0"
-extension_package = "0.10.0"
+language = "0.11"
+runtime_package = "0.11.0"
+extension_package = "0.11.0"
 channel = "verified-preview"
 
 [comparison]
-previous_language = "0.09"
-previous_runtime_package = "0.9.4"
-previous_extension_package = "0.9.0"
+previous_language = "0.10"
+previous_runtime_package = "0.10.0"
+previous_extension_package = "0.10.0"
 
 [[gains]]
 id = "N3B-TENSOR-AUTODIFF"
@@ -107,6 +107,12 @@ language = "0.10"
 summary = "A complete custom ReLU MLP can be authored in .sely with owned data ingestion, gradients, SGD, holdout evaluation, JSON persistence, reload and inference"
 evidence = "src/runtime.rs; src/semantic.rs; examples/projects/self-hosted-mlp; tests/self_hosted_mlp_probe.py; scripts/streaming/verify-event-chain.py; docs/compute/training.md; docs/project/status.md"
 
+[[gains]]
+id = "N13-SELF-HOSTED-LANGUAGE-MODEL"
+language = "0.11"
+summary = "A complete fixed-vocabulary next-token language model can be authored in modular .sely source with owned data, training, held-out evaluation, checkpoint reload and inference"
+evidence = "src/runtime.rs; src/semantic.rs; examples/projects/self-hosted-language-model; tests/self_hosted_language_model_probe.py; tests/compare_language_model.py; docs/compute/language-model.md; docs/project/status.md"
+
 [[extension_gains]]
 id = "EXT-N10-JSON-TYPED-ARRAY-INGESTION"
 language = "0.08"
@@ -134,6 +140,13 @@ language = "0.10"
 package = "0.10.0"
 summary = "VS Code completions expose the source-owned custom MLP, persistence, progress and canonical GPU alias workflow on the language 0.10 line"
 evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; examples/projects/self-hosted-mlp; docs/releases/vscode-0.10.0.md"
+
+[[extension_gains]]
+id = "EXT-N14-SELF-HOSTED-LANGUAGE-MODEL"
+language = "0.11"
+package = "0.11.0"
+summary = "VS Code completions expose text-array JSON ingestion and the source-owned modular language-model workflow on the language 0.11 line"
+evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; examples/projects/self-hosted-language-model; docs/releases/vscode-0.11.0.md"
 
 [[runtime_gains]]
 id = "R1-WORKSPACE-CONTRACTS"

@@ -17,7 +17,7 @@ $hash = (Get-FileHash .\target\release\seloryn.exe -Algorithm SHA256).Hash
   -BinaryPath .\target\release\seloryn.exe `
   -InstallRoot .\local-install `
   -ExpectedSha256 $hash `
-  -ExpectedLanguageVersion 0.10 -ExpectedRuntimeVersion 0.10.0
+  -ExpectedLanguageVersion 0.11 -ExpectedRuntimeVersion 0.11.0
 .\scripts\install\install-seloryn-windows.ps1 -Action DiagnosePath -InstallRoot .\local-install
 .\scripts\install\install-seloryn-windows.ps1 -Action Rollback -InstallRoot .\local-install
 .\scripts\install\install-seloryn-windows.ps1 -Action Uninstall -InstallRoot .\local-install

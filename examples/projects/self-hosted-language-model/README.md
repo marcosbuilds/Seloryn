@@ -61,8 +61,9 @@ produziram os mesmos resultados dentro de `3e-6`:
 
 O treino saiu com código `0`, emitiu 160 eventos `training.progress` em uma
 cadeia JSON2 válida, salvou e recarregou o checkpoint, e a segunda invocação
-de inferência com o prompt `<bos> the cat` retornou `sat on the park` com
-`status=ok`. O caso negativo com um
+de inferência com o prompt `<bos> the cat` retornou o campo JSON
+`sat on the park ` (com espaço final preservado pela decodificação de tokens)
+com `status=ok`. O caso negativo com um
 token desconhecido saiu com código diferente de zero e a mensagem
 `unknown token in dataset`. Os hashes e o quadro completo estão em
 [`evidence.md`](evidence.md).
@@ -74,6 +75,7 @@ python tests/compare_language_model.py
 ```
 
 O limite permanece explícito: este é um baseline bigram com vocabulário fixo,
-sem transformer, subwords, batching dinâmico, GPU ou servidor HTTP. A fronteira
-de integração comprovada é a API CLI JSON por stdin/stdout com checkpoint
-persistido e validado por hash.
+dimensões definidas pelo projeto, sem transformer, subwords, batching dinâmico,
+GPU ou servidor HTTP. A fronteira de integração comprovada é a API CLI JSON por
+stdin/stdout com checkpoint persistido e validado por hash; a inferência não
+revalida os hashes dos datasets porque não carrega datasets nessa operação.

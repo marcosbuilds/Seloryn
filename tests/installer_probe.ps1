@@ -9,11 +9,11 @@ $installRoot = Join-Path ([IO.Path]::GetTempPath()) ("seloryn-installer-probe-{0
 try {
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer `
         -Action Install -BinaryPath $binary -InstallRoot $installRoot `
-        -ExpectedLanguageVersion '0.10' -ExpectedRuntimeVersion '0.10.0' | Out-Null
+        -ExpectedLanguageVersion '0.11' -ExpectedRuntimeVersion '0.11.0' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'initial installer invocation failed' }
     $manifestPath = Join-Path $installRoot 'seloryn-install.json'
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    if ($manifest.language_version -ne '0.10' -or $manifest.runtime_package -ne '0.10.0') {
+    if ($manifest.language_version -ne '0.11' -or $manifest.runtime_package -ne '0.11.0') {
         throw 'installer manifest did not persist the binary compatibility line'
     }
 
@@ -21,15 +21,15 @@ try {
     $binaryHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
     [ordered]@{
         schema = 'seloryn.provenance.v1'
-        language_version = '0.10'
-        runtime_package = '0.10.0'
+        language_version = '0.11'
+        runtime_package = '0.11.0'
         runtime = [ordered]@{ binary_sha256 = $binaryHash }
     } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $provenancePath -Encoding UTF8
     $invalidProvenancePath = Join-Path $installRoot 'invalid-provenance.json'
     [ordered]@{
         schema = 'seloryn.provenance.v1'
-        language_version = '0.10'
-        runtime_package = '0.10.0'
+        language_version = '0.11'
+        runtime_package = '0.11.0'
         runtime = [ordered]@{ binary_sha256 = [string]::new('0', 64) }
     } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $invalidProvenancePath -Encoding UTF8
     $invalidInstall = Start-Process -FilePath 'powershell.exe' -ArgumentList @(

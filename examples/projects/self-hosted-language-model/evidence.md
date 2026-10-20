@@ -3,7 +3,7 @@
 Commands:
 
 ```text
-cargo build --release
+cargo build --release --locked
 python tests/self_hosted_language_model_probe.py
 python tests/compare_language_model.py
 ```
@@ -26,13 +26,14 @@ path.
 | test loss | `1.532878041267395` |
 | reloaded test loss | `1.532878041267395` |
 | test accuracy | `0.5333333333333333` |
-| generated text | `the park <eos>` |
+| generated text from default `<bos>` run | `the park <eos>` |
 | train dataset SHA-256 | `a2b046c15edeaf917f4d6cfb614f7ba5c7da2bd1912dc7611b0f7793fe63a76a` |
 | test dataset SHA-256 | `2dfe6adb2e29fc1cfa232adb25ff04defa6baec18cebe4a43cf446a25da9a6df` |
 | checkpoint SHA-256 | `1e7fdb7d6b1dfde6622685f238986fae02a8d911816159597f86b9d66561ed18` |
-| inference result | `sat on the park`, `status=ok` |
+| inference result | `sat on the park ` (trailing space is part of the JSON field), `status=ok` |
 | invalid-token result | non-zero; `unknown token in dataset` |
 | prompt-count mismatch | non-zero; `prompt_count must match tokens` |
+| dataset token-count mismatch | non-zero; `dataset token count does not match manifest` |
 
 The stdlib-Python reference implements the same 14x14 bigram, full-batch
 gradient update and greedy generation:
@@ -49,4 +50,7 @@ Loss curve (steps `1,40,80,120,160`, lower is better):
 ```
 
 No predefined model-training or prediction function is called by the project
-sources; Rust supplies only tensor and reverse-mode primitives.
+sources; Rust supplies only tensor and reverse-mode primitives. The prototype
+uses fixed 14-token/39-pair and 14-token/15-pair shapes, and inference checks
+the checkpoint's own weight hash but does not reload the datasets to revalidate
+their source hashes.

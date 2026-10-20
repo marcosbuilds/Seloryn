@@ -1,6 +1,6 @@
 # Language models: roadmap contract
 
-The long-range goal is **real foundation-model and LLM training/inference**, through a capable runtime and dedicated tensor/NN abstractions. This is an explicit research and engineering target, not a current capability.
+The long-range goal is **real foundation-model and LLM training/inference**, through a capable runtime and dedicated tensor/NN abstractions. Seloryn now has a separate, bounded next-token baseline in [`language-model.md`](language-model.md); it is a verified proof of the end-to-end path, not a claim of transformer or foundation-model capability.
 
 ### Technical layers
 
@@ -20,10 +20,11 @@ The long-range goal is **real foundation-model and LLM training/inference**, thr
 
 1. Scalar autodiff and matrix tests.
 2. CPU multilayer perceptron training on real data.
-3. Minimal next-token transformer (small vocabulary, short context) on CPU.
-4. Efficient accelerator kernels and correct mixed precision.
-5. Save/resume checkpoints and interoperable model I/O.
-6. Practical multi-device training and user-facing inference serving, proven by workloads and metrics.
+3. Bounded 14-token bigram next-token baseline on CPU — **verified preview**.
+4. Minimal next-token transformer (small vocabulary, short context) on CPU.
+5. Efficient accelerator kernels and correct mixed precision.
+6. Save/resume checkpoints and interoperable model I/O.
+7. Practical multi-device training and user-facing inference serving, proven by workloads and metrics.
 
 ### No false platform claims
 
