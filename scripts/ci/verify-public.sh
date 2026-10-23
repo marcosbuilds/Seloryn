@@ -17,6 +17,7 @@ python3 tests/release_probe.py
 python3 tests/release_staging_probe.py
 python3 tests/lsp_probe.py
 python3 tests/project_manifest_probe.py
+python3 tests/import_contract_probe.py
 python3 tests/json_array_probe.py
 python3 tests/mlp_training_probe.py
 python3 tests/mlp_inference_probe.py
@@ -24,6 +25,10 @@ python3 tests/workspace_probe.py
 python3 tests/operational_reliability_probe.py
 python3 tests/streaming_v2_probe.py
 python3 tests/self_hosted_probe.py
+python3 tests/self_hosted_language_model_probe.py
+python3 tests/auditable_local_inference_probe.py
+python3 tests/performance_probe.py --runs 5
+python3 tests/compare_language_model.py
 python3 tests/gpu_probe.py
 python3 tests/gpu_training_probe.py
 ./target/release/seloryn run examples/tensors/linear-forward.sely

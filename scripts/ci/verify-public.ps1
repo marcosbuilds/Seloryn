@@ -36,6 +36,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'LSP integration verification failed' }
     & python tests/project_manifest_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Project manifest verification failed' }
+    & python tests/import_contract_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Local import contract verification failed' }
     & python tests/json_array_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Typed JSON array verification failed' }
     & python tests/mlp_training_probe.py
@@ -50,6 +52,14 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Hash-chained training stream verification failed' }
     & python tests/self_hosted_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Seloryn-authored training verification failed' }
+    & python tests/self_hosted_language_model_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Self-hosted language-model verification failed' }
+    & python tests/auditable_local_inference_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Auditable local-inference verification failed' }
+    & python tests/performance_probe.py --runs 5
+    if ($LASTEXITCODE -ne 0) { throw 'Source-owned performance verification failed' }
+    & python tests/compare_language_model.py
+    if ($LASTEXITCODE -ne 0) { throw 'Language-model comparison verification failed' }
     & python tests/gpu_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'GPU compute verification failed' }
     & python tests/gpu_training_probe.py
