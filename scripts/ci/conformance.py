@@ -261,7 +261,7 @@ def run_probe(probe: dict[str, Any], host_platform: str) -> dict[str, Any]:
     command = resolved_command(probe)
     environment = None
     if sys.platform == "win32" and command[0].lower() in {"powershell", "powershell.exe"}:
-        # The Codex desktop runtime can prepend a PowerShell 7 utility module
+        # Some host shells can prepend a PowerShell 7 utility module
         # directory whose shadowed Microsoft.PowerShell.Utility lacks the
         # Windows PowerShell Get-FileHash cmdlet used by the installer proof.
         # CI's normal environment does not need this, but an explicit module

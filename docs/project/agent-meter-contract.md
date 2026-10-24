@@ -99,8 +99,8 @@ fields, and `unknown` when no usage exists; it still does not make the report a
 billing invoice. The overall state is `partial` whenever any boundary is
 unknown.
 
-This contract is suitable for Phase 3 measurement work in the
-[Seloryn agent runtime roadmap](seloryn-agent-runtime-roadmap.md). It does not
+This contract is suitable for the public evidence workflow described in the
+[Evidence Lab](evidence-lab.md). It does not
 earn a language-version credit by itself. A future paired claim requires the
 same prompt, tools, files, model, environment, retry policy and quality grader,
 plus provider exports for every comparable run. Missing telemetry remains

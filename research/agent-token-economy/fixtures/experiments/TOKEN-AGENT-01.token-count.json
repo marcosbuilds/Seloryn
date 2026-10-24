@@ -1,5 +1,5 @@
 {
-  "condition": "seloryn-local-agent",
+  "condition": "public-synthetic-fixture",
   "evidence_class": "visible-transcript-only",
   "limitations": [
     "This counts visible text only; chat wrappers, tool serialization, hidden context and provider-specific accounting are absent.",
@@ -10,18 +10,18 @@
     {
       "index": 0,
       "role": "user",
-      "text_sha256": "8b433be2103fa946b46a695127f350483669c68c840153282db1b2d3334ab9b0",
-      "tokens": 183,
-      "unicode_codepoints": 715,
-      "utf8_bytes": 734
+      "text_sha256": "b394707c3c84c7a5dcecc768af2a7bd6dffebdc68978d6adbb59a584360837d4",
+      "tokens": 57,
+      "unicode_codepoints": 244,
+      "utf8_bytes": 244
     },
     {
       "index": 1,
       "role": "assistant",
-      "text_sha256": "f652d66e647dd295614671d97b54d7b40dc82366a10dbe80f78ebf757bd2ab1d",
-      "tokens": 199,
-      "unicode_codepoints": 642,
-      "utf8_bytes": 653
+      "text_sha256": "33f66ab5d73d20ef760d03b3dbe9054e2a522a453cb829d331705b4be13b3f38",
+      "tokens": 42,
+      "unicode_codepoints": 228,
+      "utf8_bytes": 228
     }
   ],
   "not_provider_billing": true,
@@ -34,8 +34,8 @@
     "model": "gpt-4o"
   },
   "visible_text_tokens": {
-    "all_visible_messages": 382,
-    "assistant_roles": 199,
-    "input_roles": 183
+    "all_visible_messages": 99,
+    "assistant_roles": 42,
+    "input_roles": 57
   }
 }

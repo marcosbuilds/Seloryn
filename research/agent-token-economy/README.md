@@ -43,9 +43,9 @@ budget must be used for every compared condition.
   new integrations should use `transcript.py`.
 - `schema/visible-transcript.schema.json` — contract for the minimized visible
   transcript envelope.
-- `fixtures/experiments/TOKEN-AGENT-01.json` — real bounded subagent transcript
-  used to validate the documentation claim. It captures only the user prompt
-  and final assistant answer; it is not provider telemetry.
+- `fixtures/experiments/TOKEN-AGENT-01.json` — sanitized synthetic visible-
+  transcript fixture used to validate the documentation claim. It contains no
+  user conversation or internal instructions and is not provider telemetry.
 - `paired/TOKEN-PAIR-01.manifest.json` — shared prompt/input/environment for
   the Python/Seloryn paired experiment.
 - `paired/python_task.py` and `paired/seloryn_task.sely` — the two bounded

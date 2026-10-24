@@ -40,7 +40,7 @@ the temporary absolute workspace path.
 
 ## Observed run
 
-Executed on 2026-10-20 from `D:\Project\Seloryn\seloryn`:
+Executed on 2026-10-20 from the repository workspace:
 
 ```text
 python --version
@@ -58,7 +58,7 @@ python tests/operational_reliability_probe.py
 Observed result from the current Windows release binary:
 
 ```text
-{"attempt_ids_unique":true,"binary":"D:\\Project\\Seloryn\\seloryn\\target\\release\\seloryn.exe","checkpoint_bytes_identical":true,"json2_receipt_chains_valid":true,"json2_receipt_projection_identical":true,"json_output_identical":true,"limitations":["JSON2 raw receipt bytes include a per-attempt PID/time identifier and its dependent hash chain; only the verified semantic projection is deterministic.","Forced Windows termination is not graceful cancellation and no cancellation cleanup guarantee is claimed."],"normal_exit_codes":[0,0,0,0],"normal_processes":4,"normal_steps":640,"raw_json2_receipts_identical":false,"termination":{"graceful_cancellation_proven":false,"receipt_prefix_events":3,"returncode":1,"run_end_emitted":false,"status":"terminated","stdout_empty":true,"temporary_files_after_termination":[],"termination_seconds":0.0},"workspace_confined":true}
+{"attempt_ids_unique":true,"binary":"target\\release\\seloryn.exe","checkpoint_bytes_identical":true,"json2_receipt_chains_valid":true,"json2_receipt_projection_identical":true,"json_output_identical":true,"limitations":["JSON2 raw receipt bytes include a per-attempt PID/time identifier and its dependent hash chain; only the verified semantic projection is deterministic.","Forced Windows termination is not graceful cancellation and no cancellation cleanup guarantee is claimed."],"normal_exit_codes":[0,0,0,0],"normal_processes":4,"normal_steps":640,"raw_json2_receipts_identical":false,"termination":{"graceful_cancellation_proven":false,"receipt_prefix_events":3,"returncode":1,"run_end_emitted":false,"status":"terminated","stdout_empty":true,"temporary_files_after_termination":[],"termination_seconds":0.0},"workspace_confined":true}
 ```
 
 The probe's JSON summary is the authoritative raw result for this run. Record

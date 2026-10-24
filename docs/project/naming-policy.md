@@ -71,16 +71,16 @@ Nomes novos devem passar por quatro perguntas:
 
 `transcript.py` é o exemplo aprovado: é o nome canônico curto do contador de
 transcript. `transcript_token_count.py` permanece como shim de compatibilidade,
-porque ainda aparece no workflow, no fixture histórico `TOKEN-AGENT-01.json` e
-em documentação. O teste atual já usa `test_transcript.py`.
+porque ainda aparece no workflow, no fixture público sintético `TOKEN-AGENT-01.json`
+e em documentação. O teste atual já usa `test_transcript.py`.
 
 Não transformar automaticamente nomes de evidência em `data.json`, `probe.py`
 ou `entry.sely`. Fora do diretório, nomes como
 `TOKEN-PAIR-01.python.transcript.json`,
 `self-hosted-language-model-entry.sely` e
 `auditable-local-inference-probe.py` explicam exatamente qual artefato está
-sendo observado. A auditoria em `docs/project/filename-audit.md` confirma que
-esses caminhos são referenciados por CI, manifests, matrizes e relatórios.
+sendo observado. O inventário de referências do projeto confirma que esses
+caminhos são referenciados por CI, manifests, matrizes e relatórios.
 
 ## Comandos
 

@@ -89,7 +89,7 @@ The function above is intentionally illustrative beyond the current callable API
 
 ## Read next
 
-[Getting started](docs/guide/start.md) · [Editor support](docs/guide/editor.md) · [Conformance matrix](docs/project/conformance.md) · [Program coverage](docs/project/program-coverage.md) · [Next executable gates](docs/project/next-gates.md) · [Architecture](docs/project/architecture.md) · [Grammar](docs/reference/grammar.md) · [Types](docs/reference/types.md) · [Errors](docs/reference/errors.md) · [Tensors](docs/compute/tensors.md) · [Training](docs/compute/training.md) · [Executable language model](docs/compute/language-model.md) · [LLM path](docs/compute/llms.md) · [Servers](docs/systems/http.md) · [Platform support](docs/guide/platforms.md) · [Releases](docs/project/versions.md) · [License](docs/project/licensing.md)
+[Getting started](docs/guide/start.md) · [Editor support](docs/guide/editor.md) · [Conformance matrix](docs/project/conformance.md) · [Evidence Lab](docs/project/evidence-lab.md) · [Next executable gates](docs/project/next-gates.md) · [Architecture](docs/project/architecture.md) · [Grammar](docs/reference/grammar.md) · [Types](docs/reference/types.md) · [Errors](docs/reference/errors.md) · [Tensors](docs/compute/tensors.md) · [Training](docs/compute/training.md) · [Executable language model](docs/compute/language-model.md) · [LLM path](docs/compute/llms.md) · [Servers](docs/systems/http.md) · [Platform support](docs/guide/platforms.md) · [Releases](docs/project/versions.md) · [License](docs/project/licensing.md)
 
 ## References and visuals
 
