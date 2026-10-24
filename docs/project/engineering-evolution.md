@@ -17,6 +17,8 @@ The operating loop is:
 AUDIT -> PLAN -> IMPLEMENT -> TEST -> REVIEW -> MEASURE -> INTEGRATE -> VERIFY
 ```
 
+The consolidated outcome is recorded in the [final evidence report](engineering-evolution-report.md).
+
 ## Stage board
 
 | Stage | Acceptance scope | State | Evidence or blocker |
