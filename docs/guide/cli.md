@@ -12,6 +12,7 @@ seloryn gpu-probe [--format=human|json]
 seloryn doctor [project] [--format=human|json]
 seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]
 seloryn check <file.sely|project> [--format=human|json] [--quiet]
+seloryn inspect <file.sely|project> [--format=human|json]
 seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]
 seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
@@ -220,3 +221,24 @@ replay arbitrary executions or imply GPU,
 distributed, serving or general runtime telemetry support. Preflight failures
 before `run.start` remain normal CLI diagnostics and do not claim to have a
 JSON2 receipt.
+
+`inspect` is the compact, non-executing context path for tools and agents. It
+reuses the parser, project loader, semantic checker and the same
+`seloryn.analysis.v1` diagnostic envelope used by `check`; with `--format=json`
+it emits one JSON document on stdout containing `diagnostics` plus a `context`
+object. A project context lists the resolved source files, top-level symbols
+(`name`, `kind`, `public`, byte span) and imports (`module`, `kind`, selected
+symbols and optional alias). A standalone source produces the same shape for
+one file. The command returns `0` when the context has no diagnostics and `65`
+when static inspection fails, while still returning the structured context when
+one is available. It never executes source or reads declared data capabilities.
+The focused fixture and negative cases are covered by
+[`tests/structured_inspection_probe.py`](../../tests/structured_inspection_probe.py).
+
+Independent acceptance criteria for this slice are: a valid project must expose
+both resolved files, three top-level symbols and local/standard import kinds;
+the JSON envelope must contain no diagnostics and exit `0`; a missing local
+module must return `SEL-M002`, one envelope on stdout and exit `65`; and an
+invalid standalone source must retain its source context while returning its
+semantic diagnostic and exit `65`. The probe checks all four cases against the
+release binary.

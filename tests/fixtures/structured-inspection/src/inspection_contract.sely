@@ -1,0 +1,7 @@
+module inspection_contract
+
+pub record Contract:
+    value: I64
+
+pub fn make_contract(value: I64) -> Contract:
+    return Contract(value)

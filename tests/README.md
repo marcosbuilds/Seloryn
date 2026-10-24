@@ -13,6 +13,9 @@
   a bundle with declared JSON data on the locally built release binary.
 - `import_contract_probe.py` proves that every symbol in a local multi-symbol
   import is checked and that missing exports fail closed with `SEL-M004`.
+- `structured_inspection_probe.py` proves the compact `seloryn.analysis.v1`
+  project/source context, local/standard import classification and negative
+  diagnostics/exit behavior without executing the fixture.
 - `performance_probe.py` runs the source-owned training fixture repeatedly and
   reports median/P95 wall time alongside the pure-Python numerical oracle.
 - `../scripts/ci/conformance.py` validates the public capability matrix and

@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use crate::json::{self, JsonValue};
+
 pub const ANALYSIS_SCHEMA: &str = "seloryn.analysis.v1";
 pub const LANGUAGE_VERSION: &str = "0.12";
 pub const RUNTIME_PACKAGE: &str = env!("CARGO_PKG_VERSION");
@@ -119,6 +121,20 @@ pub fn render_json(path: &Path, source: &str, diagnostics: &[Diagnostic]) -> Str
         rendered.push('}');
     }
     rendered.push_str("]}\n");
+    rendered
+}
+
+pub fn render_analysis_json(
+    path: &Path,
+    source: &str,
+    diagnostics: &[Diagnostic],
+    context: &JsonValue,
+) -> String {
+    let mut rendered = render_json(path, source, diagnostics);
+    rendered.truncate(rendered.len().saturating_sub(2));
+    rendered.push_str(",\"context\":");
+    rendered.push_str(&json::encode(context));
+    rendered.push_str("}\n");
     rendered
 }
 

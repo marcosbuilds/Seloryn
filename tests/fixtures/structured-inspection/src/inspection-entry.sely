@@ -1,0 +1,6 @@
+from inspection_contract import Contract, make_contract
+from json import object
+
+fn main() -> Unit:
+    let contract: Contract = make_contract(7)
+    return

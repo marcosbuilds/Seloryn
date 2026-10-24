@@ -253,6 +253,15 @@
       "notes": "Full-document lifecycle, diagnostics, completion and definition."
     },
     {
+      "id": "structured-inspection",
+      "path": "tests/structured_inspection_probe.py",
+      "command": ["python", "tests/structured_inspection_probe.py"],
+      "suites": ["editor", "core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Compact seloryn.analysis.v1 source/project context with positive and negative cases."
+    },
+    {
       "id": "release-staging",
       "path": "tests/release_staging_probe.py",
       "command": ["python", "tests/release_staging_probe.py"],
@@ -573,6 +582,19 @@
       "requirements": ["Python 3.12", "Node.js", "npm dependencies", "release binary"],
       "documentation": ["docs/project/status.md", "docs/guide/editor.md", "tooling/vscode/README.md"],
       "limits": ["Indexed/incremental analysis, rename and Marketplace publication remain outside this proof."]
+    },
+    {
+      "id": "structured-inspection",
+      "area": "developer-experience",
+      "claim": "Compact non-executing source/project context with symbols, imports and diagnostics in seloryn.analysis.v1.",
+      "status": "verified-preview",
+      "implementation": ["src/analysis.rs", "src/project.rs", "src/main.rs", "src/diagnostic.rs"],
+      "positive_probes": ["structured-inspection"],
+      "negative_probes": ["structured-inspection"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/guide/cli.md"],
+      "limits": ["The context is bounded to resolved top-level source files; indexed, incremental and rename analysis remain future work."]
     },
     {
       "id": "release-provenance",

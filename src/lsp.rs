@@ -1,8 +1,9 @@
 //! Bounded Language Server Protocol support backed by the Seloryn parser.
 
+use crate::analysis;
 use crate::diagnostic::Diagnostic;
 use crate::json::{self, JsonValue};
-use crate::parser::{Item, Program};
+use crate::parser::Program;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, BufReader, Write};
 
@@ -323,16 +324,15 @@ fn completion_result(source: &str) -> JsonValue {
 }
 
 fn append_program_items(items: &mut Vec<JsonValue>, program: &Program) {
-    for item in &program.items {
-        let (name, kind, detail) = match item {
-            Item::Function(value) => (&value.name, 3, "Seloryn function"),
-            Item::Binding(value) => (&value.name, 6, "Seloryn binding"),
-            Item::Record(value) => (&value.name, 7, "Seloryn record"),
-            Item::Enum(value) => (&value.name, 13, "Seloryn enum"),
-            _ => continue,
+    for symbol in analysis::symbols(program) {
+        let (kind, detail) = match symbol.kind {
+            analysis::SymbolKind::Function => (3, "Seloryn function"),
+            analysis::SymbolKind::Binding => (6, "Seloryn binding"),
+            analysis::SymbolKind::Record => (7, "Seloryn record"),
+            analysis::SymbolKind::Enum => (13, "Seloryn enum"),
         };
         items.push(object([
-            ("label", JsonValue::String(name.clone())),
+            ("label", JsonValue::String(symbol.name)),
             ("kind", JsonValue::Number(kind.to_string())),
             ("detail", JsonValue::String(detail.to_owned())),
         ]));
@@ -344,23 +344,24 @@ fn document_symbols(source: &str) -> JsonValue {
         return JsonValue::Array(Vec::new());
     };
     JsonValue::Array(
-        program
-            .items
-            .iter()
-            .filter_map(|item| {
-                let (name, kind, span) = match item {
-                    Item::Function(value) => (&value.name, 12, value.span),
-                    Item::Binding(value) => (&value.name, 13, value.span),
-                    Item::Record(value) => (&value.name, 5, value.span),
-                    Item::Enum(value) => (&value.name, 10, value.span),
-                    _ => return None,
-                };
-                Some(object([
-                    ("name", JsonValue::String(name.clone())),
-                    ("kind", JsonValue::Number(kind.to_string())),
-                    ("range", range_value(source, span.start, span.end)),
-                    ("selectionRange", range_value(source, span.start, span.end)),
-                ]))
+        analysis::symbols(&program)
+            .into_iter()
+            .map(|symbol| {
+                object([
+                    ("name", JsonValue::String(symbol.name)),
+                    (
+                        "kind",
+                        JsonValue::Number(symbol.kind.lsp_kind().to_string()),
+                    ),
+                    (
+                        "range",
+                        range_value(source, symbol.span.start, symbol.span.end),
+                    ),
+                    (
+                        "selectionRange",
+                        range_value(source, symbol.span.start, symbol.span.end),
+                    ),
+                ])
             })
             .collect(),
     )

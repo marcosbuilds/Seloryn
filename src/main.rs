@@ -1,5 +1,6 @@
 #![allow(clippy::result_large_err)]
 
+mod analysis;
 mod autograd;
 mod builtins;
 mod diagnostic;
@@ -129,7 +130,7 @@ const EXIT_USAGE: u8 = 64;
 pub(crate) const EXIT_DATA: u8 = 65;
 pub(crate) const EXIT_IO: u8 = 74;
 
-const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn doctor [project] [--format=human|json]\n  seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`doctor` performs read-only project validation and reports production blockers; it never executes project code.\n`init` creates a validated project skeleton without overwriting an existing path.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `from training import gpu` (the compatible `train_linear_gpu` name remains accepted) in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
+const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn doctor [project] [--format=human|json]\n  seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn inspect <file.sely|project> [--format=human|json]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`doctor` performs read-only project validation and reports production blockers; it never executes project code.\n`init` creates a validated project skeleton without overwriting an existing path.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`inspect` emits compact project/source symbols, imports and diagnostics in the compatible `seloryn.analysis.v1` envelope; `--format=json` is intended for tools and agents.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `from training import gpu` (the compatible `train_linear_gpu` name remains accepted) in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
 
 const JOB_HELP_TEXT: &str = "Jobs:\n  seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]\n  seloryn job status <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job list [--root=<directory>] [--format=human|json]\n  seloryn job transition <job-id> <status> [--root=<directory>] [--format=human|json]\n  seloryn job claim <job-id> [--owner=<owner>] [--lease-id=<id>] [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job heartbeat <job-id> --lease-id=<id> [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job release <job-id> --lease-id=<id> [--root=<directory>] [--format=human|json]\n  seloryn job recover <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job preflight <job-id> [--root=<directory>] [--format=human|json]\n";
 
@@ -196,6 +197,10 @@ enum Action {
     Check {
         path: OsString,
         options: Options,
+    },
+    Inspect {
+        path: OsString,
+        format: OutputFormat,
     },
     Run {
         path: OsString,
@@ -293,6 +298,7 @@ fn run(args: &[OsString]) -> u8 {
             format,
         } => workspace::init(&PathBuf::from(path), template, name.as_deref(), format),
         Action::Check { path, options } => check_path(PathBuf::from(path), options),
+        Action::Inspect { path, format } => inspect_path(PathBuf::from(path), format),
         Action::Run { path, options } => run_path(PathBuf::from(path), options),
         Action::Build {
             path,
@@ -323,6 +329,7 @@ fn classify(args: &[OsString]) -> Action {
         [command, rest @ ..] if command == "doctor" => parse_doctor(rest),
         [command, rest @ ..] if command == "init" => parse_init(rest),
         [command, rest @ ..] if command == "check" => parse_command("check", rest),
+        [command, rest @ ..] if command == "inspect" => parse_inspect(rest),
         [command, rest @ ..] if command == "run" => parse_command("run", rest),
         [command, rest @ ..] if command == "build" => parse_build(rest),
         [command, rest @ ..] if command == "exec" => parse_exec(rest),
@@ -746,6 +753,44 @@ fn parse_exec(args: &[OsString]) -> Action {
     } else {
         unsupported_arguments(args)
     }
+}
+
+fn parse_inspect(args: &[OsString]) -> Action {
+    let mut path = None;
+    let mut format = OutputFormat::Human;
+    let mut index = 0;
+    while index < args.len() {
+        let argument = &args[index];
+        if argument == "--format" {
+            let Some(value) = args.get(index + 1) else {
+                return unsupported_arguments(args);
+            };
+            let Some(parsed) = parse_format(value) else {
+                return unsupported_arguments(args);
+            };
+            format = parsed;
+            index += 1;
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--format="))
+        {
+            let Some(parsed) = parse_format_text(value) else {
+                return unsupported_arguments(args);
+            };
+            format = parsed;
+        } else if argument
+            .to_str()
+            .is_some_and(|value| value.starts_with('-'))
+            || path.replace(argument.clone()).is_some()
+        {
+            return unsupported_arguments(args);
+        }
+        index += 1;
+    }
+    let Some(path) = path else {
+        return unsupported_arguments(args);
+    };
+    Action::Inspect { path, format }
 }
 
 fn parse_command(command: &str, args: &[OsString]) -> Action {
@@ -2405,6 +2450,210 @@ fn check_path(path: PathBuf, options: Options) -> u8 {
     write_diagnostics(&path, &source, &parsed.diagnostics, options)
 }
 
+fn inspect_path(path: PathBuf, format: OutputFormat) -> u8 {
+    if path.is_dir() {
+        return inspect_project_path(&path, format);
+    }
+    inspect_source_path(&path, format)
+}
+
+fn inspect_source_path(path: &std::path::Path, format: OutputFormat) -> u8 {
+    let label = display_argument(path.as_os_str());
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            let diagnostic = diagnostic::Diagnostic::new(
+                "SEL-C003",
+                format!("failed to read source `{label}`: {error}"),
+                diagnostic::Span::new(0, 0),
+            );
+            return write_inspection(path, "", "source", &[], &[diagnostic], format);
+        }
+    };
+    let source = match String::from_utf8(bytes) {
+        Ok(source) => source,
+        Err(error) => {
+            let offset = error.utf8_error().valid_up_to();
+            let diagnostic = diagnostic::Diagnostic::new(
+                "SEL-L001",
+                format!("source is not valid UTF-8 at byte offset {offset}"),
+                diagnostic::Span::new(offset, offset.saturating_add(1)),
+            );
+            return write_inspection(path, "", "source", &[], &[diagnostic], format);
+        }
+    };
+    let parsed = parser::parse(&source);
+    let root = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let files = parsed
+        .program
+        .as_ref()
+        .map(|program| vec![analysis::file_context(path, root, program)])
+        .unwrap_or_default();
+    if !parsed.diagnostics.is_empty() {
+        return write_inspection(path, &source, "source", &files, &parsed.diagnostics, format);
+    }
+    let Some(program) = parsed.program else {
+        let diagnostic = diagnostic::Diagnostic::new(
+            "SEL-C004",
+            "parser returned no program without diagnostics",
+            diagnostic::Span::new(0, 0),
+        );
+        return write_inspection(path, &source, "source", &files, &[diagnostic], format);
+    };
+    let diagnostics = semantic::check(&program);
+    write_inspection(path, &source, "source", &files, &diagnostics, format)
+}
+
+fn inspect_project_path(path: &std::path::Path, format: OutputFormat) -> u8 {
+    let loaded = match project::load(path) {
+        Ok(loaded) => loaded,
+        Err(diagnostic) => {
+            return write_inspection(path, "", "project", &[], &[diagnostic], format);
+        }
+    };
+    let diagnostics = semantic::check(&loaded.program);
+    write_inspection(
+        path,
+        &loaded.source,
+        "project",
+        &loaded.analysis_files,
+        &diagnostics,
+        format,
+    )
+}
+
+fn write_inspection(
+    path: &std::path::Path,
+    source: &str,
+    kind: &str,
+    files: &[analysis::FileContext],
+    diagnostics: &[diagnostic::Diagnostic],
+    format: OutputFormat,
+) -> u8 {
+    match format {
+        OutputFormat::Human => {
+            let summary = format!(
+                "inspected {kind} {} files={} symbols={} imports={} diagnostics={}\n",
+                display_argument(path.as_os_str()),
+                files.len(),
+                files.iter().map(|file| file.symbols.len()).sum::<usize>(),
+                files.iter().map(|file| file.imports.len()).sum::<usize>(),
+                diagnostics.len(),
+            );
+            let status = write_stdout(&summary);
+            if status != EXIT_OK || diagnostics.is_empty() {
+                return status;
+            }
+            write_diagnostics(
+                path,
+                source,
+                diagnostics,
+                Options {
+                    format: OutputFormat::Human,
+                    ..Options::default()
+                },
+            )
+        }
+        OutputFormat::Json => {
+            let context = inspection_context_json(kind, files);
+            let rendered = diagnostic::render_analysis_json(path, source, diagnostics, &context);
+            let status = write_stdout(&rendered);
+            if status == EXIT_OK && !diagnostics.is_empty() {
+                EXIT_DATA
+            } else {
+                status
+            }
+        }
+    }
+}
+
+fn inspection_context_json(kind: &str, files: &[analysis::FileContext]) -> json::JsonValue {
+    json::JsonValue::Object(BTreeMap::from([
+        (
+            "files".to_owned(),
+            json::JsonValue::Array(files.iter().map(inspection_file_json).collect()),
+        ),
+        ("kind".to_owned(), json::JsonValue::String(kind.to_owned())),
+    ]))
+}
+
+fn inspection_file_json(file: &analysis::FileContext) -> json::JsonValue {
+    json::JsonValue::Object(BTreeMap::from([
+        (
+            "imports".to_owned(),
+            json::JsonValue::Array(
+                file.imports
+                    .iter()
+                    .map(|import| {
+                        json::JsonValue::Object(BTreeMap::from([
+                            (
+                                "alias".to_owned(),
+                                import
+                                    .alias
+                                    .as_ref()
+                                    .map_or(json::JsonValue::Null, |alias| {
+                                        json::JsonValue::String(alias.clone())
+                                    }),
+                            ),
+                            (
+                                "kind".to_owned(),
+                                json::JsonValue::String(import.kind.as_str().to_owned()),
+                            ),
+                            (
+                                "module".to_owned(),
+                                json::JsonValue::String(import.module.clone()),
+                            ),
+                            (
+                                "symbols".to_owned(),
+                                json::JsonValue::Array(
+                                    import
+                                        .symbols
+                                        .iter()
+                                        .map(|symbol| json::JsonValue::String(symbol.clone()))
+                                        .collect(),
+                                ),
+                            ),
+                        ]))
+                    })
+                    .collect(),
+            ),
+        ),
+        (
+            "path".to_owned(),
+            json::JsonValue::String(file.path.clone()),
+        ),
+        (
+            "symbols".to_owned(),
+            json::JsonValue::Array(
+                file.symbols
+                    .iter()
+                    .map(|symbol| {
+                        json::JsonValue::Object(BTreeMap::from([
+                            (
+                                "end_byte".to_owned(),
+                                json::JsonValue::Number(symbol.span.end.to_string()),
+                            ),
+                            (
+                                "kind".to_owned(),
+                                json::JsonValue::String(symbol.kind.as_str().to_owned()),
+                            ),
+                            (
+                                "name".to_owned(),
+                                json::JsonValue::String(symbol.name.clone()),
+                            ),
+                            ("public".to_owned(), json::JsonValue::Bool(symbol.public)),
+                            (
+                                "start_byte".to_owned(),
+                                json::JsonValue::Number(symbol.span.start.to_string()),
+                            ),
+                        ]))
+                    })
+                    .collect(),
+            ),
+        ),
+    ]))
+}
+
 fn devices(format: OutputFormat) -> u8 {
     let adapters = gpu::enumerate_adapters();
     match format {
@@ -3636,6 +3885,14 @@ mod tests {
             Action::Check { .. }
         ));
         assert!(matches!(
+            classify(&[
+                OsString::from("inspect"),
+                OsString::from("project"),
+                OsString::from("--format=json")
+            ]),
+            Action::Inspect { .. }
+        ));
+        assert!(matches!(
             classify(&[OsString::from("check")]),
             Action::Unsupported(_)
         ));
@@ -3698,7 +3955,7 @@ mod tests {
         let action = classify(&[OsString::from("入口")]);
         match action {
             Action::Unsupported(message) => assert_eq!(message, "入口"),
-            Action::Help | Action::Version | Action::Check { .. } => {
+            Action::Help | Action::Version | Action::Check { .. } | Action::Inspect { .. } => {
                 panic!("expected unsupported action")
             }
             Action::Devices { .. }

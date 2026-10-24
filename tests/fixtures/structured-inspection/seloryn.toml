@@ -1,0 +1,9 @@
+[package]
+name = "structured-inspection"
+language = "0.12"
+source_root = "src"
+entry = "inspection-entry.sely"
+
+[capabilities]
+read = []
+write = []

@@ -1,5 +1,6 @@
 #![allow(clippy::result_large_err)]
 
+use crate::analysis::{self, ImportKind};
 use crate::diagnostic::{Diagnostic, Span};
 use crate::parser::{Directive, IfBranch, MatchCase, MatchStatement, Pattern};
 use crate::parser::{Expr, Item, Program, Statement};
@@ -25,6 +26,7 @@ pub struct LoadedProgram {
     pub json_max_depth: usize,
     pub training_json_max_bytes: usize,
     pub training_json_max_depth: usize,
+    pub analysis_files: Vec<analysis::FileContext>,
     /// SHA-256 of the manifest bytes used to load this program.
     pub manifest_sha256: String,
     /// SHA-256 of the canonical manifest-plus-ordered-source identity.
@@ -161,6 +163,17 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
     };
     loader.visit(&entry_path, true)?;
 
+    let analysis_files = loader
+        .ordered
+        .iter()
+        .filter_map(|path| {
+            loader
+                .visited
+                .get(path)
+                .map(|unit| analysis::file_context(path, &project_root, &unit.program))
+        })
+        .collect();
+
     let entry_source = loader
         .visited
         .get(&entry_path)
@@ -215,6 +228,7 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
         json_max_depth,
         training_json_max_bytes,
         training_json_max_depth,
+        analysis_files,
         manifest_sha256,
         program_sha256,
     })
@@ -558,31 +572,31 @@ impl Loader {
                 Span::new(0, 0),
             ));
         };
-        let imports = imports(&program);
+        let imports = analysis::imports(&program);
         self.visited.insert(path.clone(), Unit { program, source });
         for import in imports {
-            match import {
-                Import::Local {
-                    module,
-                    symbols,
-                    alias,
-                } => {
-                    let module_path = self.resolve_module(&module, !symbols.is_empty())?;
-                    self.visit(&module_path, false)?;
-                    for symbol in symbols {
-                        if !self.is_exported(&module_path, &symbol) {
-                            return Err(Diagnostic::new(
-                                "SEL-M004",
-                                format!("`{symbol}` is not exported by module `{module}`"),
-                                Span::new(0, 0),
-                            ));
-                        }
-                    }
-                    if is_entry && let Some(alias) = alias {
-                        self.aliases.insert(alias, module);
-                    }
+            let analysis::Import {
+                module,
+                symbols,
+                alias,
+                kind,
+            } = import;
+            if kind != ImportKind::Local {
+                continue;
+            }
+            let module_path = self.resolve_module(&module, !symbols.is_empty())?;
+            self.visit(&module_path, false)?;
+            for symbol in symbols {
+                if !self.is_exported(&module_path, &symbol) {
+                    return Err(Diagnostic::new(
+                        "SEL-M004",
+                        format!("`{symbol}` is not exported by module `{module}`"),
+                        Span::new(0, 0),
+                    ));
                 }
-                Import::Standard => {}
+            }
+            if is_entry && let Some(alias) = alias {
+                self.aliases.insert(alias, module);
             }
         }
         self.visiting.remove(&path);
@@ -645,74 +659,6 @@ impl Loader {
     }
 }
 
-enum Import {
-    Local {
-        module: String,
-        symbols: Vec<String>,
-        alias: Option<String>,
-    },
-    Standard,
-}
-
-fn imports(program: &Program) -> Vec<Import> {
-    program
-        .items
-        .iter()
-        .filter_map(|item| {
-            let Item::Directive(Directive { keyword, text, .. }) = item else {
-                return None;
-            };
-            if keyword == "import" {
-                let mut parts = text.split_whitespace();
-                let module = parts.next()?.to_owned();
-                let alias = parts
-                    .next()
-                    .filter(|part| *part == "as")
-                    .and_then(|_| parts.next())
-                    .map(str::to_owned);
-                return Some(if is_standard_module(&module) {
-                    Import::Standard
-                } else {
-                    Import::Local {
-                        module,
-                        symbols: Vec::new(),
-                        alias,
-                    }
-                });
-            }
-            if keyword == "from" {
-                let mut parts = text.split_whitespace();
-                let module = parts.next()?.to_owned();
-                let _import = parts.next()?;
-                let symbols = parts
-                    .map(|part| part.trim_end_matches(',').to_owned())
-                    .filter(|part| !part.is_empty())
-                    .collect::<Vec<_>>();
-                if symbols.is_empty() {
-                    return None;
-                }
-                return Some(if is_standard_module(&module) {
-                    Import::Standard
-                } else {
-                    Import::Local {
-                        module,
-                        symbols,
-                        alias: None,
-                    }
-                });
-            }
-            None
-        })
-        .collect()
-}
-
-fn is_standard_module(module: &str) -> bool {
-    matches!(
-        module,
-        "io" | "json" | "models" | "autograd" | "training" | "data" | "tensor" | "audit"
-    )
-}
-
 fn is_local_directive(item: &Item, _source_root: &Path) -> bool {
     let Item::Directive(Directive { keyword, text, .. }) = item else {
         return false;
@@ -725,7 +671,7 @@ fn is_local_directive(item: &Item, _source_root: &Path) -> bool {
 
 fn imports_from_directive(keyword: &str, text: &str) -> bool {
     let module = text.split_whitespace().next().unwrap_or_default();
-    (keyword == "import" || keyword == "from") && !is_standard_module(module)
+    (keyword == "import" || keyword == "from") && !analysis::is_standard_module(module)
 }
 
 fn parse_manifest(manifest: &str) -> Result<toml::Value, Diagnostic> {
