@@ -237,5 +237,11 @@ productivity and token economy. The GitHub governance blocker is resolved for
 the current repository state; future direct pushes to `master` are intentionally
 blocked by the active ruleset and must go through the declared review/CI path.
 
+The forward execution plan is maintained in the [Seloryn Agent Runtime
+Roadmap](seloryn-agent-runtime-roadmap.md). Its three prioritized jumps are an
+auditable agent-execution substrate, provider-neutral model ports with honest
+telemetry, and a small numerically correct model core before broad GPU or
+distribution work.
+
 This report is an evidence record, not a release announcement. No release was
 published.
