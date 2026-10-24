@@ -73,7 +73,50 @@ def main() -> int:
         assert receipt["status"] == "succeeded"
         assert receipt["committed"] is True
 
-    print("Seloryn job worker verification: preflight, lease, bounded execution, receipt and terminal state passed")
+        invalid_source = "fn main() -> I64:\n  return 7\n"
+        invalid_bytes = invalid_source.encode("utf-8")
+        (root / "invalid.sely").write_bytes(invalid_bytes)
+        invalid_spec = root / "invalid-spec.json"
+        invalid_spec.write_text(
+            json.dumps(
+                {
+                    "kind": "seloryn-run.v1",
+                    "source": "invalid.sely",
+                    "source_sha256": hashlib.sha256(invalid_bytes).hexdigest(),
+                    "timeout_ms": 2_000,
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        created_invalid = ok(
+            run(root, "create", str(invalid_spec), "--id=preflight-failure")
+        )
+        assert created_invalid["status"] == "accepted", created_invalid
+        failed = run(root, "run", "preflight-failure", "--owner=probe")
+        assert failed.returncode == 65, (failed.returncode, failed.stdout, failed.stderr)
+        assert failed.stdout == "", failed.stdout
+        error = json.loads(failed.stderr)
+        assert error["code"] == "SEL-J021", error
+
+        failed_status = ok(run(root, "status", "preflight-failure"))
+        assert failed_status["status"] == "accepted", failed_status
+        assert "lease_id" not in failed_status, failed_status
+        failure_receipt_path = (
+            root / ".seloryn" / "jobs" / "preflight-failure" / "result.json"
+        )
+        failure_receipt = json.loads(failure_receipt_path.read_text(encoding="utf-8"))
+        assert failure_receipt["schema"] == "seloryn.job-result.v1", failure_receipt
+        assert failure_receipt["phase"] == "preflight", failure_receipt
+        assert failure_receipt["status"] == "preflight_failed", failure_receipt
+        assert failure_receipt["committed"] is True, failure_receipt
+        assert failure_receipt["error_code"] == "SEL-J021", failure_receipt
+        assert len(failure_receipt["error_sha256"]) == 64, failure_receipt
+        assert "message" not in failure_receipt, failure_receipt
+        assert str(root) not in failure_receipt_path.read_text(encoding="utf-8")
+
+    print("Seloryn job worker verification: success and preflight failure receipts, lease fencing, bounded execution and terminal state passed")
     return 0
 
 

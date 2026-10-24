@@ -122,6 +122,15 @@ hyperparameter mismatch fails with a diagnostic rather than silently
 restarting. The checkpoint is intentionally local and bounded; it is not a
 portable distributed format.
 
+When `seloryn job run` rejects a job during read-only preflight, it keeps the
+job in `accepted` or `queued` state and atomically writes
+`.seloryn/jobs/<id>/result.json` with `phase=preflight`,
+`status=preflight_failed`, the stable error code and an SHA-256 fingerprint of
+the diagnostic message. The receipt contains no diagnostic text or local path,
+and `lease_id` is absent because execution never started. This is an
+observability receipt, not a retry policy or a claim that malformed jobs are
+automatically repaired.
+
 ## Hardware evidence boundary
 
 `seloryn devices --format=json` enumerates adapters exposed by the compiled

@@ -100,7 +100,17 @@ pub(crate) fn run(root: &Path, job_id: &str, config: WorkerConfig) -> Result<Jso
     super::validate_identity(&config.owner, "worker owner")?;
     let binary = resolve_binary(config.binary.as_deref())?;
 
-    let ready = preflight(root, job_id)?;
+    let ready = match preflight(root, job_id) {
+        Ok(ready) => ready,
+        Err(error) => {
+            // A preflight rejection happens before a lease is acquired. Keep
+            // the original CLI error, but persist a bounded receipt when the
+            // job is still runnable so operators can inspect the failure
+            // without reconstructing stderr or exposing its message.
+            let _ = write_preflight_failure_receipt(root, job_id, &error);
+            return Err(error);
+        }
+    };
     let timeout_ms = field_u64(&ready, "timeout_ms")?;
     let lease_seconds = lease_seconds(timeout_ms)?;
     let owner = std::ffi::OsString::from(config.owner.clone());
@@ -481,6 +491,54 @@ fn write_failure_receipt(
         (
             "status".to_owned(),
             JsonValue::String(WorkerStatus::Failed.as_str().to_owned()),
+        ),
+    ]));
+    atomic_write(
+        &directory.join(RESULT_FILE),
+        format!("{}\n", super::json::encode(&result)).as_bytes(),
+    )
+    .map(|_| ())
+}
+
+fn write_preflight_failure_receipt(
+    root: &Path,
+    job_id: &str,
+    error: &JobError,
+) -> Result<(), JobError> {
+    let snapshot = super::status(root, job_id)?;
+    let status = field_string(&snapshot, "status")?;
+    if !matches!(status, "accepted" | "queued") {
+        return Ok(());
+    }
+    let spec_sha256 = field_string(&snapshot, "spec_sha256")?;
+    let directory = job_directory(root, job_id);
+    ensure_job_contained(root, &directory)?;
+    let result = JsonValue::Object(BTreeMap::from([
+        ("committed".to_owned(), JsonValue::Bool(true)),
+        (
+            "error_code".to_owned(),
+            JsonValue::String(error.code.to_owned()),
+        ),
+        (
+            "error_sha256".to_owned(),
+            JsonValue::String(crate::sha256_hex(error.message.as_bytes())),
+        ),
+        ("job_id".to_owned(), JsonValue::String(job_id.to_owned())),
+        (
+            "phase".to_owned(),
+            JsonValue::String("preflight".to_owned()),
+        ),
+        (
+            "schema".to_owned(),
+            JsonValue::String(RESULT_SCHEMA.to_owned()),
+        ),
+        (
+            "spec_sha256".to_owned(),
+            JsonValue::String(spec_sha256.to_owned()),
+        ),
+        (
+            "status".to_owned(),
+            JsonValue::String("preflight_failed".to_owned()),
         ),
     ]));
     atomic_write(
