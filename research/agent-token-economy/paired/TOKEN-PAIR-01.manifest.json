@@ -1,0 +1,25 @@
+{
+  "schema": "seloryn.token-pair-task.v1",
+  "schema_version": 1,
+  "run_id": "TOKEN-PAIR-01",
+  "task_id": "visible-text-metrics",
+  "prompt": "Compute visible Unicode codepoint and UTF-8 byte lengths for each sample. Return one stable JSON result with the sample identifiers, metrics and totals. Do not call external services or infer provider billing.",
+  "inputs": [
+    {
+      "id": "ascii",
+      "text": "hello world"
+    },
+    {
+      "id": "portuguese",
+      "text": "caractere por caractere"
+    },
+    {
+      "id": "tensor",
+      "text": "Tensor[F32, shape=[2, 2]]"
+    }
+  ],
+  "environment": {
+    "network": "disabled",
+    "seed": 0
+  }
+}
