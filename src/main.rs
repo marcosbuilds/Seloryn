@@ -118,7 +118,7 @@ fn install_cancellation_handler() -> io::Result<()> {
     cancellation::install()
 }
 
-fn cancellation_requested() -> bool {
+pub(crate) fn cancellation_requested() -> bool {
     CANCELLATION_REQUESTED.load(Ordering::Relaxed)
 }
 
@@ -133,6 +133,8 @@ pub(crate) const EXIT_IO: u8 = 74;
 const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn doctor [project] [--format=human|json]\n  seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn inspect <file.sely|project> [--format=human|json]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`doctor` performs read-only project validation and reports production blockers; it never executes project code.\n`init` creates a validated project skeleton without overwriting an existing path.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`inspect` emits compact project/source symbols, imports and diagnostics in the compatible `seloryn.analysis.v1` envelope; `--format=json` is intended for tools and agents.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `from training import gpu` (the compatible `train_linear_gpu` name remains accepted) in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
 
 const JOB_HELP_TEXT: &str = "Jobs:\n  seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]\n  seloryn job status <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job list [--root=<directory>] [--format=human|json]\n  seloryn job transition <job-id> <status> [--root=<directory>] [--format=human|json]\n  seloryn job claim <job-id> [--owner=<owner>] [--lease-id=<id>] [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job heartbeat <job-id> --lease-id=<id> [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job release <job-id> --lease-id=<id> [--root=<directory>] [--format=human|json]\n  seloryn job recover <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job preflight <job-id> [--root=<directory>] [--format=human|json]\n";
+
+const WORKER_HELP_TEXT: &str = "  seloryn job run <job-id> [--owner=<owner>] [--binary=<seloryn>] [--root=<directory>] [--format=human|json]\n  job run performs bounded local execution only after preflight and lease claim; it never invokes a shell or an arbitrary executable.\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OutputFormat {
@@ -273,6 +275,13 @@ enum JobAction {
         root: OsString,
         format: OutputFormat,
     },
+    Run {
+        id: OsString,
+        owner: Option<OsString>,
+        binary: Option<OsString>,
+        root: OsString,
+        format: OutputFormat,
+    },
 }
 
 fn main() -> ExitCode {
@@ -283,7 +292,7 @@ fn main() -> ExitCode {
 fn run(args: &[OsString]) -> u8 {
     match classify(args) {
         Action::Help => write_stdout(&format!(
-            "{HELP_TEXT}{JOB_HELP_TEXT}Source-owned workflows can emit structured audit events through `from audit import emit`; JSON2 includes them in the same hash-chained receipt.\nCPU training remains the verified path for the MLP;\n"
+            "{HELP_TEXT}{JOB_HELP_TEXT}{WORKER_HELP_TEXT}Source-owned workflows can emit structured audit events through `from audit import emit`; JSON2 includes them in the same hash-chained receipt.\nCPU training remains the verified path for the MLP;\n"
         )),
         Action::Version => write_stdout(&format!(
             "seloryn {LANGUAGE_VERSION} package={PACKAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=verified-preview\n"
@@ -310,7 +319,7 @@ fn run(args: &[OsString]) -> u8 {
             PathBuf::from(output),
         ),
         Action::Exec { path } => exec_path(PathBuf::from(path)),
-        Action::JobHelp => write_stdout(JOB_HELP_TEXT),
+        Action::JobHelp => write_stdout(&format!("{JOB_HELP_TEXT}{WORKER_HELP_TEXT}")),
         Action::Job(action) => run_job(action),
         Action::Lsp => lsp::serve_stdio(),
         Action::Unsupported(command) => write_stderr(&format!(
@@ -351,6 +360,7 @@ fn parse_job(args: &[OsString]) -> Action {
     let mut owner = None;
     let mut lease_id = None;
     let mut ttl_seconds = None;
+    let mut binary = None;
     let mut root = OsString::from(".");
     let mut format = OutputFormat::Human;
     let mut index = 1;
@@ -360,6 +370,7 @@ fn parse_job(args: &[OsString]) -> Action {
             || argument == "--owner"
             || argument == "--lease-id"
             || argument == "--ttl-seconds"
+            || argument == "--binary"
             || argument == "--root"
             || argument == "--format"
         {
@@ -378,6 +389,8 @@ fn parse_job(args: &[OsString]) -> Action {
                     return unsupported_arguments(args);
                 };
                 ttl_seconds = Some(parsed);
+            } else if argument == "--binary" {
+                binary = Some(value.clone());
             } else if argument == "--root" {
                 root = value.clone();
             } else {
@@ -412,6 +425,11 @@ fn parse_job(args: &[OsString]) -> Action {
             ttl_seconds = Some(parsed);
         } else if let Some(value) = argument
             .to_str()
+            .and_then(|value| value.strip_prefix("--binary="))
+        {
+            binary = Some(OsString::from(value));
+        } else if let Some(value) = argument
+            .to_str()
             .and_then(|value| value.strip_prefix("--root="))
         {
             root = OsString::from(value);
@@ -432,6 +450,9 @@ fn parse_job(args: &[OsString]) -> Action {
             positionals.push(argument.clone());
         }
         index += 1;
+    }
+    if command != "run" && binary.is_some() {
+        return unsupported_arguments(args);
     }
     match command {
         "create"
@@ -491,6 +512,20 @@ fn parse_job(args: &[OsString]) -> Action {
             root,
             format,
         }),
+        "run"
+            if positionals.len() == 1
+                && id.is_none()
+                && lease_id.is_none()
+                && ttl_seconds.is_none() =>
+        {
+            Action::Job(JobAction::Run {
+                id: positionals.remove(0),
+                owner,
+                binary,
+                root,
+                format,
+            })
+        }
         "heartbeat"
             if positionals.len() == 1 && id.is_none() && owner.is_none() && lease_id.is_some() =>
         {
@@ -2568,12 +2603,166 @@ fn write_inspection(
 }
 
 fn inspection_context_json(kind: &str, files: &[analysis::FileContext]) -> json::JsonValue {
-    json::JsonValue::Object(BTreeMap::from([
+    let mut value = BTreeMap::from([
         (
             "files".to_owned(),
             json::JsonValue::Array(files.iter().map(inspection_file_json).collect()),
         ),
         ("kind".to_owned(), json::JsonValue::String(kind.to_owned())),
+    ]);
+    if !files.is_empty() {
+        let pack = analysis::build_context(files, analysis::ContextLimits::default());
+        value.insert("agent".to_owned(), inspection_context_pack_json(&pack));
+    }
+    json::JsonValue::Object(value)
+}
+
+fn inspection_context_pack_json(pack: &analysis::ContextPack) -> json::JsonValue {
+    json::JsonValue::Object(BTreeMap::from([
+        (
+            "files".to_owned(),
+            json::JsonValue::Array(
+                pack.files
+                    .iter()
+                    .map(|file| {
+                        json::JsonValue::Object(BTreeMap::from([
+                            (
+                                "path".to_owned(),
+                                json::JsonValue::String(file.path.clone()),
+                            ),
+                            (
+                                "symbols".to_owned(),
+                                json::JsonValue::Array(
+                                    file.symbols
+                                        .iter()
+                                        .map(|symbol| {
+                                            json::JsonValue::Object(BTreeMap::from([
+                                                (
+                                                    "kind".to_owned(),
+                                                    json::JsonValue::String(
+                                                        symbol.kind.as_str().to_owned(),
+                                                    ),
+                                                ),
+                                                (
+                                                    "name".to_owned(),
+                                                    json::JsonValue::String(symbol.name.clone()),
+                                                ),
+                                                (
+                                                    "public".to_owned(),
+                                                    json::JsonValue::Bool(symbol.public),
+                                                ),
+                                                (
+                                                    "span".to_owned(),
+                                                    json::JsonValue::Object(BTreeMap::from([
+                                                        (
+                                                            "end".to_owned(),
+                                                            json::JsonValue::Number(
+                                                                symbol.span.end.to_string(),
+                                                            ),
+                                                        ),
+                                                        (
+                                                            "start".to_owned(),
+                                                            json::JsonValue::Number(
+                                                                symbol.span.start.to_string(),
+                                                            ),
+                                                        ),
+                                                    ])),
+                                                ),
+                                            ]))
+                                        })
+                                        .collect(),
+                                ),
+                            ),
+                            (
+                                "imports".to_owned(),
+                                json::JsonValue::Array(
+                                    file.imports
+                                        .iter()
+                                        .map(|import| {
+                                            json::JsonValue::Object(BTreeMap::from([
+                                                (
+                                                    "alias".to_owned(),
+                                                    import.alias.as_ref().map_or(
+                                                        json::JsonValue::Null,
+                                                        |alias| {
+                                                            json::JsonValue::String(alias.clone())
+                                                        },
+                                                    ),
+                                                ),
+                                                (
+                                                    "kind".to_owned(),
+                                                    json::JsonValue::String(
+                                                        import.kind.as_str().to_owned(),
+                                                    ),
+                                                ),
+                                                (
+                                                    "module".to_owned(),
+                                                    json::JsonValue::String(import.module.clone()),
+                                                ),
+                                                (
+                                                    "symbols".to_owned(),
+                                                    json::JsonValue::Array(
+                                                        import
+                                                            .symbols
+                                                            .iter()
+                                                            .map(|symbol| {
+                                                                json::JsonValue::String(
+                                                                    symbol.clone(),
+                                                                )
+                                                            })
+                                                            .collect(),
+                                                    ),
+                                                ),
+                                            ]))
+                                        })
+                                        .collect(),
+                                ),
+                            ),
+                            (
+                                "total_imports".to_owned(),
+                                json::JsonValue::Number(file.total_imports.to_string()),
+                            ),
+                            (
+                                "total_symbols".to_owned(),
+                                json::JsonValue::Number(file.total_symbols.to_string()),
+                            ),
+                        ]))
+                    })
+                    .collect(),
+            ),
+        ),
+        (
+            "omitted_files".to_owned(),
+            json::JsonValue::Number(pack.omitted_files.to_string()),
+        ),
+        (
+            "omitted_imports".to_owned(),
+            json::JsonValue::Number(pack.omitted_imports.to_string()),
+        ),
+        (
+            "omitted_symbols".to_owned(),
+            json::JsonValue::Number(pack.omitted_symbols.to_string()),
+        ),
+        (
+            "schema".to_owned(),
+            json::JsonValue::String(pack.schema.to_owned()),
+        ),
+        (
+            "total_files".to_owned(),
+            json::JsonValue::Number(pack.total_files.to_string()),
+        ),
+        (
+            "total_imports".to_owned(),
+            json::JsonValue::Number(pack.total_imports.to_string()),
+        ),
+        (
+            "total_symbols".to_owned(),
+            json::JsonValue::Number(pack.total_symbols.to_string()),
+        ),
+        (
+            "truncated".to_owned(),
+            json::JsonValue::Bool(pack.truncated),
+        ),
     ]))
 }
 
@@ -2922,6 +3111,11 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
 }
 
 fn run_job(action: JobAction) -> u8 {
+    if matches!(&action, JobAction::Run { .. })
+        && let Err(error) = install_cancellation_handler()
+    {
+        return write_io_error("cancellation handler", error);
+    }
     let (format, result) = match action {
         JobAction::Create {
             spec,
@@ -2997,6 +3191,41 @@ fn run_job(action: JobAction) -> u8 {
                     lease_id.as_deref(),
                     ttl_seconds,
                 ),
+            )
+        }
+        JobAction::Run {
+            id,
+            owner,
+            binary,
+            root,
+            format,
+        } => {
+            let Some(id) = id.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J003",
+                        message: "job id must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            let mut config = job::job_worker::WorkerConfig::default();
+            if let Some(owner) = owner {
+                let Some(owner) = owner.to_str() else {
+                    return write_job_error(
+                        job::JobError {
+                            code: "SEL-J014",
+                            message: "worker owner must be valid UTF-8".to_owned(),
+                        },
+                        format,
+                    );
+                };
+                config.owner = owner.to_owned();
+            }
+            config.binary = binary.map(PathBuf::from);
+            (
+                format,
+                job::job_worker::run(&PathBuf::from(root), id, config),
             )
         }
         JobAction::Heartbeat {

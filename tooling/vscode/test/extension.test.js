@@ -170,6 +170,8 @@ const broadPosition = { line: 2, character: 0 };
 const broadItems = extension.createCompletionProvider(vscode)
   .provideCompletionItems(completionDocument, broadPosition);
 assert.ok(broadItems.some((item) => item.label === 'tensor_f32'));
+assert.ok(broadItems.some((item) => item.label === 'tensor_get_f32'));
+assert.ok(broadItems.some((item) => item.label === 'tensor_get_i64'));
 assert.ok(broadItems.some((item) => item.label === 'read_stdin'));
 assert.ok(broadItems.some((item) => item.label === 'json'));
 assert.ok(broadItems.some((item) => item.label === 'match'));

@@ -36,14 +36,24 @@ budget must be used for every compared condition.
   encodings. It reports Unicode code points, UTF-8 bytes and tokens as
   separate units and marks the result as a local reconstruction, never as API
   billing.
-- `transcript_token_count.py` — applies the adapter to a visible agent
-  transcript and separates input-role and assistant-role text. Hidden context,
-  tool serialization and provider billing remain explicitly unknown.
+- `transcript.py` — canonical CLI/library that applies the adapter to a visible
+  agent transcript and separates input-role and assistant-role text. Hidden
+  context, tool serialization and provider billing remain explicitly unknown.
+- `transcript_token_count.py` — compatibility shim for the historical filename;
+  new integrations should use `transcript.py`.
 - `schema/visible-transcript.schema.json` — contract for the minimized visible
   transcript envelope.
-- `fixtures/experiments/TOKEN-AGENT-01.json` — real bounded subagent transcript
-  used to validate the documentation claim. It captures only the user prompt
-  and final assistant answer; it is not provider telemetry.
+- `fixtures/experiments/TOKEN-AGENT-01.json` — sanitized synthetic visible-
+  transcript fixture used to validate the documentation claim. It contains no
+  user conversation or internal instructions and is not provider telemetry.
+- `paired/TOKEN-PAIR-01.manifest.json` — shared prompt/input/environment for
+  the Python/Seloryn paired experiment.
+- `paired/python_task.py` and `paired/seloryn_task.sely` — the two bounded
+  implementations of the same declared task.
+- `paired/run_pair.py` — executes both conditions and feeds both visible
+  transcripts through the same local tokenizer.
+- `fixtures/experiments/TOKEN-PAIR-01.pair-report.json` — reproducible local
+  result with separate transcript/token-count evidence for each condition.
 - `tests/test_runner.py` — standard-library tests for validation, dry-run,
   replay and missing-token semantics.
 - `tests/test_token_count.py` — token/character/byte separation checks when the
@@ -69,10 +79,17 @@ python research/agent-token-economy/runner.py replay \
 python research/agent-token-economy/runner.py report --input replay.json --format markdown
 python research/agent-token-economy/tests/test_runner.py
 python research/agent-token-economy/tests/test_token_count.py
-python research/agent-token-economy/tests/test_transcript_token_count.py
-python research/agent-token-economy/transcript_token_count.py \
+python research/agent-token-economy/tests/test_transcript.py
+python research/agent-token-economy/transcript.py \
   --input research/agent-token-economy/fixtures/experiments/TOKEN-AGENT-01.json \
   --model gpt-4o
+python research/agent-token-economy/paired/python_task_test.py
+python research/agent-token-economy/paired/pair_runner_test.py
+python research/agent-token-economy/paired/seloryn_task_test.py
+python research/agent-token-economy/paired/run_pair.py \
+  --manifest research/agent-token-economy/paired/TOKEN-PAIR-01.manifest.json \
+  --model gpt-4o \
+  --output-dir research/agent-token-economy/fixtures/experiments
 ```
 
 Install the optional tokenizer adapter with
@@ -81,9 +98,30 @@ Use `token_count.py --model <model> --text <text>` or an explicit
 `--encoding`. A character count, byte count or local reconstruction is never
 substituted for provider-reported usage; chat wrappers, tool calls and hidden
 context can make API billing differ from visible-text tokenization.
-The model-specific BPE premise follows [OpenAI's tokenizer documentation](https://platform.openai.com/tokenizer)
-and the official [`tiktoken`](https://github.com/openai/tiktoken) implementation
-notes; it is not a character-by-character accounting rule.
+The model-specific BPE premise follows [OpenAI's official token-counting
+documentation](https://developers.openai.com/api/docs/guides/token-counting),
+the [OpenAI tokenizer](https://platform.openai.com/tokenizer) and the official
+[`tiktoken`](https://github.com/openai/tiktoken) implementation notes; it is
+not a character-by-character accounting rule. OpenAI documents that exact API
+input counts include request structure, tools and files, while local
+`tiktoken` is a plain-text reconstruction.
+
+## Paired Python/Seloryn experiment
+
+`TOKEN-PAIR-01` uses one manifest, one prompt, one declared environment and one
+`gpt-4o`/`o200k_base` local counter for both conditions. The observed Windows
+run recorded 99 visible input tokens for each condition. Python returned its
+full deterministic codepoint/UTF-8 result in 210 visible output tokens (309
+visible total); Seloryn returned its currently supported codepoint total in 7
+visible output tokens (106 visible total). This is a capability-boundary
+measurement, not a token-economy win: the conditions are explicitly marked
+functionally non-equivalent because Seloryn does not yet implement OpenAI BPE,
+UTF-8 byte reporting, hidden-context accounting or provider billing.
+
+The pair report preserves the observed platform and binary hash, but it does
+not claim that either visible total equals API usage or cost. Provider
+telemetry, message wrappers, tools, files and non-visible output remain
+unknown.
 
 `replay` does not infer totals from input/output tokens, infer zero from a
 missing field, infer files or lines from a workspace, infer human intervention

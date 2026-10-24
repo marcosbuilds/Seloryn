@@ -304,6 +304,8 @@ fn completion_result(source: &str) -> JsonValue {
         "print",
         "tensor_f32",
         "tensor_i64",
+        "tensor_get_f32",
+        "tensor_get_i64",
         "train_linear",
         "train_mlp",
         "range",

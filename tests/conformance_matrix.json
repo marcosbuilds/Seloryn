@@ -235,6 +235,15 @@
       "notes": "Read-only seloryn-run.v1 source validation and confinement rejection."
     },
     {
+      "id": "job-worker",
+      "path": "tests/job_worker_probe.py",
+      "command": ["python", "tests/job_worker_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "local process"],
+      "notes": "Bounded direct-process worker, lease fencing, cancellation/timeout cleanup and committed result receipt."
+    },
+    {
       "id": "language-model-comparison",
       "path": "tests/compare_language_model.py",
       "command": ["python", "tests/compare_language_model.py"],
@@ -454,6 +463,19 @@
       "limits": ["The proof does not provide GPU tensor training or a general checkpoint registry."]
     },
     {
+      "id": "bounded-mlp-inference",
+      "area": "inference",
+      "claim": "Hash-validated bounded CPU MLP checkpoint batch inference with deterministic predictions.",
+      "status": "verified-preview",
+      "implementation": ["src/runtime.rs", "examples/projects/mlp-inference"],
+      "positive_probes": ["mlp-inference"],
+      "negative_probes": ["mlp-inference"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["CPU", "Python 3.12", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/compute/inference.md"],
+      "limits": ["This is a bounded CPU inference contract, not a general serving runtime, model registry or GPU inference backend."]
+    },
+    {
       "id": "source-owned-language-model",
       "area": "language-model",
       "claim": "A source-owned CPU bigram workflow with runtime-sized vocabulary/data, training, evaluation, checkpoint reload and inference.",
@@ -536,13 +558,13 @@
       "area": "operations",
       "claim": "Local job spec/state/event contracts, read-only preflight and bounded reservation lease.",
       "status": "experimental-implemented",
-      "implementation": ["src/job.rs"],
-      "positive_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight"],
-      "negative_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight"],
+      "implementation": ["src/job.rs", "src/job_worker.rs", "src/main.rs"],
+      "positive_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight", "job-worker"],
+      "negative_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight", "job-worker"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary", "local filesystem"],
       "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
-      "limits": ["No worker, process fencing, retry, remote execution or live-process recovery is claimed."]
+      "limits": ["The worker is direct-process and bounded; no descendant process-group/job-object fencing, retry, remote execution or escaped-child recovery is claimed."]
     },
     {
       "id": "operational-reliability",
@@ -576,7 +598,7 @@
       "claim": "Bounded parser-backed LSP lifecycle plus VS Code package and CLI integration evidence.",
       "status": "verified-preview",
       "implementation": ["src/lsp.rs", "tooling/vscode", "tests/lsp_probe.py"],
-      "positive_probes": ["lsp", "vscode-tests", "vscode-cli-integration"],
+      "positive_probes": ["lsp", "vscode-package", "vscode-tests", "vscode-cli-integration"],
       "negative_probes": ["lsp", "vscode-cli-integration"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "Node.js", "npm dependencies", "release binary"],

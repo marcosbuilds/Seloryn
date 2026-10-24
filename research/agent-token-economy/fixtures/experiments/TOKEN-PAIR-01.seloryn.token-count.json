@@ -1,0 +1,41 @@
+{
+  "condition": "seloryn",
+  "evidence_class": "visible-transcript-only",
+  "limitations": [
+    "This counts visible text only; chat wrappers, tool serialization, hidden context and provider-specific accounting are absent.",
+    "The counts are a local reconstruction and must not be used as provider billing values.",
+    "A real comparison still requires paired transcripts and provider telemetry for all attempts."
+  ],
+  "messages": [
+    {
+      "index": 0,
+      "role": "user",
+      "text_sha256": "477881fc7f1c16f440717857978771e8574538456fc2b301e73239f8a80388d7",
+      "tokens": 99,
+      "unicode_codepoints": 421,
+      "utf8_bytes": 421
+    },
+    {
+      "index": 1,
+      "role": "assistant",
+      "text_sha256": "602d19e2c654cc2089002dc1dcaa3956786a34412f4d5abf6f9be5774d0b17e0",
+      "tokens": 7,
+      "unicode_codepoints": 24,
+      "utf8_bytes": 24
+    }
+  ],
+  "not_provider_billing": true,
+  "run_id": "TOKEN-PAIR-01",
+  "schema": "seloryn.agent-visible-transcript-token-count.v1",
+  "status": "measured",
+  "task_id": "visible-text-metrics",
+  "tokenizer": {
+    "encoding": "o200k_base",
+    "model": "gpt-4o"
+  },
+  "visible_text_tokens": {
+    "all_visible_messages": 106,
+    "assistant_roles": 7,
+    "input_roles": 99
+  }
+}

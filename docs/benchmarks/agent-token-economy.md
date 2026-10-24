@@ -18,7 +18,8 @@ requirements file.
 
 For an agent experiment, export a transcript using the
 `seloryn.agent-visible-transcript.v1` shape and run
-`research/agent-token-economy/transcript_token_count.py`. The result separates
+`research/agent-token-economy/transcript.py`. The historical
+`transcript_token_count.py` filename remains a compatibility shim. The result separates
 visible input-role and assistant-role text and is labelled
 `visible-transcript-only`; it cannot establish billed totals or a language
 advantage without paired provider telemetry.
@@ -32,10 +33,21 @@ This proves the local instrument distinguishes visible BPE tokens from
 codepoints and bytes; it does not prove provider billing, hidden-context
 accounting, productivity, or token economy.
 
-This change adds the measurement instrument only. No external model was
-controlled, no provider result was fabricated, no token total or cost was
-estimated, and no productivity or token-efficiency advantage has been
-demonstrated. The committed replay is synthetic and is explicitly marked
+The paired `TOKEN-PAIR-01` experiment now executes a bounded Python condition
+and a bounded Seloryn condition from one manifest and sends both visible
+transcripts through the same local `gpt-4o`/`o200k_base` counter. On the
+observed Windows run, the shared prompt measured 99 input tokens in each
+condition. Python produced 210 visible output tokens (309 visible total),
+while Seloryn produced 7 visible output tokens (106 visible total). The report
+marks the conditions as not functionally equivalent: Seloryn currently
+supports codepoint length for this task but not OpenAI-compatible BPE, UTF-8
+byte metrics or provider telemetry. This is evidence of a capability boundary,
+not evidence of token economy, cost reduction or productivity.
+
+This change adds the measurement instrument and the bounded paired harness. No
+external model was controlled, no provider result was fabricated, no token
+total or cost was estimated, and no productivity or token-efficiency advantage
+has been demonstrated. The committed replay is synthetic and is explicitly marked
 `not_an_evaluation: true`; real comparisons require provider exports for both a
 baseline and a candidate under the declared tool-parity profile.
 
@@ -47,7 +59,10 @@ python research/agent-token-economy/runner.py dry-run
 python research/agent-token-economy/runner.py replay --records research/agent-token-economy/fixtures/replay/provider-records.jsonl --workspace research/agent-token-economy/fixtures/replay/workspaces
 python research/agent-token-economy/tests/test_runner.py
 python research/agent-token-economy/tests/test_token_count.py
-python research/agent-token-economy/tests/test_transcript_token_count.py
+python research/agent-token-economy/tests/test_transcript.py
+python research/agent-token-economy/paired/python_task_test.py
+python research/agent-token-economy/paired/pair_runner_test.py
+python research/agent-token-economy/paired/seloryn_task_test.py
 ```
 
 The current result is intentionally inconclusive. The kit records acceptance

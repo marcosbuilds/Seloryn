@@ -22,12 +22,12 @@ not a promise that GitHub publication already happened.
 - **Candidate:** the Windows installer verifies supplied `seloryn.provenance.v1`
   metadata, including the runtime version and binary hash, before copying a
   binary into the install root.
-- **Candidate:** `seloryn job` adds a local, contract-only coordination slice
-  with canonical JSON specs, read-only `seloryn-run.v1` preflight, atomic
-  snapshots, event-authoritative repair, claim/heartbeat/release,
-  expiry-only recovery and public protection against forged executor states.
-  It does not yet spawn or supervise workers, prove process liveness, fence
-  stale owners, retry lost jobs, commit artifacts or distribute work.
+- **Candidate:** `seloryn job` now includes a bounded local worker for validated
+  `seloryn-run.v1` sources. It snapshots the validated source, claims and
+  fences a lease, applies timeout/cancellation cleanup, bounds stdout/stderr
+  evidence and commits an atomic result receipt. The slice does not supervise
+  descendant processes, provide process-group/job-object fencing, retry lost
+  jobs or distribute work remotely.
 
 ## [0.9.4] — local runtime patch, 2026-10-16
 

@@ -1,0 +1,24 @@
+{
+  "capture_scope": "shared_manifest_prompt_and_seloryn_stdout_only",
+  "condition": "seloryn",
+  "limitations": [
+    "The Seloryn condition currently supports Unicode codepoint length only for this task.",
+    "Seloryn does not yet implement OpenAI-compatible BPE tokenization, provider billing or hidden-context telemetry.",
+    "The transcript captures the declared prompt and process stdout, not tool serialization or provider usage."
+  ],
+  "manifest_sha256": "e3a73206ff5d640dc549f73895e862cdf141d159c6142db401f60ee19bc9572f",
+  "messages": [
+    {
+      "role": "user",
+      "text": "Compute visible Unicode codepoint and UTF-8 byte lengths for each sample. Return one stable JSON result with the sample identifiers, metrics and totals. Do not call external services or infer provider billing.\n\nInput JSON:\n{\"environment\":{\"network\":\"disabled\",\"seed\":0},\"inputs\":[{\"id\":\"ascii\",\"text\":\"hello world\"},{\"id\":\"portuguese\",\"text\":\"caractere por caractere\"},{\"id\":\"tensor\",\"text\":\"Tensor[F32, shape=[2, 2]]\"}]}"
+    },
+    {
+      "role": "assistant",
+      "text": "{\"stdout\":\"\",\"value\":59}"
+    }
+  ],
+  "not_provider_billing": true,
+  "run_id": "TOKEN-PAIR-01",
+  "schema": "seloryn.agent-visible-transcript.v1",
+  "task_id": "visible-text-metrics"
+}

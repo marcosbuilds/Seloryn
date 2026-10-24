@@ -74,6 +74,8 @@ jobs:
           "SELORYN_BASELINE_BINARY=$baselineBinary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Validate public conformance matrix
         run: python scripts/ci/conformance.py --validate
+      - name: Run public core conformance matrix
+        run: python scripts/ci/conformance.py --run --suite core
       - name: Validate benchmark suite contracts
         run: python benchmarks/test_benchmark_contracts.py
       - name: Run reproducible benchmark suite (advisory)
@@ -93,10 +95,17 @@ jobs:
         run: >
           python research/agent-token-economy/runner.py validate
           && python research/agent-token-economy/tests/test_runner.py
-          && python -m py_compile research/agent-token-economy/token_count.py research/agent-token-economy/transcript_token_count.py
+          && python research/agent-token-economy/paired/python_task_test.py
+          && python research/agent-token-economy/paired/pair_runner_test.py
+          && python research/agent-token-economy/paired/seloryn_task_test.py
+          && python research/agent-token-economy/meter/test_meter.py
+          && python -m py_compile research/agent-token-economy/token_count.py research/agent-token-economy/transcript.py research/agent-token-economy/transcript_token_count.py research/agent-token-economy/meter/meter.py research/agent-token-economy/meter/test_meter.py research/agent-token-economy/paired/python_task.py research/agent-token-economy/paired/run_pair.py research/agent-token-economy/paired/pair_runner_test.py research/agent-token-economy/paired/seloryn_task_test.py
           && python benchmarks/validate_json.py
           --schema research/agent-token-economy/schema/visible-transcript.schema.json
           research/agent-token-economy/fixtures/experiments/TOKEN-AGENT-01.json
+          && python benchmarks/validate_json.py
+          --schema research/agent-token-economy/schema/token-pair-report.schema.json
+          research/agent-token-economy/fixtures/experiments/TOKEN-PAIR-01.pair-report.json
       - name: Independent N1 CLI comparison
         run: >
           python scripts/ci/ci_evidence.py run
@@ -255,6 +264,14 @@ jobs:
           --kind probe
           --
           python tests/job_preflight_probe.py
+      - name: Job worker execution proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name job-worker
+          --kind probe
+          --
+          python tests/job_worker_probe.py
       - name: Python/Seloryn language-model comparison
         run: >
           python scripts/ci/ci_evidence.py run
@@ -336,7 +353,7 @@ jobs:
           public-projects project-manifest local-import cpu-mlp-training
           training-stream self-hosted-mlp self-hosted-language-model
           auditable-local-inference performance operational-reliability
-          job-lifecycle job-lease job-recovery job-concurrency job-preflight
+          job-lifecycle job-lease job-recovery job-concurrency job-preflight job-worker
           language-model-comparison gpu-compute gpu-training
       - name: Upload sanitized CI evidence
         if: always()

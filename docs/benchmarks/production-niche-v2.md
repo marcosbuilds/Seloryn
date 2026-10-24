@@ -2,8 +2,9 @@
 
 This is a reviewed local measurement, not a general performance claim and not
 an assertion that the whole language is production-ready. The raw run records,
-generated datasets and reference programs remain in the private operator
-evidence directory so generated data does not become repository noise.
+generated datasets and reference programs are intentionally not included in
+this public fixture, so the result must not be treated as independently
+reproducible without the declared inputs.
 
 This is a historical snapshot, not a measurement of the current `origin/master`:
 the recorded run used public commit `fff625e`, language `0.08` and runtime
