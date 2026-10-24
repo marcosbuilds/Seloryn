@@ -9,6 +9,13 @@ The executable kit is under
 versioned task specs, independent acceptance adapters, a manifest and schemas,
 a deterministic local runner, replay fixtures and a report format.
 
+The optional [`token_count.py`](../../research/agent-token-economy/token_count.py)
+adapter uses OpenAI's `tiktoken` BPE encodings to count visible text. It reports
+characters, UTF-8 bytes and tokens separately; it does not assume one character
+equals one token and it is not a provider billing oracle. A transcript can be
+measured with `--model` or an explicit encoding after installing the optional
+requirements file.
+
 This change adds the measurement instrument only. No external model was
 controlled, no provider result was fabricated, no token total or cost was
 estimated, and no productivity or token-efficiency advantage has been
@@ -23,6 +30,7 @@ python research/agent-token-economy/runner.py validate
 python research/agent-token-economy/runner.py dry-run
 python research/agent-token-economy/runner.py replay --records research/agent-token-economy/fixtures/replay/provider-records.jsonl --workspace research/agent-token-economy/fixtures/replay/workspaces
 python research/agent-token-economy/tests/test_runner.py
+python research/agent-token-economy/tests/test_token_count.py
 ```
 
 The current result is intentionally inconclusive. The kit records acceptance

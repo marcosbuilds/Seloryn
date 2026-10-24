@@ -32,8 +32,14 @@ budget must be used for every compared condition.
   intentionally contains no invented token, cost or success values.
 - `runner.py` — deterministic manifest validator, dry-run planner, replay
   runner and report renderer.
+- `token_count.py` — optional local adapter using OpenAI's `tiktoken` BPE
+  encodings. It reports Unicode code points, UTF-8 bytes and tokens as
+  separate units and marks the result as a local reconstruction, never as API
+  billing.
 - `tests/test_runner.py` — standard-library tests for validation, dry-run,
   replay and missing-token semantics.
+- `tests/test_token_count.py` — token/character/byte separation checks when the
+  optional tokenizer dependency is installed.
 
 The replay workspaces contain an explicit task-named submission adapter artifact.
 A real harness may point the runner at a candidate checkout instead;
@@ -54,7 +60,15 @@ python research/agent-token-economy/runner.py replay \
   --output replay.json
 python research/agent-token-economy/runner.py report --input replay.json --format markdown
 python research/agent-token-economy/tests/test_runner.py
+python research/agent-token-economy/tests/test_token_count.py
 ```
+
+Install the optional tokenizer adapter with
+`python -m pip install -r research/agent-token-economy/requirements-tokenizer.txt`.
+Use `token_count.py --model <model> --text <text>` or an explicit
+`--encoding`. A character count, byte count or local reconstruction is never
+substituted for provider-reported usage; chat wrappers, tool calls and hidden
+context can make API billing differ from visible-text tokenization.
 
 `replay` does not infer totals from input/output tokens, infer zero from a
 missing field, infer files or lines from a workspace, infer human intervention
