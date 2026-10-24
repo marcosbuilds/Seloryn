@@ -1,0 +1,54 @@
+{
+  "$id": "https://seloryn.dev/schemas/token-pair-report-v1.json",
+  "title": "Seloryn paired visible-token report",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "run_id",
+    "task_id",
+    "evidence_class",
+    "not_provider_billing",
+    "manifest_sha256",
+    "declared_environment",
+    "observed_environment",
+    "conditions",
+    "parity",
+    "interpretation"
+  ],
+  "properties": {
+    "schema": {"const": "seloryn.token-pair-report.v1"},
+    "schema_version": {"const": 1},
+    "run_id": {"const": "TOKEN-PAIR-01"},
+    "task_id": {"type": "string", "minLength": 1},
+    "evidence_class": {"const": "paired-visible-transcript-local-reconstruction"},
+    "not_provider_billing": {"const": true},
+    "manifest_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "git_commit": {"type": ["string", "null"]},
+    "declared_environment": {"type": "object"},
+    "observed_environment": {
+      "type": "object",
+      "required": ["python", "platform", "tiktoken", "seloryn_binary_sha256"],
+      "properties": {
+        "seloryn_binary_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "conditions": {
+      "type": "object",
+      "required": ["python", "seloryn"],
+      "properties": {
+        "python": {"type": "object", "required": ["transcript", "token_count"]},
+        "seloryn": {"type": "object", "required": ["transcript", "token_count"]}
+      }
+    },
+    "parity": {
+      "type": "object",
+      "required": ["same_manifest", "same_prompt", "same_declared_environment", "same_tokenizer", "functionally_equivalent"]
+    },
+    "interpretation": {
+      "type": "object",
+      "required": ["token_economy_claim", "provider_usage", "cost", "productivity", "purpose"]
+    }
+  },
+  "additionalProperties": true
+}

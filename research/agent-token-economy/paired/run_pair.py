@@ -76,6 +76,19 @@ def manifest_sha256(manifest: dict[str, Any]) -> str:
     return hashlib.sha256(canonical(manifest).encode("utf-8")).hexdigest()
 
 
+def repository_commit() -> str | None:
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=ROOT,
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
+    commit = completed.stdout.strip()
+    return commit if completed.returncode == 0 and commit else None
+
+
 def run_seloryn(binary: Path) -> str:
     command = [str(binary), "run", str(SELY_TASK), "--format=json"]
     completed = subprocess.run(
@@ -172,6 +185,7 @@ def run_pair(manifest_path: Path, binary: Path, *, model: str | None, encoding: 
             "tiktoken": importlib.metadata.version("tiktoken"),
             "seloryn_binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
         },
+        "git_commit": repository_commit(),
         "tokenizer": tokenizer,
         "conditions": {
             "python": {

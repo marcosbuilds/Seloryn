@@ -74,6 +74,8 @@ jobs:
           "SELORYN_BASELINE_BINARY=$baselineBinary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Validate public conformance matrix
         run: python scripts/ci/conformance.py --validate
+      - name: Run public core conformance matrix
+        run: python scripts/ci/conformance.py --run --suite core
       - name: Validate benchmark suite contracts
         run: python benchmarks/test_benchmark_contracts.py
       - name: Run reproducible benchmark suite (advisory)
@@ -101,6 +103,9 @@ jobs:
           && python benchmarks/validate_json.py
           --schema research/agent-token-economy/schema/visible-transcript.schema.json
           research/agent-token-economy/fixtures/experiments/TOKEN-AGENT-01.json
+          && python benchmarks/validate_json.py
+          --schema research/agent-token-economy/schema/token-pair-report.schema.json
+          research/agent-token-economy/fixtures/experiments/TOKEN-PAIR-01.pair-report.json
       - name: Independent N1 CLI comparison
         run: >
           python scripts/ci/ci_evidence.py run
