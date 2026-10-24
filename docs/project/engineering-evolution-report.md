@@ -176,6 +176,27 @@ sequences rather than one-character units, and the official `tiktoken` project
 describes the BPE implementation: [OpenAI tokenizer](https://platform.openai.com/tokenizer),
 [official tiktoken repository](https://github.com/openai/tiktoken).
 
+The continuation phase added the frozen paired experiment
+[`TOKEN-PAIR-01.pair-report.json`](../../research/agent-token-economy/fixtures/experiments/TOKEN-PAIR-01.pair-report.json).
+It uses one manifest, one visible prompt, `network=disabled`, `seed=0`, the
+same local `gpt-4o`/`o200k_base` tokenizer and the same release binary for the
+Seloryn condition. An independent subagent reproduced the command with exit
+code `0` without changing files. The observed Windows evidence is:
+
+| Condition | Visible input tokens | Visible assistant tokens | Visible total | Observable result |
+|---|---:|---:|---:|---|
+| Python | 99 | 210 | 309 | codepoints, UTF-8 bytes and hashes for all three inputs |
+| Seloryn | 99 | 7 | 106 | Unicode codepoint total `59`; stdout `{"stdout":"","value":59}` |
+
+The pair deliberately records `functionally_equivalent: false`: Seloryn does
+not yet implement OpenAI-compatible BPE, native token counting, UTF-8 byte
+reporting, hidden-context accounting, provider telemetry or billing. These are
+visible-text local reconstructions, not provider usage, cost or productivity
+evidence. OpenAI's current documentation states that exact input counts can
+include message structure, tools and files, and that reported output can
+include non-visible generated tokens; the local pair therefore cannot be
+promoted to an API billing claim. See the [official token-counting guide](https://developers.openai.com/api/docs/guides/token-counting).
+
 ## G. Conclusions and remaining decisions
 
 Improved and verified:
@@ -188,6 +209,13 @@ Improved and verified:
   diagnostics without executing source.
 - Token measurement now has a real local instrument, schema, tests, a real
   subagent experiment and explicit non-billing limitations.
+- The Python/Seloryn paired harness now reproduces one shared-input experiment,
+  preserves both visible transcripts and token reports, and exposes the
+  current Seloryn tokenization boundary without fabricating equivalence.
+- The GitHub About metadata is configured with a capability-accurate public
+  description and seven topics; the active `Protect master - verified CI`
+  ruleset applies to `master` with review, current-branch, three-platform CI,
+  conversation-resolution and force-push/deletion protections.
 
 Not demonstrated:
 
@@ -196,12 +224,24 @@ Not demonstrated:
 - AI productivity or language/ecosystem advantage;
 - stable ABI, distributed execution, general GPU training, production model
   serving or a public package registry;
-- protected `master` branch, because this requires GitHub owner/admin action.
+- provider-billed token totals, hidden context, tool/file serialization or
+  output reasoning accounting;
+- token economy, productivity or language/ecosystem advantage; the paired
+  conditions are explicitly not functionally equivalent;
+- automatic execution of the local job contract.
 
-The exact next owner action is to configure the GitHub ruleset/branch
-protection. The exact next research action is to obtain paired, consented,
-provider-exported baseline/candidate runs for the frozen AI suite; absent those
-exports, the comparison must remain `inconclusive`.
+The exact next research action is to obtain paired, consented,
+provider-exported baseline/candidate runs for the frozen AI suite. Until those
+exports exist, the comparison remains `inconclusive` for billing, cost,
+productivity and token economy. The GitHub governance blocker is resolved for
+the current repository state; future direct pushes to `master` are intentionally
+blocked by the active ruleset and must go through the declared review/CI path.
+
+The forward execution plan is maintained in the [Seloryn Agent Runtime
+Roadmap](seloryn-agent-runtime-roadmap.md). Its three prioritized jumps are an
+auditable agent-execution substrate, provider-neutral model ports with honest
+telemetry, and a small numerically correct model core before broad GPU or
+distribution work.
 
 This report is an evidence record, not a release announcement. No release was
 published.
