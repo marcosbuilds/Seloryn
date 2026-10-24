@@ -158,7 +158,7 @@ def main() -> int:
         })
         completion = receive(process)
         labels = {item["label"] for item in completion["result"]["items"]}
-        assert {"helper", "train_mlp", "fn"}.issubset(labels)
+        assert {"helper", "tensor_get_f32", "tensor_get_i64", "train_mlp", "fn"}.issubset(labels)
 
         send(process, {
             "jsonrpc": "2.0",

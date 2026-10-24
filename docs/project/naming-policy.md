@@ -1,6 +1,7 @@
 # Seloryn — política de nomes
 
-Status: política proposta para adoção incremental na linha `0.12`.
+Status: política adotada para a linha `0.12`; novos aliases continuam sujeitos a
+revisão, teste de compatibilidade e evidência de integração.
 
 Esta política transforma a preferência por nomes curtos em uma regra de
 engenharia verificável. O objetivo é reduzir atrito de leitura e integração
@@ -116,6 +117,15 @@ objeto/namespace (`torch.Tensor.item`, `torch.tensor`, `numpy.ndarray`), e as
 diretrizes de Rust recomendam `snake_case`, palavras não ambíguas e evitar
 abreviações que reduzam clareza. Como a gramática atual ainda não possui um
 namespace `tensor.<op>`, o prefixo `tensor_` permanece a forma segura.
+
+As referências normativas consultadas são as [Rust API
+Guidelines](https://rust-lang.github.io/api-guidelines/naming.html), a API de
+[`torch.Tensor`](https://docs.pytorch.org/docs/main/tensors.html), a referência
+de [objetos de array do NumPy](https://numpy.org/doc/stable/reference/arrays.html)
+e a [API de `tf.Tensor`](https://www.tensorflow.org/api_docs/python/tf/Tensor).
+Elas convergem em três práticas úteis para Seloryn: manter a operação legível,
+usar o tipo/namespace para desambiguar o domínio e não esconder diferenças de
+contrato atrás de abreviações.
 
 Portanto, a regra desta versão é conservadora: não criar aliases tensor específicos
 quando eles removem `tensor`, o dtype ou uma parte da operação. Aliases já
