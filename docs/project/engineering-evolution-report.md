@@ -3,7 +3,8 @@
 Date: 2026-10-24  
 Repository: `marcosbuilds/Seloryn`  
 Final branch: `master`  
-Final commit: `a091ef3a86fd6cefd66a50f83398006de5b6562c`
+Evidence snapshot commit: `ac4b7a30a568662c31bf2954686198651859fd4d`  
+Report commits: `a091ef3`, `235df5c`
 
 ## Executive result
 
