@@ -23,9 +23,9 @@ AUDIT -> PLAN -> IMPLEMENT -> TEST -> REVIEW -> MEASURE -> INTEGRATE -> VERIFY
 |---|---|---|---|
 | P0 — Integrity | Baseline preserved, CI failures investigated, supported-platform CI green, no weakened correctness tests | **Complete for the current restoration slice** | [CI run 40](https://github.com/marcosbuilds/Seloryn/actions/runs/40058223002), commits [`fccdbf4`](https://github.com/marcosbuilds/Seloryn/commit/fccdbf4916a5aac4e09e3c9dc4db7145ae39acbd), [`66e4c93`](https://github.com/marcosbuilds/Seloryn/commit/66e4c93517ca9a610a43a6ca374cdb115f04eafb), [`e0f22b7`](https://github.com/marcosbuilds/Seloryn/commit/e0f22b72ad747141db6f1051eb91edee7fe5fcc5) |
 | P1 — Organization | Public documentation agrees with implementation; `master` and historical refs preserved; integration and release policy are explicit | **In progress** | Documentation corrections are landed. GitHub reports `master` unprotected and no rulesets; owner/admin configuration is still required. |
-| P2 — Evidence | Conformance, benchmark and comparison proofs are reproducible, independent and honest about limits | **Conformance foundation implemented; sanitized artifact integration pending remote verification** | [`conformance.md`](conformance.md), [`conformance_matrix.json`](../../tests/conformance_matrix.json) and [`conformance.py`](../../scripts/ci/conformance.py) map 23 capabilities to 38 existing probes, source paths, platform requirements and limits. The workflow validates that matrix and preserves sanitized machine-readable summaries per OS while the existing probes remain blocking. No general performance superiority or AI token-economy claim is accepted. |
+| P2 — Evidence | Conformance, benchmark and comparison proofs are reproducible, independent and honest about limits | **Conformance and benchmark suites implemented; one numerical-equivalence gap remains** | [`conformance.md`](conformance.md) and the public [`Benchmark Suite`](../../benchmarks/README.md) provide executable contracts. The workflow validates both suites, publishes sanitized CI evidence and retains advisory benchmark reports per OS. The local six-case run passed BENCH-01/02/03/05/06 and failed BENCH-04 on independent numerical equivalence; no general performance superiority or AI token-economy claim is accepted. |
 | P3 — Developer experience | Diagnostics, CLI/LSP and agent-facing inspection improvements have measurable acceptance criteria | **Bounded slices verified; continuation open** | Current LSP, diagnostics and project-contract probes are documented in [`status.md`](status.md) and [`next-gates.md`](next-gates.md). |
-| P4 — Performance | Changes are selected from measurements and compared under controlled conditions | **Evidence-only baseline** | Shared-runner benchmarks are non-blocking. No version gain is recorded without a controlled before/after result. |
+| P4 — Performance | Changes are selected from measurements and compared under controlled conditions | **Measured baseline; optimization not accepted** | Commit [`117dc93`](https://github.com/marcosbuilds/Seloryn/commit/117dc93) adds six paired stdlib-reference cases with median/p95 reporting and no aggregate score. Current runs record case-local timing losses and the BENCH-04 equivalence failure; shared-runner results remain advisory and no version gain is recorded. |
 | P5 — AI workflow | Any productivity or token-efficiency claim has a defined experiment and independent measurement | **Harness frozen; comparison not demonstrated** | [AI-assisted development evaluation](../benchmarks/agent-token-economy.md) and [`research/agent-token-economy`](../../research/agent-token-economy) define ten tasks, independent acceptance and provider-metric missingness; no advantage result exists. |
 | P6 — Release | Version ledger, compatibility, artifacts, checksums and authorization are complete | **Candidate only** | Language remains `0.12`, runtime/extension remain `0.12.0`; no release publication is authorized by this program. |
 
@@ -62,13 +62,15 @@ not weaken correctness gates.
 
 1. Obtain or document GitHub owner/admin action for branch protection and the
    required `Verify Seloryn` status checks.
-2. Run the public conformance matrix on all supported CI platforms after an
-   authorized integration, then preserve raw benchmark/probe evidence and
-   separate verified results from experimental or hardware-dependent results.
-3. Select the next technical gate only after its acceptance contract is
+2. Investigate and correct the BENCH-04 numerical-equivalence failure before
+   treating the small-MLP comparison as verified; preserve both failed and
+   successful runs.
+3. Supply paired provider exports to the frozen AI suite for hypotheses A and
+   B; until then its result remains inconclusive by design.
+4. Select the next technical gate only after its acceptance contract is
    written; the current job-lifecycle boundary is local coordination only and
    does not authorize a worker, retry system or remote execution feature.
-4. Build the final report from this ledger, the contract files and the linked
+5. Build the final report from this ledger, the contract files and the linked
    executions. Do not mark an item complete from source presence alone.
 
 ## Current release boundary

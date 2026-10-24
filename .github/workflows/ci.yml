@@ -74,6 +74,25 @@ jobs:
           "SELORYN_BASELINE_BINARY=$baselineBinary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Validate public conformance matrix
         run: python scripts/ci/conformance.py --validate
+      - name: Validate benchmark suite contracts
+        run: python benchmarks/test_benchmark_contracts.py
+      - name: Run reproducible benchmark suite (advisory)
+        continue-on-error: true
+        run: python benchmarks/runner.py --samples 3 --warmup 1 --timeout 60
+      - name: Upload benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seloryn-benchmark-report-${{ matrix.os }}
+          path: |
+            benchmarks/reports/latest.json
+            benchmarks/reports/latest.md
+          if-no-files-found: error
+          retention-days: 30
+      - name: Validate AI development evaluation suite
+        run: >
+          python research/agent-token-economy/runner.py validate
+          && python research/agent-token-economy/tests/test_runner.py
       - name: Independent N1 CLI comparison
         run: >
           python scripts/ci/ci_evidence.py run
