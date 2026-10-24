@@ -5,6 +5,7 @@ mod builtins;
 mod diagnostic;
 mod gpu;
 mod ir;
+mod job;
 mod json;
 mod lexer;
 mod lsp;
@@ -127,6 +128,8 @@ pub(crate) const EXIT_IO: u8 = 74;
 
 const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn doctor [project] [--format=human|json]\n  seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`doctor` performs read-only project validation and reports production blockers; it never executes project code.\n`init` creates a validated project skeleton without overwriting an existing path.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `from training import gpu` (the compatible `train_linear_gpu` name remains accepted) in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
 
+const JOB_HELP_TEXT: &str = "Jobs:\n  seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]\n  seloryn job status <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job list [--root=<directory>] [--format=human|json]\n  seloryn job transition <job-id> <status> [--root=<directory>] [--format=human|json]\n";
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OutputFormat {
     Human,
@@ -203,8 +206,34 @@ enum Action {
     Exec {
         path: OsString,
     },
+    JobHelp,
+    Job(JobAction),
     Lsp,
     Unsupported(String),
+}
+
+enum JobAction {
+    Create {
+        spec: OsString,
+        id: Option<OsString>,
+        root: OsString,
+        format: OutputFormat,
+    },
+    Status {
+        id: OsString,
+        root: OsString,
+        format: OutputFormat,
+    },
+    List {
+        root: OsString,
+        format: OutputFormat,
+    },
+    Transition {
+        id: OsString,
+        status: OsString,
+        root: OsString,
+        format: OutputFormat,
+    },
 }
 
 fn main() -> ExitCode {
@@ -215,7 +244,7 @@ fn main() -> ExitCode {
 fn run(args: &[OsString]) -> u8 {
     match classify(args) {
         Action::Help => write_stdout(&format!(
-            "{HELP_TEXT}Source-owned workflows can emit structured audit events through `from audit import emit`; JSON2 includes them in the same hash-chained receipt.\nCPU training remains the verified path for the MLP;\n"
+            "{HELP_TEXT}{JOB_HELP_TEXT}Source-owned workflows can emit structured audit events through `from audit import emit`; JSON2 includes them in the same hash-chained receipt.\nCPU training remains the verified path for the MLP;\n"
         )),
         Action::Version => write_stdout(&format!(
             "seloryn {LANGUAGE_VERSION} package={PACKAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=verified-preview\n"
@@ -241,6 +270,8 @@ fn run(args: &[OsString]) -> u8 {
             PathBuf::from(output),
         ),
         Action::Exec { path } => exec_path(PathBuf::from(path)),
+        Action::JobHelp => write_stdout(JOB_HELP_TEXT),
+        Action::Job(action) => run_job(action),
         Action::Lsp => lsp::serve_stdio(),
         Action::Unsupported(command) => write_stderr(&format!(
             "SEL-C001 unsupported command or argument: {command}\n"
@@ -261,7 +292,92 @@ fn classify(args: &[OsString]) -> Action {
         [command, rest @ ..] if command == "run" => parse_command("run", rest),
         [command, rest @ ..] if command == "build" => parse_build(rest),
         [command, rest @ ..] if command == "exec" => parse_exec(rest),
+        [command, rest @ ..] if command == "job" => parse_job(rest),
         [command, rest @ ..] if command == "lsp" => parse_lsp(rest),
+        _ => unsupported_arguments(args),
+    }
+}
+
+fn parse_job(args: &[OsString]) -> Action {
+    if args.is_empty() || args[0] == "--help" || args[0] == "-h" {
+        return Action::JobHelp;
+    }
+    let Some(command) = args.first().and_then(|value| value.to_str()) else {
+        return unsupported_arguments(args);
+    };
+    let mut positionals = Vec::new();
+    let mut id = None;
+    let mut root = OsString::from(".");
+    let mut format = OutputFormat::Human;
+    let mut index = 1;
+    while index < args.len() {
+        let argument = &args[index];
+        if argument == "--id" || argument == "--root" || argument == "--format" {
+            let Some(value) = args.get(index + 1) else {
+                return unsupported_arguments(args);
+            };
+            if argument == "--id" {
+                id = Some(value.clone());
+            } else if argument == "--root" {
+                root = value.clone();
+            } else {
+                let Some(parsed) = parse_format(value) else {
+                    return unsupported_arguments(args);
+                };
+                format = parsed;
+            }
+            index += 1;
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--id="))
+        {
+            id = Some(OsString::from(value));
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--root="))
+        {
+            root = OsString::from(value);
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--format="))
+        {
+            let Some(parsed) = parse_format_text(value) else {
+                return unsupported_arguments(args);
+            };
+            format = parsed;
+        } else if argument
+            .to_str()
+            .is_some_and(|value| value.starts_with('-'))
+        {
+            return unsupported_arguments(args);
+        } else {
+            positionals.push(argument.clone());
+        }
+        index += 1;
+    }
+    match command {
+        "create" if positionals.len() == 1 => Action::Job(JobAction::Create {
+            spec: positionals.remove(0),
+            id,
+            root,
+            format,
+        }),
+        "status" if positionals.len() == 1 && id.is_none() => Action::Job(JobAction::Status {
+            id: positionals.remove(0),
+            root,
+            format,
+        }),
+        "list" if positionals.is_empty() && id.is_none() => {
+            Action::Job(JobAction::List { root, format })
+        }
+        "transition" if positionals.len() == 2 && id.is_none() => {
+            Action::Job(JobAction::Transition {
+                id: positionals.remove(0),
+                status: positionals.remove(0),
+                root,
+                format,
+            })
+        }
         _ => unsupported_arguments(args),
     }
 }
@@ -2399,6 +2515,66 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
     }
 }
 
+fn run_job(action: JobAction) -> u8 {
+    let (format, result) = match action {
+        JobAction::Create {
+            spec,
+            id,
+            root,
+            format,
+        } => (
+            format,
+            job::create(&PathBuf::from(root), &PathBuf::from(spec), id.as_deref()),
+        ),
+        JobAction::Status { id, root, format } => {
+            let Some(id) = id.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J003",
+                        message: "job id must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            (format, job::status(&PathBuf::from(root), id))
+        }
+        JobAction::List { root, format } => (format, job::list(&PathBuf::from(root))),
+        JobAction::Transition {
+            id,
+            status,
+            root,
+            format,
+        } => {
+            let Some(id) = id.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J003",
+                        message: "job id must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            let Some(status) = status.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J006",
+                        message: "job status must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            (format, job::transition(&PathBuf::from(root), id, status))
+        }
+    };
+    match result {
+        Ok(value) => match format {
+            OutputFormat::Human => write_stdout(&job::render_human(&value)),
+            OutputFormat::Json => write_stdout(&format!("{}\n", json::encode(&value))),
+        },
+        Err(error) => write_job_error(error, format),
+    }
+}
+
 fn check_json_data_path(path: &std::path::Path, options: Options) -> u8 {
     let label = display_argument(path.as_os_str());
     if let Err(error) = std::fs::read(path) {
@@ -3103,6 +3279,34 @@ fn write_data_stderr(message: &str) -> u8 {
     }
 }
 
+fn write_job_error(error: job::JobError, format: OutputFormat) -> u8 {
+    let message = match format {
+        OutputFormat::Human => format!("{} {}\n", error.code, error.message),
+        OutputFormat::Json => {
+            let value = json::JsonValue::Object(BTreeMap::from([
+                (
+                    "code".to_owned(),
+                    json::JsonValue::String(error.code.to_owned()),
+                ),
+                ("message".to_owned(), json::JsonValue::String(error.message)),
+                (
+                    "schema".to_owned(),
+                    json::JsonValue::String("seloryn.error.v1".to_owned()),
+                ),
+            ]));
+            format!("{}\n", json::encode(&value))
+        }
+    };
+    if error.code == "SEL-J001" || error.code == "SEL-J010" {
+        match io::stderr().write_all(message.as_bytes()) {
+            Ok(()) => EXIT_IO,
+            Err(write_error) => write_io_error("stderr", write_error),
+        }
+    } else {
+        write_data_stderr(&message)
+    }
+}
+
 fn write_diagnostics(
     path: &std::path::Path,
     source: &str,
@@ -3239,6 +3443,8 @@ mod tests {
             | Action::Run { .. }
             | Action::Build { .. }
             | Action::Exec { .. }
+            | Action::JobHelp
+            | Action::Job(_)
             | Action::Lsp => {
                 panic!("expected unsupported action")
             }

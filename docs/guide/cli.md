@@ -15,6 +15,10 @@ seloryn check <file.sely|project> [--format=human|json] [--quiet]
 seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]
 seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
+seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]
+seloryn job status <job-id> [--root=<directory>] [--format=human|json]
+seloryn job list [--root=<directory>] [--format=human|json]
+seloryn job transition <job-id> <status> [--root=<directory>] [--format=human|json]
 seloryn lsp --stdio
 ```
 
@@ -113,6 +117,24 @@ semantic validation without executing project code. It emits the stable
 `init <directory>` creates a validated project atomically and refuses to
 overwrite an existing path. The default `minimal` template and the
 `tabular-mlp` starter both emit a stable `seloryn.init.v1` report.
+
+`job` exposes the first local lifecycle contract. `create` canonicalizes a
+bounded JSON specification and stores it with an initial `accepted` state;
+`status` and `list` validate the state snapshot against the append-only event
+log; `transition` accepts only the declared state-machine edges. The store is
+written under `<root>/.seloryn/jobs/<job-id>` using same-directory temporary
+files, flushes and atomic replacement. Repeating `create` with the same ID and
+specification is idempotent; a different specification is rejected. IDs are
+ASCII path-safe and valid job operations use versioned JSON envelopes when
+`--format=json` is selected; malformed CLI syntax still uses the global usage
+diagnostic.
+
+This is a contract and persistence slice, not a worker or scheduler. It does
+not execute a spec, claim crash recovery of a running process, provide leases,
+retry, quotas, remote execution or a public registry. `run` remains the
+backward-compatible direct execution command. These limits are intentional
+until a separate worker/supervisor gate proves them with process, concurrency
+and interruption tests.
 
 ## Future commands
 

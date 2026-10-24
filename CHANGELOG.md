@@ -22,6 +22,10 @@ not a promise that GitHub publication already happened.
 - **Candidate:** the Windows installer verifies supplied `seloryn.provenance.v1`
   metadata, including the runtime version and binary hash, before copying a
   binary into the install root.
+- **Candidate:** `seloryn job` adds a local, contract-only job store with
+  canonical JSON specs, safe IDs, validated lifecycle transitions, atomic
+  snapshots and recovery from an interrupted snapshot write. It does not yet
+  execute jobs, supervise workers, provide leases, retry or distribute work.
 
 ## [0.9.4] — local runtime patch, 2026-10-16
 

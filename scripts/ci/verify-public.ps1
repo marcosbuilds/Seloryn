@@ -54,6 +54,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Hash-chained training stream verification failed' }
     & python tests/source_contract_reuse_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Source contract reuse verification failed' }
+    & python tests/job_lifecycle_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Job lifecycle verification failed' }
+    & python tests/job_recovery_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Job recovery verification failed' }
+    & python tests/job_concurrency_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Job concurrency verification failed' }
     & python tests/self_hosted_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Seloryn-authored training verification failed' }
     & python tests/self_hosted_language_model_probe.py

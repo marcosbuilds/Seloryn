@@ -90,6 +90,11 @@ promise that every design proposal already exists.
   multi-symbol local imports validate every requested export; and source-owned
   training receipts replay successfully in an isolated copy while rejecting a
   changed dataset.
+- The first job-lifecycle contract is now executable locally: bounded JSON
+  specs receive safe IDs, canonical hashes and an `accepted` state; state is
+  checked against an append-only event log; valid transitions are explicit;
+  atomic writes and event-authoritative repair are covered by black-box probes.
+  This does not execute a job or recover a worker.
 
 ## Next gates
 
@@ -137,6 +142,12 @@ promise that every design proposal already exists.
    proof is real on a declared physical adapter. The next gate is a reusable
    device-resident Tensor/F32 abstraction, then GPU autodiff and MLP training;
    no fallback or distributed claim is implied.
+8. **Job execution continuation — contract slice completed:** `seloryn job`
+   now provides a durable local spec/state/event boundary. The next gate must
+   add a single-process worker with a lease, preflight/failure receipts,
+   process-group cancellation, artifact commit markers and idempotent recovery.
+   It must prove same-workspace conflict handling and forced interruption before
+   any queue, retry policy, remote worker or serving API is added.
 
 ## Boundaries
 
