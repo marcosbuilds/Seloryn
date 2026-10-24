@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "seloryn.benchmark-report.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "suite", "run", "environment", "manifest", "cases", "summary", "interpretation"],
+  "properties": {
+    "schema": {"const": "seloryn.benchmark-report.v1"},
+    "suite": {"const": "Seloryn Benchmark Suite"},
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["started_at_utc", "samples", "warmup", "timeout_seconds", "binary"],
+      "properties": {
+        "started_at_utc": {"type": "string"},
+        "samples": {"type": "integer", "minimum": 1},
+        "warmup": {"type": "integer", "minimum": 0},
+        "timeout_seconds": {"type": "number", "exclusiveMinimum": 0},
+        "binary": {"type": "string"}
+      }
+    },
+    "environment": {"type": "object"},
+    "manifest": {"type": "object"},
+    "cases": {"type": "array", "minItems": 6},
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "passed", "failed", "blocked", "not_run"],
+      "properties": {
+        "total": {"type": "integer", "minimum": 0},
+        "passed": {"type": "integer", "minimum": 0},
+        "failed": {"type": "integer", "minimum": 0},
+        "blocked": {"type": "integer", "minimum": 0},
+        "not_run": {"type": "integer", "minimum": 0}
+      }
+    },
+    "interpretation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "no_general_superiority_claim", "gains_and_losses_recorded"],
+      "properties": {
+        "scope": {"type": "string"},
+        "no_general_superiority_claim": {"const": true},
+        "gains_and_losses_recorded": {"const": true},
+        "blocked_means_required_capability_or_environment_evidence_is_unavailable": {"const": true}
+      }
+    }
+  }
+}

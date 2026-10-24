@@ -1,0 +1,2 @@
+fn main() -> Tensor[F32]:
+    return tensor_log(tensor_f32([0.0], [1]))

@@ -1,0 +1,69 @@
+{
+  "$schema": "./schema/manifest.schema.json",
+  "schema": "seloryn.benchmark-manifest.v1",
+  "suite": "Seloryn Benchmark Suite",
+  "dataset_version": "small-v1",
+  "provenance": {
+    "source_class": "curated repository fixtures",
+    "rights": "repository-owned or existing Seloryn examples",
+    "consent": "not applicable; no personal data",
+    "reset": "read-only fixtures or a fresh temporary project copy per sample",
+    "contamination_risk": "low; fixtures are stored in the repository and are not training data for a production model"
+  },
+  "cases": [
+    {
+      "id": "BENCH-01",
+      "name": "JSON Validation",
+      "kind": "json_validation",
+      "candidate": "examples/projects/json-config",
+      "reference": "benchmarks/references/bench_01_json_validation.py",
+      "correctness": "exact string result and successful exit",
+      "status": "verified-preview"
+    },
+    {
+      "id": "BENCH-02",
+      "name": "Data Transformation",
+      "kind": "data_transformation",
+      "candidate": "examples/projects/json-array-pipeline",
+      "reference": "benchmarks/references/bench_02_data_transformation.py",
+      "correctness": "numeric sum within 1e-6 and successful exit",
+      "status": "verified-preview"
+    },
+    {
+      "id": "BENCH-03",
+      "name": "Numerical Computation",
+      "kind": "numerical_computation",
+      "candidate": "benchmarks/fixtures/bench-03-numerical-computation.sely",
+      "reference": "benchmarks/references/bench_03_numerical_computation.py",
+      "correctness": "shape exact and values within 2e-4",
+      "status": "verified-preview"
+    },
+    {
+      "id": "BENCH-04",
+      "name": "Small Neural Network",
+      "kind": "small_neural_network",
+      "candidate": "examples/projects/self-hosted-mlp",
+      "reference": "benchmarks/references/bench_04_small_neural_network.py",
+      "correctness": "loss decreases, checkpoint reload agrees, metrics within 2e-3",
+      "status": "verified-preview"
+    },
+    {
+      "id": "BENCH-05",
+      "name": "Language Model",
+      "kind": "language_model",
+      "candidate": "examples/projects/self-hosted-language-model",
+      "reference": "benchmarks/references/bench_05_language_model.py",
+      "correctness": "loss decreases, held-out accuracy and generated sequence agree",
+      "status": "verified-preview"
+    },
+    {
+      "id": "BENCH-06",
+      "name": "Error Handling",
+      "kind": "error_handling",
+      "candidate": "benchmarks/fixtures/bench-06-error-handling.sely",
+      "reference": "benchmarks/references/bench_06_error_handling.py",
+      "correctness": "nonzero exit, stable SEL-R210 domain diagnostic, no false success",
+      "status": "verified-preview"
+    }
+  ]
+}

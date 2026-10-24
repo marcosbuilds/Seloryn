@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "seloryn.benchmark-sample.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["index", "elapsed_ms", "exit_code", "correct", "output_sha256"],
+  "properties": {
+    "index": {"type": "integer", "minimum": 0},
+    "elapsed_ms": {"type": "number", "minimum": 0},
+    "exit_code": {"type": ["integer", "null"]},
+    "correct": {"type": "boolean"},
+    "output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}

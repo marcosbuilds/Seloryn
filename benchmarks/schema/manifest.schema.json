@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "seloryn.benchmark-manifest.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "suite", "dataset_version", "provenance", "cases"],
+  "properties": {
+    "$schema": {"type": "string"},
+    "schema": {"const": "seloryn.benchmark-manifest.v1"},
+    "suite": {"const": "Seloryn Benchmark Suite"},
+    "dataset_version": {"type": "string", "minLength": 1},
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_class", "rights", "consent", "reset", "contamination_risk"],
+      "properties": {
+        "source_class": {"type": "string"},
+        "rights": {"type": "string"},
+        "consent": {"type": "string"},
+        "reset": {"type": "string"},
+        "contamination_risk": {"type": "string"}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "kind", "candidate", "reference", "correctness", "status"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^BENCH-0[1-6]$"},
+          "name": {"type": "string"},
+          "kind": {"type": "string"},
+          "candidate": {"type": "string"},
+          "reference": {"type": "string"},
+          "correctness": {"type": "string"},
+          "status": {"enum": ["verified-preview", "experimental", "blocked"]}
+        }
+      }
+    }
+  }
+}
