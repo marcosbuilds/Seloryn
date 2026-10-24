@@ -20,74 +20,18 @@ try {
         & cargo @argsForCargo
         if ($LASTEXITCODE -ne 0) { throw "cargo $($argsForCargo -join ' ') failed" }
     }
-    & python tests/n1_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'N1 independent CLI verification failed' }
-    & python tests/n2_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'N2 independent CLI verification failed' }
-    & python tests/n3_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'N3a independent CLI verification failed' }
-    & python tests/n3_tensor_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'N3b tensor independent CLI verification failed' }
-    & python tests/release_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Public project and bundle verification failed' }
-    & python tests/release_staging_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Release staging verification failed' }
-    & python tests/lsp_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'LSP integration verification failed' }
-    & python tests/project_manifest_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Project manifest verification failed' }
-    & python tests/import_contract_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Local import contract verification failed' }
-    & python tests/json_array_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Typed JSON array verification failed' }
-    & python tests/mlp_training_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'CPU MLP independent verification failed' }
-    & python tests/mlp_inference_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'MLP batch inference verification failed' }
-    & python tests/workspace_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Workspace doctor/init verification failed' }
-    & python tests/operational_reliability_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Operational reliability verification failed' }
-    & python tests/cancel_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Cooperative cancellation verification failed' }
-    & python tests/streaming_v2_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Hash-chained training stream verification failed' }
-    & python tests/source_contract_reuse_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Source contract reuse verification failed' }
-    & python tests/job_lifecycle_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Job lifecycle verification failed' }
-    & python tests/job_recovery_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Job recovery verification failed' }
-    & python tests/job_concurrency_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Job concurrency verification failed' }
-    & python tests/job_lease_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Job lease verification failed' }
-    & python tests/job_preflight_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Job preflight verification failed' }
-    & python tests/self_hosted_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Seloryn-authored training verification failed' }
-    & python tests/self_hosted_language_model_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Self-hosted language-model verification failed' }
-    & python tests/auditable_local_inference_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'Auditable local-inference verification failed' }
-    & python tests/performance_probe.py --runs 5
-    if ($LASTEXITCODE -ne 0) { throw 'Source-owned performance verification failed' }
-    & python tests/compare_language_model.py
-    if ($LASTEXITCODE -ne 0) { throw 'Language-model comparison verification failed' }
-    & python tests/gpu_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'GPU compute verification failed' }
-    & python tests/gpu_training_probe.py
-    if ($LASTEXITCODE -ne 0) { throw 'GPU training verification failed' }
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File tests/installer_probe.ps1
-    if ($LASTEXITCODE -ne 0) { throw 'Windows installer verification failed' }
+    & python scripts/ci/conformance.py --run --suite core
+    if ($LASTEXITCODE -ne 0) { throw 'Portable public conformance matrix failed' }
+    & python scripts/ci/conformance.py --run --suite benchmark
+    if ($LASTEXITCODE -ne 0) { throw 'Benchmark evidence suite failed' }
+    & python scripts/ci/conformance.py --run --suite hardware
+    if ($LASTEXITCODE -ne 0) { throw 'Hardware conformance suite failed' }
     & npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'VS Code packaging dependencies failed to install' }
-    & npm run package --prefix tooling/vscode
-    if ($LASTEXITCODE -ne 0) { throw 'VS Code VSIX packaging failed' }
-    & npm run test:cli --prefix tooling/vscode
-    if ($LASTEXITCODE -ne 0) { throw 'VS Code to CLI diagnostic integration failed' }
-    & npm test --prefix tooling/vscode
-    if ($LASTEXITCODE -ne 0) { throw 'VS Code extension validation failed' }
+    & python scripts/ci/conformance.py --run --suite editor
+    if ($LASTEXITCODE -ne 0) { throw 'Editor conformance suite failed' }
+    & python scripts/ci/conformance.py --run --suite release
+    if ($LASTEXITCODE -ne 0) { throw 'Release conformance suite failed' }
     & .\target\release\seloryn.exe run examples\tensors\linear-forward.sely
     if ($LASTEXITCODE -ne 0) { throw 'Linear forward example failed' }
     & .\target\release\seloryn.exe run examples\tensors\tensor-reduce.sely

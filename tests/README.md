@@ -15,6 +15,9 @@
   import is checked and that missing exports fail closed with `SEL-M004`.
 - `performance_probe.py` runs the source-owned training fixture repeatedly and
   reports median/P95 wall time alongside the pure-Python numerical oracle.
+- `../scripts/ci/conformance.py` validates the public capability matrix and
+  runs the existing probes by evidence suite; its source of truth is
+  `conformance_matrix.json`.
 
 Only sanitized public fixtures that are executable against this checkout belong
 here.

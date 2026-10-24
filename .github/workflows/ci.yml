@@ -64,59 +64,22 @@ jobs:
           $baselineBinary = Join-Path $baselineRoot ('target/release/' + $binaryName)
           if (-not (Test-Path -LiteralPath $baselineBinary -PathType Leaf)) { throw "baseline binary missing: $baselineBinary" }
           "SELORYN_BASELINE_BINARY=$baselineBinary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Independent N1 CLI comparison
-        run: python tests/n1_probe.py
-      - name: Independent N2 CLI comparison
-        run: python tests/n2_probe.py
-      - name: Independent N3a CLI comparison
-        run: python tests/n3_probe.py
-      - name: Independent N3b tensor autograd comparison
-        run: python tests/n3_tensor_probe.py
-      - name: Public projects and bundle probe
-        run: python tests/release_probe.py
-      - name: Independent project manifest probe
-        run: python tests/project_manifest_probe.py
-      - name: Independent local import contract probe
-        run: python tests/import_contract_probe.py
-      - name: Independent CPU MLP training proof
-        run: python tests/mlp_training_probe.py
-      - name: Independent hash-chained training stream proof
-        run: python tests/streaming_v2_probe.py
-      - name: Independent Seloryn-authored training proof
-        run: python tests/self_hosted_probe.py
-      - name: Independent self-hosted language-model proof
-        run: python tests/self_hosted_language_model_probe.py
-      - name: Independent auditable local-inference proof
-        run: python tests/auditable_local_inference_probe.py
+      - name: Portable public conformance matrix
+        run: python scripts/ci/conformance.py --run --suite core
       - name: Reproducible source-owned performance benchmark
         shell: pwsh
         # Shared runners are suitable for collecting comparable evidence, but
         # not for a hard five-sample performance gate. Functional correctness
         # remains blocking; performance promotion requires a controlled review.
         run: python tests/performance_probe.py --baseline $env:SELORYN_BASELINE_BINARY --runs 5
-      - name: Operational reliability and workspace confinement proof
-        run: python tests/operational_reliability_probe.py
-      - name: Local job lifecycle contract proofs
-        run: |
-          python tests/job_lifecycle_probe.py
-          python tests/job_lease_probe.py
-          python tests/job_recovery_probe.py
-          python tests/job_concurrency_probe.py
-          python tests/job_preflight_probe.py
-      - name: Python/Seloryn language-model comparison
-        run: python tests/compare_language_model.py
-      - name: GPU compute probe when an adapter exists
-        run: python tests/gpu_probe.py
-      - name: GPU linear training proof when an adapter exists
-        run: python tests/gpu_training_probe.py
+      - name: Hardware conformance matrix when an adapter exists
+        run: python scripts/ci/conformance.py --run --suite hardware
       - name: Install VS Code packaging dependencies
         run: npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
-      - name: Build deterministic VSIX preview
-        run: npm run package --prefix tooling/vscode
-      - name: VS Code extension and CLI diagnostic integration
-        run: npm run test:cli --prefix tooling/vscode
-      - name: VS Code extension metadata and API-double tests
-        run: npm test --prefix tooling/vscode
+      - name: Editor conformance matrix
+        run: python scripts/ci/conformance.py --run --suite editor
+      - name: Release and installer conformance matrix
+        run: python scripts/ci/conformance.py --run --suite release
       - name: PowerShell 5.1 CLI smoke
         if: runner.os == 'Windows'
         shell: powershell
@@ -153,7 +116,3 @@ jobs:
           if errorlevel 66 exit /b 1
           if not errorlevel 65 exit /b 1
           exit /b 0
-      - name: Windows installer and terminal lifecycle
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: .\tests\installer_probe.ps1

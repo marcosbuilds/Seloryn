@@ -9,30 +9,12 @@ cargo test --all-targets --locked -- --test-threads=1
 cargo clippy --all-targets --locked -- -D warnings
 cargo test --release --all-targets --locked -- --test-threads=1
 cargo build --release --locked
-python3 tests/n1_probe.py
-python3 tests/n2_probe.py
-python3 tests/n3_probe.py
-python3 tests/n3_tensor_probe.py
-python3 tests/release_probe.py
-python3 tests/release_staging_probe.py
-python3 tests/lsp_probe.py
-python3 tests/project_manifest_probe.py
-python3 tests/import_contract_probe.py
-python3 tests/json_array_probe.py
-python3 tests/mlp_training_probe.py
-python3 tests/mlp_inference_probe.py
-python3 tests/workspace_probe.py
-python3 tests/operational_reliability_probe.py
-python3 tests/cancel_probe.py
-python3 tests/streaming_v2_probe.py
-python3 tests/source_contract_reuse_probe.py
-python3 tests/self_hosted_probe.py
-python3 tests/self_hosted_language_model_probe.py
-python3 tests/auditable_local_inference_probe.py
-python3 tests/performance_probe.py --runs 5
-python3 tests/compare_language_model.py
-python3 tests/gpu_probe.py
-python3 tests/gpu_training_probe.py
+python3 scripts/ci/conformance.py --run --suite core
+python3 scripts/ci/conformance.py --run --suite benchmark
+python3 scripts/ci/conformance.py --run --suite hardware
+npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
+python3 scripts/ci/conformance.py --run --suite editor
+python3 scripts/ci/conformance.py --run --suite release
 ./target/release/seloryn run examples/tensors/linear-forward.sely
 ./target/release/seloryn run examples/tensors/tensor-reduce.sely
 set +e

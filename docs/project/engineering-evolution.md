@@ -23,7 +23,7 @@ AUDIT -> PLAN -> IMPLEMENT -> TEST -> REVIEW -> MEASURE -> INTEGRATE -> VERIFY
 |---|---|---|---|
 | P0 — Integrity | Baseline preserved, CI failures investigated, supported-platform CI green, no weakened correctness tests | **Complete for the current restoration slice** | [CI run 40](https://github.com/marcosbuilds/Seloryn/actions/runs/40058223002), commits [`fccdbf4`](https://github.com/marcosbuilds/Seloryn/commit/fccdbf4916a5aac4e09e3c9dc4db7145ae39acbd), [`66e4c93`](https://github.com/marcosbuilds/Seloryn/commit/66e4c93517ca9a610a43a6ca374cdb115f04eafb), [`e0f22b7`](https://github.com/marcosbuilds/Seloryn/commit/e0f22b72ad747141db6f1051eb91edee7fe5fcc5) |
 | P1 — Organization | Public documentation agrees with implementation; `master` and historical refs preserved; integration and release policy are explicit | **In progress** | Documentation corrections are landed. GitHub reports `master` unprotected and no rulesets; owner/admin configuration is still required. |
-| P2 — Evidence | Conformance, benchmark and comparison proofs are reproducible, independent and honest about limits | **Partially complete** | Existing probes run in public CI. No general performance superiority or AI token-economy claim is accepted. Remaining evidence must preserve raw outputs and environment details. |
+| P2 — Evidence | Conformance, benchmark and comparison proofs are reproducible, independent and honest about limits | **Conformance foundation implemented; cross-platform integration pending** | [`conformance.md`](conformance.md), [`conformance_matrix.json`](../../tests/conformance_matrix.json) and [`conformance.py`](../../scripts/ci/conformance.py) map 23 capabilities to 38 existing probes, source paths, platform requirements and limits. The isolated Windows run passed core, editor, hardware, release and benchmark suites; this unpushed worktree still needs the new workflow to run on Linux/macOS. No general performance superiority or AI token-economy claim is accepted. |
 | P3 — Developer experience | Diagnostics, CLI/LSP and agent-facing inspection improvements have measurable acceptance criteria | **Bounded slices verified; continuation open** | Current LSP, diagnostics and project-contract probes are documented in [`status.md`](status.md) and [`next-gates.md`](next-gates.md). |
 | P4 — Performance | Changes are selected from measurements and compared under controlled conditions | **Evidence-only baseline** | Shared-runner benchmarks are non-blocking. No version gain is recorded without a controlled before/after result. |
 | P5 — AI workflow | Any productivity or token-efficiency claim has a defined experiment and independent measurement | **Not demonstrated** | Existing auditable local-inference proofs do not measure agent tokens, cost, retries or task success. |
@@ -49,8 +49,9 @@ AUDIT -> PLAN -> IMPLEMENT -> TEST -> REVIEW -> MEASURE -> INTEGRATE -> VERIFY
 
 1. Obtain or document GitHub owner/admin action for branch protection and the
    required `Verify Seloryn` status checks.
-2. Preserve public raw benchmark/probe evidence and separate verified results
-   from experimental or hardware-dependent results.
+2. Run the public conformance matrix on all supported CI platforms after an
+   authorized integration, then preserve raw benchmark/probe evidence and
+   separate verified results from experimental or hardware-dependent results.
 3. Select the next technical gate only after its acceptance contract is
    written; the current job-lifecycle boundary is local coordination only and
    does not authorize a worker, retry system or remote execution feature.

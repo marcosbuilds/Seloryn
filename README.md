@@ -7,7 +7,7 @@
 
 > **Current local candidate: language 0.12 / runtime package 0.12.0, verified-preview CPU training, a complete source-owned `.sely` bigram language-model workflow and an auditable local-inference workflow with explicit data/model/run contracts, hash-bound checkpoints and inference audit events.** The release also retains identity-bearing replay receipts, typed JSON-array ingestion, an explicit device-resident GPU linear-training profile, hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles. Transformer training, GPU tensor/MLP training, distributed, registry, stable ABI and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md), [auditable proof](docs/benchmarks/auditable-local-inference.md), [language-model proof](docs/compute/language-model.md) and [training reference](docs/compute/training.md).
 
-> **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Local preview artifacts are generated and validated, but they carry the exact platform, version and boundary claims documented below; GitHub publication remains explicit and separate.
+> **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Local preview artifacts are generated and validated, but they carry the exact platform, version and boundary claims documented below; GitHub publication remains explicit and separate. The executable [public conformance and evidence matrix](docs/project/conformance.md) maps each claim to source paths, positive/negative probes, platform requirements and limits.
 
 The first reviewed comparative result for the intended CPU-first tabular niche
 is documented in [the production-niche benchmark](docs/benchmarks/production-niche-v2.md).
@@ -88,7 +88,7 @@ The function above is intentionally illustrative beyond the current callable API
 
 ## Read next
 
-[Getting started](docs/guide/start.md) · [Editor support](docs/guide/editor.md) · [Next executable gates](docs/project/next-gates.md) · [Architecture](docs/project/architecture.md) · [Grammar](docs/reference/grammar.md) · [Types](docs/reference/types.md) · [Errors](docs/reference/errors.md) · [Tensors](docs/compute/tensors.md) · [Training](docs/compute/training.md) · [Executable language model](docs/compute/language-model.md) · [LLM path](docs/compute/llms.md) · [Servers](docs/systems/http.md) · [Platform support](docs/guide/platforms.md) · [Releases](docs/project/versions.md) · [License](docs/project/licensing.md)
+[Getting started](docs/guide/start.md) · [Editor support](docs/guide/editor.md) · [Conformance matrix](docs/project/conformance.md) · [Next executable gates](docs/project/next-gates.md) · [Architecture](docs/project/architecture.md) · [Grammar](docs/reference/grammar.md) · [Types](docs/reference/types.md) · [Errors](docs/reference/errors.md) · [Tensors](docs/compute/tensors.md) · [Training](docs/compute/training.md) · [Executable language model](docs/compute/language-model.md) · [LLM path](docs/compute/llms.md) · [Servers](docs/systems/http.md) · [Platform support](docs/guide/platforms.md) · [Releases](docs/project/versions.md) · [License](docs/project/licensing.md)
 
 ## References and visuals
 

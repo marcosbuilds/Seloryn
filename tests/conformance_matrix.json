@@ -1,0 +1,669 @@
+{
+  "schema": "seloryn.conformance.v1",
+  "schema_version": 1,
+  "repository": "https://github.com/marcosbuilds/Seloryn",
+  "status_labels": [
+    "design-only",
+    "reserved",
+    "experimental-implemented",
+    "verified-preview",
+    "supported-stable",
+    "deprecated",
+    "unsupported"
+  ],
+  "platform_labels": [
+    "linux",
+    "macos",
+    "windows",
+    "not-applicable"
+  ],
+  "probes": [
+    {
+      "id": "n1-cli",
+      "path": "tests/n1_probe.py",
+      "command": ["python", "tests/n1_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Independent scalar CLI oracle."
+    },
+    {
+      "id": "n2-cli",
+      "path": "tests/n2_probe.py",
+      "command": ["python", "tests/n2_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Independent parser, runtime and negative-diagnostic oracle."
+    },
+    {
+      "id": "n3-scalar-autograd",
+      "path": "tests/n3_probe.py",
+      "command": ["python", "tests/n3_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Finite-difference oracle for scalar reverse mode."
+    },
+    {
+      "id": "n3-tensor-autograd",
+      "path": "tests/n3_tensor_probe.py",
+      "command": ["python", "tests/n3_tensor_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Independent matrix/mean gradient oracle."
+    },
+    {
+      "id": "release-public-projects",
+      "path": "tests/release_probe.py",
+      "command": ["python", "tests/release_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Public projects, typed tensor example and deterministic bundle."
+    },
+    {
+      "id": "project-manifest",
+      "path": "tests/project_manifest_probe.py",
+      "command": ["python", "tests/project_manifest_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Valid and invalid TOML/language-version declarations."
+    },
+    {
+      "id": "import-contract",
+      "path": "tests/import_contract_probe.py",
+      "command": ["python", "tests/import_contract_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Validates every requested local export and rejects missing exports."
+    },
+    {
+      "id": "json-array",
+      "path": "tests/json_array_probe.py",
+      "command": ["python", "tests/json_array_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Typed integer/float JSON arrays and invalid-value rejection."
+    },
+    {
+      "id": "mlp-training",
+      "path": "tests/mlp_training_probe.py",
+      "command": ["python", "tests/mlp_training_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Positive training/resume path plus tampered checkpoint and budget failures."
+    },
+    {
+      "id": "streaming-v2",
+      "path": "tests/streaming_v2_probe.py",
+      "command": ["python", "tests/streaming_v2_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "JSON2 chain, replay, authentication, redaction and tamper cases."
+    },
+    {
+      "id": "self-hosted-linear",
+      "path": "tests/self_hosted_probe.py",
+      "command": ["python", "tests/self_hosted_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Seloryn-authored objective, gradients, bounded range and SGD."
+    },
+    {
+      "id": "self-hosted-mlp",
+      "path": "tests/self_hosted_mlp_probe.py",
+      "command": ["python", "tests/self_hosted_mlp_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Source-owned ReLU MLP, persistence, reload and inference."
+    },
+    {
+      "id": "self-hosted-language-model",
+      "path": "tests/self_hosted_language_model_probe.py",
+      "command": ["python", "tests/self_hosted_language_model_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Runtime-sized source-owned CPU bigram training and inference."
+    },
+    {
+      "id": "auditable-local-inference",
+      "path": "tests/auditable_local_inference_probe.py",
+      "command": ["python", "tests/auditable_local_inference_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Independent local-inference contract, audit event and six boundary cases."
+    },
+    {
+      "id": "cancel",
+      "path": "tests/cancel_probe.py",
+      "command": ["python", "tests/cancel_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Bounded cooperative cancellation and no-success-result assertion."
+    },
+    {
+      "id": "workspace",
+      "path": "tests/workspace_probe.py",
+      "command": ["python", "tests/workspace_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Read-only doctor and transactional init, including refusal paths."
+    },
+    {
+      "id": "mlp-inference",
+      "path": "tests/mlp_inference_probe.py",
+      "command": ["python", "tests/mlp_inference_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Hash-validated bounded CPU checkpoint inference and invalid-input cases."
+    },
+    {
+      "id": "source-contract-reuse",
+      "path": "tests/source_contract_reuse_probe.py",
+      "command": ["python", "tests/source_contract_reuse_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Two consumers use one source-owned Parameter/Sgd contract."
+    },
+    {
+      "id": "operational-reliability",
+      "path": "tests/operational_reliability_probe.py",
+      "command": ["python", "tests/operational_reliability_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "four concurrent processes"],
+      "notes": "Workspace confinement and deterministic bounded CPU process evidence."
+    },
+    {
+      "id": "job-lifecycle",
+      "path": "tests/job_lifecycle_probe.py",
+      "command": ["python", "tests/job_lifecycle_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Canonical specs, state transitions and event-authoritative checks."
+    },
+    {
+      "id": "job-lease",
+      "path": "tests/job_lease_probe.py",
+      "command": ["python", "tests/job_lease_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "100-way claim race"],
+      "notes": "Claim, heartbeat, release, expiry and ownership rejection."
+    },
+    {
+      "id": "job-recovery",
+      "path": "tests/job_recovery_probe.py",
+      "command": ["python", "tests/job_recovery_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Event-authoritative repair and expiry-only recovery boundaries."
+    },
+    {
+      "id": "job-concurrency",
+      "path": "tests/job_concurrency_probe.py",
+      "command": ["python", "tests/job_concurrency_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "concurrent subprocesses"],
+      "notes": "Concurrent creation and claim ownership."
+    },
+    {
+      "id": "job-preflight",
+      "path": "tests/job_preflight_probe.py",
+      "command": ["python", "tests/job_preflight_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Read-only seloryn-run.v1 source validation and confinement rejection."
+    },
+    {
+      "id": "language-model-comparison",
+      "path": "tests/compare_language_model.py",
+      "command": ["python", "tests/compare_language_model.py"],
+      "suites": ["core", "benchmark"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "stdlib reference"],
+      "notes": "Independent numerical reference; does not claim general superiority."
+    },
+    {
+      "id": "lsp",
+      "path": "tests/lsp_probe.py",
+      "command": ["python", "tests/lsp_probe.py"],
+      "suites": ["editor"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Full-document lifecycle, diagnostics, completion and definition."
+    },
+    {
+      "id": "release-staging",
+      "path": "tests/release_staging_probe.py",
+      "command": ["python", "tests/release_staging_probe.py"],
+      "suites": ["release"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "release dependencies"],
+      "notes": "Source, toolchain, lockfile, binary and artifact provenance."
+    },
+    {
+      "id": "performance",
+      "path": "tests/performance_probe.py",
+      "command": ["python", "tests/performance_probe.py", "--runs", "3"],
+      "suites": ["benchmark"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "controlled comparison for promotion"],
+      "notes": "Collects local timing evidence; it does not assert superiority."
+    },
+    {
+      "id": "gpu-compute",
+      "path": "tests/gpu_probe.py",
+      "command": ["python", "tests/gpu_probe.py"],
+      "suites": ["hardware"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "physical compatible adapter"],
+      "notes": "Capability-aware physical adapter and WGSL readback proof."
+    },
+    {
+      "id": "gpu-linear-training",
+      "path": "tests/gpu_training_probe.py",
+      "command": ["python", "tests/gpu_training_probe.py"],
+      "suites": ["hardware"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "physical compatible adapter"],
+      "notes": "Closed scalar F32 device-resident training profile; no CPU fallback."
+    },
+    {
+      "id": "installer-windows",
+      "path": "tests/installer_probe.ps1",
+      "command": ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tests/installer_probe.ps1"],
+      "suites": ["release"],
+      "platforms": ["windows"],
+      "requirements": ["PowerShell", "release binary", "local provenance artifact"],
+      "notes": "Local installer verification only; no public download claim."
+    },
+    {
+      "id": "vscode-package",
+      "path": "tooling/vscode/package.json",
+      "command": ["npm", "run", "package", "--prefix", "tooling/vscode"],
+      "suites": ["editor"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Node.js", "npm dependencies"],
+      "notes": "Deterministic VSIX packaging preview."
+    },
+    {
+      "id": "vscode-tests",
+      "path": "tooling/vscode/package.json",
+      "command": ["npm", "test", "--prefix", "tooling/vscode"],
+      "suites": ["editor"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Node.js", "npm dependencies"],
+      "notes": "Package metadata and API-double tests; install dependencies first."
+    },
+    {
+      "id": "vscode-cli-integration",
+      "path": "tooling/vscode/package.json",
+      "command": ["npm", "run", "test:cli", "--prefix", "tooling/vscode"],
+      "suites": ["editor"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Node.js", "npm dependencies", "release binary"],
+      "notes": "Extension-to-CLI diagnostics and integration fixtures."
+    },
+    {
+      "id": "boundary-gpu-tensor",
+      "type": "boundary",
+      "path": "docs/project/status.md",
+      "suites": ["core"],
+      "platforms": ["not-applicable"],
+      "requirements": ["explicit public boundary"],
+      "must_contain": "GPU tensor/autodiff training",
+      "notes": "The public status explicitly excludes GPU tensor/autodiff/MLP training."
+    },
+    {
+      "id": "boundary-transformer-http",
+      "type": "boundary",
+      "path": "docs/project/status.md",
+      "suites": ["core"],
+      "platforms": ["not-applicable"],
+      "requirements": ["explicit public boundary"],
+      "must_contain": "Transformer/LLM-scale training",
+      "notes": "The public status explicitly excludes transformer/LLM-scale training and HTTP serving."
+    },
+    {
+      "id": "boundary-distributed",
+      "type": "boundary",
+      "path": "docs/project/status.md",
+      "suites": ["core"],
+      "platforms": ["not-applicable"],
+      "requirements": ["explicit public boundary"],
+      "must_contain": "distributed execution",
+      "notes": "The public status explicitly excludes distributed execution."
+    },
+    {
+      "id": "boundary-registry-abi",
+      "type": "boundary",
+      "path": "docs/project/status.md",
+      "suites": ["core"],
+      "platforms": ["not-applicable"],
+      "requirements": ["explicit public boundary"],
+      "must_contain": "Registry, broad package ecosystem and stable ABI",
+      "notes": "The public status explicitly excludes a package registry and stable ABI."
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "front-end-diagnostics",
+      "area": "language",
+      "claim": "UTF-8 lexing, layout, parsing, names, bounded semantic checks and structured diagnostics.",
+      "status": "experimental-implemented",
+      "implementation": ["src/lexer.rs", "src/parser.rs", "src/semantic.rs", "src/diagnostic.rs"],
+      "positive_probes": ["n1-cli", "n2-cli"],
+      "negative_probes": ["n2-cli"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Rust release binary", "Python 3.12"],
+      "documentation": ["docs/project/status.md", "docs/reference/grammar.md", "docs/reference/errors.md"],
+      "limits": ["The language subset and type checker remain bounded and experimental."]
+    },
+    {
+      "id": "bounded-runtime",
+      "area": "runtime",
+      "claim": "Bounded scalar/list/project execution with deterministic CLI behavior.",
+      "status": "experimental-implemented",
+      "implementation": ["src/runtime.rs", "src/main.rs", "src/project.rs"],
+      "positive_probes": ["n1-cli", "release-public-projects"],
+      "negative_probes": ["n2-cli", "project-manifest"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Rust release binary", "Python 3.12"],
+      "documentation": ["docs/project/status.md", "docs/guide/cli.md", "docs/guide/start.md"],
+      "limits": ["Execution is bounded; unrestricted effects and a stable ABI are not claimed."]
+    },
+    {
+      "id": "cpu-tensors-autodiff",
+      "area": "numeric",
+      "claim": "CPU Tensor[F32]/Tensor[I64], bounded broadcasting/reduction/matmul and reverse-mode autodiff.",
+      "status": "experimental-implemented",
+      "implementation": ["src/tensor", "src/tensor_autograd.rs", "src/autograd.rs"],
+      "positive_probes": ["n2-cli", "n3-scalar-autograd", "n3-tensor-autograd"],
+      "negative_probes": ["n3-tensor-autograd"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Rust release binary", "CPU", "Python 3.12"],
+      "documentation": ["docs/project/status.md", "docs/compute/tensors.md", "docs/compute/autograd.md"],
+      "limits": ["GPU tensor/autodiff and general tensor training are outside this proof."]
+    },
+    {
+      "id": "cpu-mlp-training",
+      "area": "training",
+      "claim": "Bounded CPU two-layer MLP training with mini-batches, evaluation, deterministic seed and checkpoint/resume.",
+      "status": "verified-preview",
+      "implementation": ["src/runtime.rs", "examples/projects/mlp-training", "tests/mlp_training_probe.py"],
+      "positive_probes": ["mlp-training"],
+      "negative_probes": ["mlp-training"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["CPU", "single process", "Python 3.12", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/compute/training.md", "examples/projects/mlp-training/README.md"],
+      "limits": ["This is a bounded CPU profile, not a general model framework."]
+    },
+    {
+      "id": "source-owned-optimization",
+      "area": "training",
+      "claim": "Seloryn-authored objective, multi-input gradients, bounded range and SGD updates.",
+      "status": "verified-preview",
+      "implementation": ["examples/projects/self-hosted-linear", "src/tensor_autograd.rs"],
+      "positive_probes": ["self-hosted-linear"],
+      "negative_probes": ["self-hosted-linear"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["CPU", "Python 3.12", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/compute/training.md"],
+      "limits": ["No public Module/Dataset framework or optimizer family is claimed."]
+    },
+    {
+      "id": "source-owned-mlp",
+      "area": "training",
+      "claim": "A complete bounded ReLU MLP workflow authored in .sely with persistence, reload and inference.",
+      "status": "verified-preview",
+      "implementation": ["examples/projects/self-hosted-mlp", "tests/self_hosted_mlp_probe.py"],
+      "positive_probes": ["self-hosted-mlp"],
+      "negative_probes": ["self-hosted-mlp"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["CPU", "Python 3.12", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/compute/training.md", "examples/projects/self-hosted-mlp/README.md"],
+      "limits": ["The proof does not provide GPU tensor training or a general checkpoint registry."]
+    },
+    {
+      "id": "source-owned-language-model",
+      "area": "language-model",
+      "claim": "A source-owned CPU bigram workflow with runtime-sized vocabulary/data, training, evaluation, checkpoint reload and inference.",
+      "status": "verified-preview",
+      "implementation": ["examples/projects/self-hosted-language-model", "src/tensor_autograd.rs"],
+      "positive_probes": ["self-hosted-language-model", "language-model-comparison"],
+      "negative_probes": ["self-hosted-language-model"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["CPU", "single token context", "Python 3.12", "stdlib numerical reference"],
+      "documentation": ["docs/project/status.md", "docs/compute/language-model.md", "docs/compute/llms.md"],
+      "limits": ["This is not transformer training, subword tokenization, HTTP serving or GPU training."]
+    },
+    {
+      "id": "auditable-local-inference",
+      "area": "evidence",
+      "claim": "Source-owned bounded local inference with explicit data/model/run contracts, hash-bound checkpoint and audit event.",
+      "status": "verified-preview",
+      "implementation": ["examples/projects/auditable-local-inference", "scripts/streaming/verify-event-chain.py"],
+      "positive_probes": ["auditable-local-inference", "streaming-v2"],
+      "negative_probes": ["auditable-local-inference", "streaming-v2"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["CPU fixture", "Python 3.12", "release binary"],
+      "documentation": ["docs/benchmarks/auditable-local-inference.md", "docs/project/status.md"],
+      "limits": ["The evidence covers the bounded fixture, not general model interchange or production serving."]
+    },
+    {
+      "id": "streaming-receipts",
+      "area": "observability",
+      "claim": "Human/JSON/JSON2 streams with identity, hash chaining, replay, redaction and optional keyed authentication.",
+      "status": "verified-preview",
+      "implementation": ["src/main.rs", "src/runtime.rs", "scripts/streaming/verify-event-chain.py", "scripts/streaming/replay-receipt.py"],
+      "positive_probes": ["streaming-v2", "auditable-local-inference"],
+      "negative_probes": ["streaming-v2", "auditable-local-inference"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/compute/training.md", "docs/benchmarks/auditable-local-inference.md"],
+      "limits": ["This is not a public-key signature, async backpressure protocol or universal telemetry system."]
+    },
+    {
+      "id": "json-array-ingestion",
+      "area": "data",
+      "claim": "Bounded JSON numeric arrays convert to typed Seloryn lists for real iteration.",
+      "status": "verified-preview",
+      "implementation": ["src/runtime.rs", "src/semantic.rs", "examples/projects/json-array-pipeline"],
+      "positive_probes": ["json-array"],
+      "negative_probes": ["json-array"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/reference/language.md"],
+      "limits": ["Input remains bounded and is not a general dataframe or package API."]
+    },
+    {
+      "id": "projects-modules-bundles",
+      "area": "projects",
+      "claim": "Local modules, strict project manifests and deterministic versioned bundles.",
+      "status": "experimental-implemented",
+      "implementation": ["src/project.rs", "src/main.rs", "examples/projects/source-contract-reuse"],
+      "positive_probes": ["release-public-projects", "project-manifest", "import-contract", "source-contract-reuse"],
+      "negative_probes": ["project-manifest", "import-contract"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/reference/modules.md", "docs/guide/cli.md"],
+      "limits": ["There is no public registry, broad resolver or stable ABI."]
+    },
+    {
+      "id": "gpu-physical-linear",
+      "area": "hardware",
+      "claim": "Capability-aware physical adapter inventory and a closed device-resident scalar GPU linear-training profile.",
+      "status": "verified-preview",
+      "implementation": ["src/gpu.rs", "examples/projects/gpu-linear-training"],
+      "positive_probes": ["gpu-compute", "gpu-linear-training"],
+      "negative_probes": ["gpu-compute", "gpu-linear-training"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["physical compatible adapter", "WGSL-capable wgpu backend", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/compute/training.md", "docs/guide/platforms.md"],
+      "limits": ["No fallback, GPU Tensor/autodiff/MLP, distributed execution or universal adapter support is claimed."]
+    },
+    {
+      "id": "job-contracts",
+      "area": "operations",
+      "claim": "Local job spec/state/event contracts, read-only preflight and bounded reservation lease.",
+      "status": "experimental-implemented",
+      "implementation": ["src/job.rs"],
+      "positive_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight"],
+      "negative_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "local filesystem"],
+      "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
+      "limits": ["No worker, process fencing, retry, remote execution or live-process recovery is claimed."]
+    },
+    {
+      "id": "operational-reliability",
+      "area": "operations",
+      "claim": "Bounded CPU process evidence with workspace confinement and deterministic semantic receipts/checkpoints.",
+      "status": "verified-preview",
+      "implementation": ["tests/operational_reliability_probe.py", "src/runtime.rs", "src/workspace.rs"],
+      "positive_probes": ["operational-reliability"],
+      "negative_probes": ["operational-reliability", "cancel"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["four concurrent processes", "Python 3.12", "release binary"],
+      "documentation": ["docs/benchmarks/operational-reliability.md", "docs/project/status.md"],
+      "limits": ["Forced termination is classified separately and does not become a graceful-cancellation claim."]
+    },
+    {
+      "id": "workspace-tools",
+      "area": "developer-experience",
+      "claim": "Read-only doctor diagnostics and transactional init templates with refusal paths.",
+      "status": "verified-preview",
+      "implementation": ["src/workspace.rs", "src/main.rs"],
+      "positive_probes": ["workspace"],
+      "negative_probes": ["workspace"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/guide/cli.md"],
+      "limits": ["Diagnostics report unstable ABI/production status accurately; they do not change it."]
+    },
+    {
+      "id": "lsp-editor",
+      "area": "developer-experience",
+      "claim": "Bounded parser-backed LSP lifecycle plus VS Code package and CLI integration evidence.",
+      "status": "verified-preview",
+      "implementation": ["src/lsp.rs", "tooling/vscode", "tests/lsp_probe.py"],
+      "positive_probes": ["lsp", "vscode-tests", "vscode-cli-integration"],
+      "negative_probes": ["lsp", "vscode-cli-integration"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "Node.js", "npm dependencies", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/guide/editor.md", "tooling/vscode/README.md"],
+      "limits": ["Indexed/incremental analysis, rename and Marketplace publication remain outside this proof."]
+    },
+    {
+      "id": "release-provenance",
+      "area": "release",
+      "claim": "Local runtime staging records source, toolchain, lockfile, binary and artifact provenance.",
+      "status": "verified-preview",
+      "implementation": ["scripts/release/package-runtime.py", "scripts/release/prepare-release.py"],
+      "positive_probes": ["release-staging", "release-public-projects"],
+      "negative_probes": ["release-staging"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release dependencies", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/project/versions.md", "docs/guide/install.md"],
+      "limits": ["This is provenance and local staging evidence, not a public release or signature claim."]
+    },
+    {
+      "id": "installer-preview",
+      "area": "release",
+      "claim": "Windows installer verifies local provenance and compatibility before installing a supplied binary.",
+      "status": "experimental-implemented",
+      "implementation": ["scripts/install/install-seloryn-windows.ps1", "tests/installer_probe.ps1"],
+      "positive_probes": ["installer-windows"],
+      "negative_probes": ["installer-windows"],
+      "platforms": ["windows"],
+      "requirements": ["Windows PowerShell", "local release binary", "local provenance artifact"],
+      "documentation": ["docs/project/status.md", "docs/guide/install.md"],
+      "limits": ["No public download, signing, cross-platform installer lifecycle or stable release target is claimed."]
+    },
+    {
+      "id": "performance-evidence",
+      "area": "benchmark",
+      "claim": "The source-owned benchmark can collect repeated local timing evidence for the declared fixture.",
+      "status": "verified-preview",
+      "implementation": ["src/tensor/ops.rs", "tests/performance_probe.py"],
+      "positive_probes": ["performance"],
+      "negative_probes": ["language-model-comparison"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "controlled environment for promotion"],
+      "documentation": ["docs/benchmarks/production-niche-v2.md", "docs/project/status.md"],
+      "limits": ["Timing output is evidence for the fixture; it does not prove general performance superiority."]
+    },
+    {
+      "id": "gpu-tensor-autodiff-boundary",
+      "area": "boundary",
+      "claim": "GPU tensor/autodiff/MLP training is explicitly outside the current implementation.",
+      "status": "unsupported",
+      "implementation": [],
+      "positive_probes": [],
+      "negative_probes": ["boundary-gpu-tensor"],
+      "platforms": ["not-applicable"],
+      "requirements": ["public boundary record"],
+      "documentation": ["docs/project/status.md", "docs/compute/tensors.md"],
+      "limits": ["The scalar GPU linear profile must not be generalized to Tensor or MLP support."]
+    },
+    {
+      "id": "transformer-http-boundary",
+      "area": "boundary",
+      "claim": "Transformer/LLM-scale training, subword tokenizers and HTTP serving are not implemented.",
+      "status": "unsupported",
+      "implementation": [],
+      "positive_probes": [],
+      "negative_probes": ["boundary-transformer-http"],
+      "platforms": ["not-applicable"],
+      "requirements": ["public boundary record"],
+      "documentation": ["docs/project/status.md", "docs/compute/llms.md", "docs/systems/http.md"],
+      "limits": ["The verified language-model row is a one-token CPU bigram proof only."]
+    },
+    {
+      "id": "distributed-boundary",
+      "area": "boundary",
+      "claim": "Distributed execution, worker coordination and memory sharding are not implemented.",
+      "status": "unsupported",
+      "implementation": [],
+      "positive_probes": [],
+      "negative_probes": ["boundary-distributed"],
+      "platforms": ["not-applicable"],
+      "requirements": ["public boundary record"],
+      "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
+      "limits": ["Local reservation leases do not prove live worker fencing or distributed recovery."]
+    },
+    {
+      "id": "registry-abi-boundary",
+      "area": "boundary",
+      "claim": "A public package registry, broad package ecosystem and stable language ABI are not implemented.",
+      "status": "unsupported",
+      "implementation": [],
+      "positive_probes": [],
+      "negative_probes": ["boundary-registry-abi"],
+      "platforms": ["not-applicable"],
+      "requirements": ["public boundary record"],
+      "documentation": ["docs/project/status.md", "docs/project/versions.md"],
+      "limits": ["Local modules and deterministic bundles do not imply registry or ABI stability."]
+    }
+  ]
+}

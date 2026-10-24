@@ -3,7 +3,9 @@
 Scripts are grouped by their operational purpose:
 
 - `ci/` runs the local format, Rust, probe and example checks used by the
-  development workflow.
+  development workflow. `scripts/ci/conformance.py` validates the public
+  capability matrix and selects the existing probes by `core`, `editor`,
+  `hardware`, `release` or `benchmark` suite.
 - `install/` contains experimental scripts that install an already-built
   binary into a caller-selected directory. They do not download releases or
   establish platform support.
@@ -18,6 +20,10 @@ That gate includes formatting, all-target Rust tests, Clippy with warnings as
 errors, release checks, independent numeric probes, and the exact public
 project/bundle business-result probe. CI repeats the same classes of checks on
 Ubuntu, macOS and Windows.
+
+For a claim-to-evidence view, run `python scripts/ci/conformance.py --list`.
+Use `--validate` to check every implementation and documentation path, or
+`--run --suite core` to execute the portable public conformance proofs.
 
 The Rust test commands intentionally pass `--test-threads=1`. Tensor tests
 exercise a process-wide resident-buffer budget; serial scheduling keeps the
