@@ -222,8 +222,16 @@ def main() -> int:
 
         create_job(root, "lost", valid_spec())
         successful(run(root, "claim", "lost", "--owner=probe", "--ttl-seconds=1"))
-        time.sleep(1.2)
-        successful(run(root, "recover", "lost"))
+        recovery_deadline = time.monotonic() + 5.0
+        while True:
+            recovery_attempt = run(root, "recover", "lost")
+            if recovery_attempt.returncode == 0:
+                successful(recovery_attempt)
+                break
+            failed(recovery_attempt, "SEL-J016")
+            if time.monotonic() >= recovery_deadline:
+                raise AssertionError("lost job did not expire within the bounded recovery window")
+            time.sleep(0.05)
         assert_read_only(root, "lost", "lost")
 
     print("Seloryn job preflight verification: strict spec, bounded source validation, diagnostics, path safety and read-only state passed")

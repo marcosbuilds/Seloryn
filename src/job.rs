@@ -2160,7 +2160,9 @@ fn reject_symlink(path: &Path) -> Result<(), JobError> {
 
 fn is_existing_directory_error(error: &io::Error) -> bool {
     error.kind() == io::ErrorKind::AlreadyExists
-        || matches!(error.raw_os_error(), Some(145) | Some(183))
+        // Linux reports a non-empty directory target as ENOTEMPTY when the
+        // atomic publish races with or reuses an existing job directory.
+        || matches!(error.raw_os_error(), Some(39) | Some(145) | Some(183))
 }
 
 fn generated_job_id() -> String {
