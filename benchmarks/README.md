@@ -39,7 +39,8 @@ marking the remaining cases `not-run`. A missing executable is reported as
 - BENCH-02 requires the typed numeric transformation to agree within `1e-6`.
 - BENCH-03 requires exact shape and F32 values within `2e-4`.
 - BENCH-04 requires loss reduction, checkpoint-reload agreement and model
-  metrics within `2e-3`.
+  metrics within `2e-3`; its independent reference rounds every primitive to
+  IEEE-754 binary32 to match the candidate's `Tensor[F32]` contract.
 - BENCH-05 requires loss reduction, held-out metrics and the declared greedy
   generation to agree with the stdlib oracle.
 - BENCH-06 requires a nonzero exit, empty stdout and stable `SEL-R210` domain

@@ -439,14 +439,14 @@ def comparison(candidate: dict[str, Any], reference: dict[str, Any]) -> dict[str
     }
 
 
-def case_limitations(case_id: str) -> list[str]:
+def case_limitations(case_id: str, *, status: str | None = None) -> list[str]:
     common = [
         "The timing is wall-clock process time and is not a claim about general Seloryn performance.",
         "The Python reference is an independent correctness oracle, not a competing production runtime.",
     ]
     if case_id in {"BENCH-04", "BENCH-05"}:
         common.append("The model workload is intentionally tiny and CPU-only; it does not represent framework-scale training or transformer serving.")
-    if case_id == "BENCH-04":
+    if case_id == "BENCH-04" and status == "failed":
         common.append("The current run records a failed independent numerical-equivalence check for the MLP metrics; this remains an evidence gap, not a pass or a general performance claim.")
     if case_id == "BENCH-06":
         common.append("Failure timing is diagnostic evidence; lower error latency is not a quality score.")
@@ -501,7 +501,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     for spec in manifest["cases"]:
         case_id = spec["id"]
         if case_id not in selected:
-            cases.append({"id": case_id, "name": spec["name"], "status": "not-run", "correctness": {"status": "not-run"}, "limitations": case_limitations(case_id)})
+            cases.append({"id": case_id, "name": spec["name"], "status": "not-run", "correctness": {"status": "not-run"}, "limitations": case_limitations(case_id, status="not-run")})
             continue
         reference_path = ROOT / spec["reference"]
         try:
@@ -527,7 +527,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "reference": reference_result,
                 "correctness": correctness,
                 "comparison": comparison(candidate_result, reference_result),
-                "limitations": case_limitations(case_id),
+                "limitations": case_limitations(case_id, status=status),
             })
         except BlockedCase as error:
             cases.append({
@@ -539,7 +539,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "status": "blocked",
                 "blocked_reason": str(error),
                 "correctness": {"status": "blocked", "contract": spec["correctness"]},
-                "limitations": case_limitations(case_id),
+                "limitations": case_limitations(case_id, status="blocked"),
             })
         except (OSError, RuntimeError, TypeError, ValueError, json.JSONDecodeError) as error:
             cases.append({
@@ -551,7 +551,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "status": "failed",
                 "error": repr(error),
                 "correctness": {"status": "failed", "contract": spec["correctness"]},
-                "limitations": case_limitations(case_id),
+                "limitations": case_limitations(case_id, status="failed"),
             })
     summary = {
         "passed": sum(1 for case in cases if case["status"] == "passed"),
