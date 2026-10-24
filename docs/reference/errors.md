@@ -48,6 +48,7 @@ Job reservation errors are intentionally explicit about the current boundary:
 | `SEL-J018` | public transition attempted to write an executor-owned state |
 | `SEL-J019` | persisted lease or attempt identity is inconsistent |
 | `SEL-J020` | TTL is outside the bounded local range |
+| `SEL-J021` | job preflight spec, source, path, hash, parser or semantic validation failed |
 
 These errors do not imply that Seloryn has started a worker, proven process
 liveness or fenced a stale process.

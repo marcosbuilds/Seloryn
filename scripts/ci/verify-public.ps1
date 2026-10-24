@@ -62,6 +62,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Job concurrency verification failed' }
     & python tests/job_lease_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Job lease verification failed' }
+    & python tests/job_preflight_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Job preflight verification failed' }
     & python tests/self_hosted_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Seloryn-authored training verification failed' }
     & python tests/self_hosted_language_model_probe.py

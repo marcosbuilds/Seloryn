@@ -94,10 +94,13 @@ promise that every design proposal already exists.
   specs receive safe IDs, canonical hashes and an `accepted` state; state is
   checked against an append-only event log; public transitions cannot forge
   executor-owned states; and a bounded local reservation lease supports
-  claim/heartbeat/release plus expiry-only recovery. Atomic writes,
-  event-authoritative repair, 100-way claim races and lease expiry are covered
-  by black-box probes. This does not execute a job, prove process liveness,
-  fence a worker or retry a lost job.
+  claim/heartbeat/release plus expiry-only recovery. A read-only
+  `seloryn-run.v1` preflight now binds the canonical spec digest to a bounded,
+  root-confined `.sely` source and checks parser/semantic validity without
+  mutating state. Atomic writes, event-authoritative repair, 100-way claim
+  races, lease expiry and preflight rejection cases are covered by black-box
+  probes. This does not execute a job, prove process liveness, fence a worker
+  or retry a lost job.
 
 ## Next gates
 
@@ -145,9 +148,10 @@ promise that every design proposal already exists.
    proof is real on a declared physical adapter. The next gate is a reusable
    device-resident Tensor/F32 abstraction, then GPU autodiff and MLP training;
    no fallback or distributed claim is implied.
-8. **Job coordination continuation — reservation lease slice completed:**
-   `seloryn job` now provides a durable local spec/state/event boundary and a
-   bounded reservation lease. The next gate must add a single-process worker
+8. **Job coordination continuation — reservation and preflight slices
+   completed:** `seloryn job` now provides a durable local spec/state/event
+   boundary, a bounded reservation lease and read-only validation for an
+   isolated `seloryn-run.v1` source. The next gate must add a single-process worker
    only after defining process identity, fencing, preflight/failure receipts,
    process-group cancellation, artifact commit markers and idempotent recovery.
    It must prove that an expired lease cannot abandon a live worker before any

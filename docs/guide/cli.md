@@ -23,6 +23,7 @@ seloryn job claim <job-id> [--owner=<owner>] [--lease-id=<id>] [--ttl-seconds=<n
 seloryn job heartbeat <job-id> --lease-id=<id> [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]
 seloryn job release <job-id> --lease-id=<id> [--root=<directory>] [--format=human|json]
 seloryn job recover <job-id> [--root=<directory>] [--format=human|json]
+seloryn job preflight <job-id> [--root=<directory>] [--format=human|json]
 seloryn lsp --stdio
 ```
 
@@ -39,8 +40,21 @@ local writers; it is not a cryptographic credential, process-liveness proof or
 worker fencing token. Seloryn does not yet spawn or supervise a job, verify a
 live process, retry a lost job, commit artifacts or execute remotely. Jobs
 with `lost` are terminal in this contract; create a new job for a new
-execution attempt. Errors `SEL-J013` through `SEL-J020` identify invalid
+execution attempt. Errors `SEL-J013` through `SEL-J021` identify invalid
 operation/state, lease ownership, expiry, identity or TTL conditions.
+
+`preflight` is read-only and only accepts the strict `seloryn-run.v1` spec:
+`kind`, a root-relative `.sely` source, its raw-content SHA-256 and a bounded
+`timeout_ms`. It rejects extra fields, unsafe cross-platform path syntax,
+reparse points, hash mismatches, oversized or invalid UTF-8 sources, and parser
+or semantic diagnostics. A successful result means only that the isolated
+source is ready for a future worker; it does not claim that the job was
+claimed, spawned or executed. `SEL-J021` identifies a preflight contract
+failure. The preflight keeps the job lock, reads through an opened file handle
+and rechecks canonical containment after the read, but it is not a complete
+no-follow/handle-based filesystem security boundary against a hostile process
+that races path replacement. A future worker must add platform-specific handle
+identity and fencing before treating preflight as execution authorization.
 
 The preview version reports `0.12`, `package=0.12.0` and
 `build=local-development`; this is

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::ffi::OsStr;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
@@ -13,6 +13,7 @@ const JOB_SCHEMA: &str = "seloryn.job.v1";
 const EVENT_SCHEMA: &str = "seloryn.job-event.v1";
 const MAX_JOB_ID_BYTES: usize = 64;
 const MAX_SPEC_BYTES: usize = 4 * 1024 * 1024;
+const MAX_PREFLIGHT_SOURCE_BYTES: usize = 16 * 1024 * 1024;
 const MAX_JSON_DEPTH: usize = 64;
 const LOCK_WAIT_ATTEMPTS: usize = 500;
 const LOCK_WAIT_STEP: Duration = Duration::from_millis(10);
@@ -131,6 +132,7 @@ enum Operation {
     Heartbeat,
     Release,
     Recover,
+    Preflight,
 }
 
 impl Operation {
@@ -143,6 +145,7 @@ impl Operation {
             Self::Heartbeat => "heartbeat",
             Self::Release => "release",
             Self::Recover => "recover",
+            Self::Preflight => "preflight",
         }
     }
 }
@@ -286,6 +289,275 @@ pub(crate) fn status(root: &Path, job_id: &str) -> Result<JsonValue, JobError> {
     ensure_job_contained(root, &directory)?;
     let record = load_record(&directory)?;
     Ok(result_json(Operation::Status, &record, None, None))
+}
+
+pub(crate) fn preflight(root: &Path, job_id: &str) -> Result<JsonValue, JobError> {
+    validate_job_id(job_id)?;
+    let directory = job_directory(root, job_id);
+    ensure_store_contained(
+        root,
+        directory.parent().expect("job directory has a parent"),
+    )?;
+    ensure_job_contained(root, &directory)?;
+    let _lock = JobLock::acquire(&directory)?;
+    let record = load_record_unlocked_read_only_without_spec(&directory)?;
+    if !matches!(record.state.status, Status::Accepted | Status::Queued) {
+        return Err(preflight_error(
+            "job must be in accepted or queued state for preflight",
+        ));
+    }
+
+    let spec_path = directory.join("spec.json");
+    reject_symlink(&spec_path)?;
+    let spec_bytes = fs::read(&spec_path)
+        .map_err(|error| JobError::io("SEL-J010", "failed to read job spec", error))?;
+    let spec = parse_preflight_spec(&spec_bytes, &record.state.spec_sha256)?;
+    let resolved_source = resolve_preflight_source(root, &spec.source)?;
+    let mut source_file = File::open(&resolved_source.path)
+        .map_err(|error| JobError::io("SEL-J010", "failed to open job source", error))?;
+    let source_metadata = source_file
+        .metadata()
+        .map_err(|error| JobError::io("SEL-J010", "failed to inspect job source", error))?;
+    if metadata_is_reparse(&source_metadata) || !source_metadata.is_file() {
+        return Err(preflight_error("source is not a regular file"));
+    }
+    if source_metadata.len() > MAX_PREFLIGHT_SOURCE_BYTES as u64 {
+        return Err(preflight_error(format!(
+            "source exceeds the {MAX_PREFLIGHT_SOURCE_BYTES} byte limit"
+        )));
+    }
+    let mut source_bytes = Vec::new();
+    std::io::Read::by_ref(&mut source_file)
+        .take(MAX_PREFLIGHT_SOURCE_BYTES as u64 + 1)
+        .read_to_end(&mut source_bytes)
+        .map_err(|error| JobError::io("SEL-J010", "failed to read job source", error))?;
+    if source_bytes.len() > MAX_PREFLIGHT_SOURCE_BYTES {
+        return Err(preflight_error(format!(
+            "source exceeds the {MAX_PREFLIGHT_SOURCE_BYTES} byte limit"
+        )));
+    }
+    let canonical_after_read = fs::canonicalize(&resolved_source.path)
+        .map_err(|error| JobError::io("SEL-J010", "failed to re-resolve the source path", error))?;
+    if canonical_after_read != resolved_source.canonical
+        || !canonical_after_read.starts_with(&resolved_source.canonical_root)
+    {
+        return Err(preflight_error(
+            "source path changed or resolves outside the selected root",
+        ));
+    }
+    let source = String::from_utf8(source_bytes.clone())
+        .map_err(|_| preflight_error("source must be valid UTF-8"))?;
+    let source_sha256 = crate::sha256_hex(&source_bytes);
+    if source_sha256 != spec.source_sha256 {
+        return Err(preflight_error(
+            "source_sha256 does not match source content",
+        ));
+    }
+    let parsed = crate::parser::parse(&source);
+    if let Some(diagnostic) = parsed.diagnostics.first() {
+        return Err(source_diagnostic_error(diagnostic));
+    }
+    let program = parsed
+        .program
+        .ok_or_else(|| preflight_error("source parser produced no program"))?;
+    if let Some(diagnostic) = crate::semantic::check(&program).first() {
+        return Err(source_diagnostic_error(diagnostic));
+    }
+
+    Ok(JsonValue::Object(BTreeMap::from([
+        (
+            "attempt".to_owned(),
+            JsonValue::Number(record.state.attempt.to_string()),
+        ),
+        ("job_id".to_owned(), JsonValue::String(record.state.job_id)),
+        (
+            "operation".to_owned(),
+            JsonValue::String(Operation::Preflight.as_str().to_owned()),
+        ),
+        (
+            "schema".to_owned(),
+            JsonValue::String(JOB_SCHEMA.to_owned()),
+        ),
+        ("source".to_owned(), JsonValue::String(spec.source)),
+        (
+            "source_bytes".to_owned(),
+            JsonValue::Number(source_bytes.len().to_string()),
+        ),
+        (
+            "source_sha256".to_owned(),
+            JsonValue::String(spec.source_sha256),
+        ),
+        (
+            "spec_sha256".to_owned(),
+            JsonValue::String(record.state.spec_sha256),
+        ),
+        ("status".to_owned(), JsonValue::String("ready".to_owned())),
+        (
+            "timeout_ms".to_owned(),
+            JsonValue::Number(spec.timeout_ms.to_string()),
+        ),
+    ])))
+}
+
+struct PreflightSpec {
+    source: String,
+    source_sha256: String,
+    timeout_ms: u64,
+}
+
+fn parse_preflight_spec(
+    bytes: &[u8],
+    expected_spec_sha256: &str,
+) -> Result<PreflightSpec, JobError> {
+    if bytes.len() > MAX_SPEC_BYTES {
+        return Err(preflight_error(format!(
+            "job spec exceeds the {MAX_SPEC_BYTES} byte limit"
+        )));
+    }
+    let source = String::from_utf8(bytes.to_vec())
+        .map_err(|_| preflight_error("job spec must be valid UTF-8 JSON"))?;
+    let value = json::parse(&source, MAX_SPEC_BYTES, MAX_JSON_DEPTH)
+        .map_err(|error| preflight_error(format!("invalid job spec: {}", error.message)))?;
+    let canonical_spec = format!("{}\n", json::encode(&value));
+    let actual_spec_sha256 = crate::sha256_hex(canonical_spec.as_bytes());
+    if actual_spec_sha256 != expected_spec_sha256 {
+        return Err(preflight_error(
+            "job spec digest does not match the record spec_sha256",
+        ));
+    }
+    let object = object(value, "job spec").map_err(|error| preflight_error(error.message))?;
+    let expected = ["kind", "source", "source_sha256", "timeout_ms"];
+    if object.len() != expected.len() || expected.iter().any(|key| !object.contains_key(*key)) {
+        return Err(preflight_error(
+            "job spec must contain exactly kind, source, source_sha256 and timeout_ms",
+        ));
+    }
+    let kind =
+        object_string_from(&object, "kind").map_err(|error| preflight_error(error.message))?;
+    if kind != "seloryn-run.v1" {
+        return Err(preflight_error("job spec kind must be seloryn-run.v1"));
+    }
+    let source = object_string_from(&object, "source")
+        .map_err(|error| preflight_error(error.message))?
+        .to_owned();
+    let source_sha256 = object_string_from(&object, "source_sha256")
+        .map_err(|error| preflight_error(error.message))?
+        .to_owned();
+    if source_sha256.len() != 64
+        || !source_sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    {
+        return Err(preflight_error(
+            "source_sha256 must be 64 lowercase hexadecimal characters",
+        ));
+    }
+    let timeout_ms =
+        object_u64(&object, "timeout_ms").map_err(|error| preflight_error(error.message))?;
+    if !(1..=3_600_000).contains(&timeout_ms) {
+        return Err(preflight_error("timeout_ms must be between 1 and 3600000"));
+    }
+    Ok(PreflightSpec {
+        source,
+        source_sha256,
+        timeout_ms,
+    })
+}
+
+struct ResolvedSource {
+    path: PathBuf,
+    canonical: PathBuf,
+    canonical_root: PathBuf,
+}
+
+fn resolve_preflight_source(root: &Path, source: &str) -> Result<ResolvedSource, JobError> {
+    if source.is_empty()
+        || source.len() > 1024
+        || !source.ends_with(".sely")
+        || source.starts_with('/')
+        || source.contains('\\')
+        || source.as_bytes().get(1).is_some_and(|byte| *byte == b':')
+        || source.chars().any(char::is_control)
+        || source
+            .chars()
+            .any(|character| matches!(character, ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+    {
+        return Err(preflight_error(
+            "source must be a relative UTF-8 .sely path within 1024 bytes without forbidden syntax",
+        ));
+    }
+    let components = source.split('/').collect::<Vec<_>>();
+    if components.iter().any(|component| {
+        component.is_empty()
+            || component.len() > 255
+            || matches!(*component, "." | "..")
+            || component.ends_with('.')
+            || component.ends_with(' ')
+            || is_windows_reserved_component(component)
+    }) {
+        return Err(preflight_error("source path contains an invalid component"));
+    }
+
+    let root_metadata = fs::symlink_metadata(root)
+        .map_err(|error| JobError::io("SEL-J010", "failed to inspect the job root", error))?;
+    if metadata_is_reparse(&root_metadata) || !root_metadata.is_dir() {
+        return Err(preflight_error("job root must be a real directory"));
+    }
+    let canonical_root = fs::canonicalize(root)
+        .map_err(|error| JobError::io("SEL-J010", "failed to resolve the job root", error))?;
+    let mut path = root.to_path_buf();
+    for (index, component) in components.iter().enumerate() {
+        path.push(component);
+        let metadata = fs::symlink_metadata(&path).map_err(|error| {
+            if error.kind() == io::ErrorKind::NotFound {
+                preflight_error("source file or directory component does not exist")
+            } else {
+                JobError::io("SEL-J010", "failed to inspect the source path", error)
+            }
+        })?;
+        if metadata_is_reparse(&metadata) {
+            return Err(preflight_error(
+                "source path contains a symlink, junction or reparse point",
+            ));
+        }
+        if index + 1 < components.len() && !metadata.is_dir() {
+            return Err(preflight_error("source path component is not a directory"));
+        }
+        if index + 1 == components.len() && !metadata.is_file() {
+            return Err(preflight_error("source is not a regular file"));
+        }
+    }
+    let canonical_source = fs::canonicalize(&path)
+        .map_err(|error| JobError::io("SEL-J010", "failed to resolve the source path", error))?;
+    if !canonical_source.starts_with(&canonical_root) {
+        return Err(preflight_error("source resolves outside the selected root"));
+    }
+    Ok(ResolvedSource {
+        path,
+        canonical: canonical_source,
+        canonical_root,
+    })
+}
+
+fn is_windows_reserved_component(component: &str) -> bool {
+    let base = component.split('.').next().unwrap_or_default();
+    let upper = base.to_ascii_uppercase();
+    matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        || (upper.len() == 4
+            && (upper.starts_with("COM") || upper.starts_with("LPT"))
+            && upper.as_bytes()[3].is_ascii_digit()
+            && upper.as_bytes()[3] != b'0')
+}
+
+fn preflight_error(message: impl Into<String>) -> JobError {
+    JobError::new("SEL-J021", message)
+}
+
+fn source_diagnostic_error(diagnostic: &crate::diagnostic::Diagnostic) -> JobError {
+    preflight_error(format!(
+        "source diagnostic {}: {}",
+        diagnostic.code, diagnostic.message
+    ))
 }
 
 pub(crate) fn list(root: &Path) -> Result<JsonValue, JobError> {
@@ -1179,6 +1451,28 @@ fn load_record(directory: &Path) -> Result<Record, JobError> {
 }
 
 fn load_record_unlocked(directory: &Path) -> Result<Record, JobError> {
+    let record = load_record_unlocked_read_only(directory)?;
+    let state_path = directory.join("state.json");
+    let state_source = read_required(&state_path, "job state")?;
+    let stored = parse_state(&state_source)?;
+    if record.state != stored {
+        atomic_write(&state_path, state_json(&record.state).as_bytes())?;
+    }
+    Ok(record)
+}
+
+fn load_record_unlocked_read_only(directory: &Path) -> Result<Record, JobError> {
+    load_record_unlocked_read_only_with_spec(directory, true)
+}
+
+fn load_record_unlocked_read_only_without_spec(directory: &Path) -> Result<Record, JobError> {
+    load_record_unlocked_read_only_with_spec(directory, false)
+}
+
+fn load_record_unlocked_read_only_with_spec(
+    directory: &Path,
+    verify_spec_hash: bool,
+) -> Result<Record, JobError> {
     reject_symlink(directory)?;
     let state_path = directory.join("state.json");
     reject_symlink(&state_path)?;
@@ -1191,23 +1485,25 @@ fn load_record_unlocked(directory: &Path) -> Result<Record, JobError> {
             "job directory name does not match state.json job_id",
         ));
     }
-    let spec_path = directory.join("spec.json");
-    reject_symlink(&spec_path)?;
-    let spec_source = read_required(&spec_path, "job spec")?;
-    let spec_value =
-        json::parse(&spec_source, MAX_SPEC_BYTES, MAX_JSON_DEPTH).map_err(|error| {
-            JobError::new(
+    if verify_spec_hash {
+        let spec_path = directory.join("spec.json");
+        reject_symlink(&spec_path)?;
+        let spec_source = read_required(&spec_path, "job spec")?;
+        let spec_value =
+            json::parse(&spec_source, MAX_SPEC_BYTES, MAX_JSON_DEPTH).map_err(|error| {
+                JobError::new(
+                    "SEL-J007",
+                    format!("job spec is invalid: {}", error.message),
+                )
+            })?;
+        let expected_spec_sha256 =
+            crate::sha256_hex(format!("{}\n", json::encode(&spec_value)).as_bytes());
+        if expected_spec_sha256 != state.spec_sha256 {
+            return Err(JobError::new(
                 "SEL-J007",
-                format!("job spec is invalid: {}", error.message),
-            )
-        })?;
-    let expected_spec_sha256 =
-        crate::sha256_hex(format!("{}\n", json::encode(&spec_value)).as_bytes());
-    if expected_spec_sha256 != state.spec_sha256 {
-        return Err(JobError::new(
-            "SEL-J007",
-            "job spec hash does not match state.json",
-        ));
+                "job spec hash does not match state.json",
+            ));
+        }
     }
     let events_path = directory.join("events.jsonl");
     reject_symlink(&events_path)?;
@@ -1217,9 +1513,6 @@ fn load_record_unlocked(directory: &Path) -> Result<Record, JobError> {
         return Err(JobError::new("SEL-J007", "job event log is empty"));
     }
     let derived = derive_state(&events, &state)?;
-    if derived != state {
-        atomic_write(&state_path, state_json(&derived).as_bytes())?;
-    }
     Ok(Record { state: derived })
 }
 
@@ -1834,9 +2127,26 @@ fn ensure_job_contained(root: &Path, directory: &Path) -> Result<(), JobError> {
     Ok(())
 }
 
+fn metadata_is_reparse(metadata: &fs::Metadata) -> bool {
+    if metadata.file_type().is_symlink() {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_REPARSE_POINT;
+
+        metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+    }
+    #[cfg(not(windows))]
+    {
+        false
+    }
+}
+
 fn reject_symlink(path: &Path) -> Result<(), JobError> {
     match fs::symlink_metadata(path) {
-        Ok(metadata) if metadata.file_type().is_symlink() => Err(JobError::new(
+        Ok(metadata) if metadata_is_reparse(&metadata) => Err(JobError::new(
             "SEL-J012",
             "job store contains a symlink or reparse point",
         )),
