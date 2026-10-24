@@ -55,7 +55,7 @@ def main() -> int:
                 "claim",
                 "lease",
                 f"--owner=worker-{index}",
-                "--ttl-seconds=5",
+                "--ttl-seconds=30",
             )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
@@ -85,7 +85,7 @@ def main() -> int:
                 "lease",
                 f"--lease-id={lease_id}",
                 f"--owner={claimed['owner']}",
-                "--ttl-seconds=5",
+                "--ttl-seconds=30",
             )
         )
         assert retried["idempotent"] is True, retried
@@ -109,7 +109,7 @@ def main() -> int:
                 "heartbeat",
                 "lease",
                 f"--lease-id={lease_id}",
-                "--ttl-seconds=5",
+                "--ttl-seconds=30",
             )
         )
         assert renewed["status"] == "starting", renewed
@@ -129,7 +129,7 @@ def main() -> int:
         assert "owner" not in released, released
 
         reclaimed = ok(
-            run(root, "claim", "lease", "--owner=worker-reclaim", "--ttl-seconds=5")
+            run(root, "claim", "lease", "--owner=worker-reclaim", "--ttl-seconds=1")
         )
         assert reclaimed["status"] == "starting", reclaimed
         assert reclaimed["attempt"] == 2, reclaimed
@@ -141,8 +141,16 @@ def main() -> int:
         before_expiry = ok(run(root, "status", "lease"))
         assert before_expiry["status"] == "starting", before_expiry
 
-        time.sleep(5.25)
-        recovered = ok(run(root, "recover", "lease"))
+        recovery_deadline = time.monotonic() + 5.0
+        while True:
+            recovery_attempt = run(root, "recover", "lease")
+            if recovery_attempt.returncode == 0:
+                recovered = ok(recovery_attempt)
+                break
+            error(recovery_attempt, "SEL-J016")
+            if time.monotonic() >= recovery_deadline:
+                raise AssertionError("lease did not expire within the bounded recovery window")
+            time.sleep(0.05)
         assert recovered["status"] == "lost", recovered
         assert "lease_id" not in recovered, recovered
         assert recovered["owner"] == "worker-reclaim", recovered

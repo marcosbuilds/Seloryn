@@ -261,6 +261,19 @@ def relative_files(root: Path) -> list[str]:
     return sorted(found)
 
 
+def is_checkpoint_temporary(path: str) -> bool:
+    """Recognize only the crash residue produced by atomic checkpoint writes."""
+
+    parts = path.split("/")
+    if len(parts) != 2 or parts[0] != "checkpoints":
+        return False
+    prefix = ".model.json.tmp-"
+    if not parts[1].startswith(prefix):
+        return False
+    suffix = parts[1][len(prefix) :].split("-")
+    return len(suffix) == 2 and all(part.isdigit() for part in suffix)
+
+
 def stable_receipt(events: list[dict[str, object]]) -> list[dict[str, object]]:
     """Drop only per-attempt and hash-chain fields before cross-process comparison."""
 
@@ -367,11 +380,18 @@ def run_termination_case(workspace: Path) -> dict[str, object]:
         raise AssertionError("terminated process emitted run.end; termination was not bounded")
     if stdout:
         raise AssertionError("terminated process emitted a successful JSON result")
-    temporary_files = [
+    termination_files = relative_files(workspace)
+    temporary_files = [name for name in termination_files if is_checkpoint_temporary(name)]
+    unexpected_files = [
         name
-        for name in relative_files(workspace)
-        if ".tmp-" in name or name.endswith(".tmp")
+        for name in termination_files
+        if name not in allowed_termination_files(temporary_files)
     ]
+    if unexpected_files:
+        raise AssertionError(
+            "terminated process created an unexpected workspace entry: "
+            f"{unexpected_files}"
+        )
     return {
         "status": "terminated",
         "returncode": returncode,
@@ -381,6 +401,19 @@ def run_termination_case(workspace: Path) -> dict[str, object]:
         "stdout_empty": True,
         "temporary_files_after_termination": temporary_files,
         "graceful_cancellation_proven": False,
+    }
+
+
+def allowed_termination_files(temporary_files: list[str]) -> set[str]:
+    return {
+        "seloryn.toml",
+        "src/main.sely",
+        "data/train.json",
+        "data/test.json",
+        "checkpoints/model.json",
+        "probe.stdout",
+        "probe.receipt.ndjson",
+        *temporary_files,
     }
 
 
@@ -449,10 +482,18 @@ def main() -> int:
             raise AssertionError(
                 f"termination process created entries outside its workspace: {sorted(actual_root_entries)}"
             )
-        all_workspaces_confined = all(
+        termination_files = set(relative_files(termination_workspace))
+        temporary_files = [
+            name for name in termination_files if is_checkpoint_temporary(name)
+        ]
+        normal_workspaces_confined = all(
             set(relative_files(workspace)).issubset(allowed)
-            for workspace in (*normal_workspaces, termination_workspace)
+            for workspace in normal_workspaces
         )
+        termination_workspace_confined = termination_files.issubset(
+            allowed_termination_files(temporary_files)
+        ) and all(is_checkpoint_temporary(name) for name in temporary_files)
+        all_workspaces_confined = normal_workspaces_confined and termination_workspace_confined
         if not all_workspaces_confined:
             raise AssertionError("a probe process created an out-of-contract workspace entry")
 

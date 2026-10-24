@@ -846,7 +846,7 @@ pub(crate) fn claim(
     let now = unix_seconds();
     let attempt_id = generated_attempt_id(&owner);
     let lease_id = generated_lease_id(&owner, &attempt_id);
-    let lease_expires_at = now.saturating_add(ttl_seconds);
+    let lease_expires_at = lease_deadline(ttl_seconds);
     let event = Event {
         sequence: record.state.sequence.saturating_add(1),
         job_id: job_id.to_owned(),
@@ -910,9 +910,7 @@ pub(crate) fn heartbeat(
         .state
         .lease_expires_at
         .ok_or_else(|| JobError::new("SEL-J019", "starting job has no lease expiry"))?;
-    let lease_expires_at = now
-        .saturating_add(ttl_seconds)
-        .max(current_expiry.saturating_add(1));
+    let lease_expires_at = lease_deadline(ttl_seconds).max(current_expiry.saturating_add(1));
     let event = Event {
         sequence: record.state.sequence.saturating_add(1),
         job_id: job_id.to_owned(),
@@ -2211,6 +2209,20 @@ fn unix_seconds() -> u64 {
         .unwrap_or_default()
 }
 
+fn lease_deadline(ttl_seconds: u64) -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| lease_deadline_from_duration(duration, ttl_seconds))
+        .unwrap_or(ttl_seconds)
+}
+
+fn lease_deadline_from_duration(duration: Duration, ttl_seconds: u64) -> u64 {
+    duration
+        .as_secs()
+        .saturating_add(u64::from(duration.subsec_nanos() != 0))
+        .saturating_add(ttl_seconds)
+}
+
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), JobError> {
     let parent = path
         .parent()
@@ -2291,5 +2303,17 @@ fn replace_file(temporary: &Path, destination: &Path) -> io::Result<()> {
 fn sync_directory(path: &Path) {
     if let Ok(directory) = File::open(path) {
         let _ = directory.sync_all();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lease_deadline_from_duration;
+    use std::time::Duration;
+
+    #[test]
+    fn lease_deadline_rounds_fractional_second_up_before_adding_ttl() {
+        assert_eq!(lease_deadline_from_duration(Duration::new(12, 0), 1), 13);
+        assert_eq!(lease_deadline_from_duration(Duration::new(12, 1), 1), 14);
     }
 }

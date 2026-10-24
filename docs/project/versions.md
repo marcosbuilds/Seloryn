@@ -26,8 +26,9 @@ its own evidenced gain. For example, language `0.08` authorizes the `0.8.x`
 runtime and extension line. A package cannot jump ahead of the language line,
 and a package update cannot be justified by a commit count, documentation-only
 edit or an unproven feature. Runtime patch releases remain blocked until a
-runtime-specific gain ledger is added; the current runtime line is at patch `3`
-because `R1`, `R2` and `R3` each carry their own evidence.
+runtime-specific gain ledger is added; the historical `0.9.x` line reached patch
+`4` because `R1`, `R2`, `R3` and `R4` each carry their own evidence. The
+current runtime package line is `0.12.0`.
 
 `VERSION.toml` is the source of truth for the current/previous comparison and
 the append-only `extension_gains` ledger. Every extension gain records the
@@ -40,8 +41,11 @@ same language line.
 
 Historical tags remain immutable. Runtime tags use `seloryn-vM.mm`; extension
 tags use `vscode-vM.m.P`. Those namespaces are retained for artifact tooling,
-but both tags must resolve to the same language compatibility line. Do not
-delete or retag the existing `0.01`–`0.07` history to make it look uniform.
+but both tags must resolve to the same language compatibility line. The
+currently present runtime tags cover `seloryn-v0.05` through `seloryn-v0.07`,
+while the existing extension tags cover `vscode-v0.1.0` through
+`vscode-v0.4.0`; do not create, delete or retag references to make the history
+look more uniform.
 
 Before publication, `scripts/release/prepare-release.py` creates a single
 staging directory containing the runtime archive, the VSIX, `release-manifest.json`

@@ -40,8 +40,8 @@ Legend: **✓ implemented** means the checker/interpreter has source and tests; 
 | Core IR | **⚠️ Experimental implemented:** deterministic lowered execution representation | Type checking remains a preceding gate; optimization and SSA passes are future work |
 | Execution | **⚠️ Experimental E4/N1/N2:** IR interpreter plus CPU tensor builtins | No broad effects or accelerators |
 | Tensor engine | **⚠️ Experimental N1/N2:** owned F32/I64 CPU buffers, checked shapes, broadcasting, reductions, rank-2 matmul, shape/stride transpose views, F32 unary/stable reductions and broadcast sum-to-shape with bounded resident memory | No symbolic shapes or device movement; bounded autodiff is a separate CPU tape |
-| Device interface | **⚠️ Probe only:** adapter enumeration and one physical non-fallback WGSL compute/readback path | No device-resident tensors, autodiff parity or GPU training |
-| System library | **⚠️ Narrow:** local project modules and bounded JSON reads | HTTP, subprocesses and unrestricted files require later gates |
+| Device interface | **⚠️ Narrow preview:** adapter enumeration, one physical non-fallback WGSL compute/readback path and the closed scalar F32 `train_linear_gpu` profile | No device-resident tensors, autodiff parity, GPU MLP or general GPU training |
+| System library | **⚠️ Narrow:** local project modules and manifest-granted bounded JSON reads/writes | HTTP, subprocesses and unrestricted files require later gates |
 | Product tools | **⚠️ Partial:** development CLI, experimental build/exec, bounded parser-backed `lsp --stdio`, VS Code extension LSP client/release workflow and local installer scripts | Indexed analysis, formatter and supported runtime distribution are future |
 
 ### Capability sequencing

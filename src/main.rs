@@ -50,7 +50,10 @@ mod cancellation {
     const SIG_ERR: usize = usize::MAX;
 
     unsafe extern "C" {
-        fn signal(signal: i32, handler: usize) -> usize;
+        // POSIX accepts a function pointer for the handler and returns a
+        // pointer-sized status value; keep the input typed instead of casting
+        // a Rust function item to an integer at each call site.
+        fn signal(signal: i32, handler: Option<unsafe extern "C" fn(i32)>) -> usize;
     }
 
     unsafe extern "C" fn handler(_: i32) {
@@ -60,8 +63,8 @@ mod cancellation {
     pub fn install() -> io::Result<()> {
         let (int_result, term_result) = unsafe {
             (
-                signal(SIGINT, handler as usize),
-                signal(SIGTERM, handler as usize),
+                signal(SIGINT, Some(handler)),
+                signal(SIGTERM, Some(handler)),
             )
         };
         if int_result == SIG_ERR || term_result == SIG_ERR {

@@ -65,7 +65,7 @@ instead of gaining features by default.
 | Physical hardware inventory, non-fallback GPU compute/readback probe and explicit GPU linear training | Verified preview on the declared host; capability-aware elsewhere | [`src/gpu.rs`](src/gpu.rs), [`tests/gpu_probe.py`](tests/gpu_probe.py), [`tests/gpu_training_probe.py`](tests/gpu_training_probe.py); the GPU trainer is scalar F32 linear only, device-resident parameters, one final readback, no silent CPU fallback |
 | `build`/`exec` `.selyapp` bundle path | Experimental | Deterministic bundle and clean terminal fixtures; not an installer |
 | Transformer/LLM-scale training, HTTP serving, general GPU tensor/MLP training, packages and distributed execution | Not implemented or verified | The language-model project is a bounded CPU bigram proof, and `train_linear_gpu` is a closed scalar profile, not a general backend |
-| Local installer scripts | Development-only; Windows x64 lifecycle verified here | No public download, signing or cross-OS binary support |
+| Local installer scripts | Development-only; Windows x64 lifecycle verified here | No public download, signing or verified multiplatform installer lifecycle |
 
 | AI development | AI integration | AI serving | Evidence |
 |:--|:--|:--|:--|

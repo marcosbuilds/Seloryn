@@ -90,9 +90,19 @@ jobs:
         run: python tests/auditable_local_inference_probe.py
       - name: Reproducible source-owned performance benchmark
         shell: pwsh
-        run: python tests/performance_probe.py --baseline $env:SELORYN_BASELINE_BINARY --runs 5 --require-reduction
+        # Shared runners are suitable for collecting comparable evidence, but
+        # not for a hard five-sample performance gate. Functional correctness
+        # remains blocking; performance promotion requires a controlled review.
+        run: python tests/performance_probe.py --baseline $env:SELORYN_BASELINE_BINARY --runs 5
       - name: Operational reliability and workspace confinement proof
         run: python tests/operational_reliability_probe.py
+      - name: Local job lifecycle contract proofs
+        run: |
+          python tests/job_lifecycle_probe.py
+          python tests/job_lease_probe.py
+          python tests/job_recovery_probe.py
+          python tests/job_concurrency_probe.py
+          python tests/job_preflight_probe.py
       - name: Python/Seloryn language-model comparison
         run: python tests/compare_language_model.py
       - name: GPU compute probe when an adapter exists
