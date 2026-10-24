@@ -504,7 +504,7 @@
     {
       "id": "streaming-receipts",
       "area": "observability",
-      "claim": "Human/JSON/JSON2 streams with identity, hash chaining, replay, redaction and optional keyed authentication.",
+      "claim": "Human/JSON/JSON2 streams with identity, bounded source/manifest/static preflight error receipts, hash chaining, replay, redaction and optional keyed authentication.",
       "status": "verified-preview",
       "implementation": ["src/main.rs", "src/runtime.rs", "scripts/streaming/verify-event-chain.py", "scripts/streaming/replay-receipt.py"],
       "positive_probes": ["streaming-v2", "auditable-local-inference"],
@@ -512,7 +512,7 @@
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary"],
       "documentation": ["docs/project/status.md", "docs/compute/training.md", "docs/benchmarks/auditable-local-inference.md"],
-      "limits": ["This is not a public-key signature, async backpressure protocol or universal telemetry system."]
+      "limits": ["Preflight receipts cover source loading, manifest loading and static checking; this is not a public-key signature, async backpressure protocol or universal telemetry system."]
     },
     {
       "id": "json-array-ingestion",

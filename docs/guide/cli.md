@@ -216,7 +216,10 @@ This contract applies only to the bounded fixture, not to general telemetry.
 `--log=json2` begins with `run.start`, emits the v1 training events as chained
 records and closes with `run.end`. The start identity covers program, manifest,
 datasets and the checkpoint before training; the end identity covers the result
-and checkpoint after training. Structured path fields are redacted. The helper
+and checkpoint after training. Structured path fields are redacted. Source,
+manifest and static-check failures emit `run.start`, `preflight.error` and
+`run.end(status=error)`; the error event includes only its stable code and a
+message fingerprint. The helper
 [`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py)
 re-executes successful bounded native or source-owned training receipts in an isolated copy. The external verifier at
 [`scripts/streaming/verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py)
@@ -226,9 +229,9 @@ with a shared HMAC key, but is not a public-key signature. Source-owned training
 replay is accepted only when the receipt contains its explicit dataset hashes,
 recorded `{"mode":"train"}` request and checkpoint completion event. The stream does not
 replay arbitrary executions or imply GPU,
-distributed, serving or general runtime telemetry support. Preflight failures
-before `run.start` remain normal CLI diagnostics and do not claim to have a
-JSON2 receipt.
+distributed, serving or general runtime telemetry support. Later
+dataset/checkpoint failures remain bounded runtime errors and do not claim a
+general telemetry or replay contract.
 
 `inspect` is the compact, non-executing context path for tools and agents. It
 reuses the parser, project loader, semantic checker and the same

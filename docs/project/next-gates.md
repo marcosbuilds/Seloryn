@@ -142,8 +142,10 @@ promise that every design proposal already exists.
    successful isolated replay for native and source-owned CPU training, and
    cooperative cancellation with an explicit `SEL-CANCELLED` end event,
    semantic-event comparison, structured path redaction and keyed HMAC
-   authentication are now tested. Remaining gates are pre-run failure receipts,
-   initial checkpoint snapshots for resume replay, filesystem-wide output
+   authentication are now tested. Source, manifest and static-check failures
+   also emit a bounded `run.start` → `preflight.error` → `run.end` receipt;
+   dataset/checkpoint failures remain bounded runtime errors. Remaining gates
+   are initial checkpoint snapshots for resume replay, filesystem-wide output
    snapshots, public-key signatures, async backpressure and
    slow/disconnected consumer evidence.
 7. **GPU continuation — first slice completed:** the closed `train_linear_gpu`

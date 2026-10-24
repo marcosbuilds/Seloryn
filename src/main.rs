@@ -1076,6 +1076,80 @@ impl CliEventSink {
         self.result_sha256 = Some(value);
     }
 
+    fn ensure_run_started(
+        &mut self,
+        source_event: &str,
+        run_fingerprint: String,
+        mut identity: BTreeMap<String, json::JsonValue>,
+    ) {
+        if !is_receipt_log(self.format) || self.v2_run.is_some() {
+            return;
+        }
+        identity.insert(
+            "schema".to_owned(),
+            json::JsonValue::String("seloryn.run-identity.v1".to_owned()),
+        );
+        let plan = json::JsonValue::Object(BTreeMap::from([
+            (
+                "identity".to_owned(),
+                json::JsonValue::Object(identity.clone()),
+            ),
+            (
+                "source_event".to_owned(),
+                json::JsonValue::String(source_event.to_owned()),
+            ),
+            (
+                "run_fingerprint".to_owned(),
+                json::JsonValue::String(run_fingerprint.clone()),
+            ),
+        ]));
+        let plan_hash = v2_hash(&plan);
+        self.v2_run = Some(format!("r_{}", &plan_hash["sha256:".len()..]));
+        let data = BTreeMap::from([
+            (
+                "attempt_id".to_owned(),
+                json::JsonValue::String(self.attempt_id.clone()),
+            ),
+            ("identity".to_owned(), json::JsonValue::Object(identity)),
+            (
+                "language_version".to_owned(),
+                json::JsonValue::String(LANGUAGE_VERSION.to_owned()),
+            ),
+            (
+                "run_fingerprint".to_owned(),
+                json::JsonValue::String(run_fingerprint),
+            ),
+            (
+                "runtime_package".to_owned(),
+                json::JsonValue::String(PACKAGE_VERSION.to_owned()),
+            ),
+            (
+                "source_event".to_owned(),
+                json::JsonValue::String(source_event.to_owned()),
+            ),
+        ]);
+        self.write_v2_record("run.start", json::JsonValue::Object(data));
+    }
+
+    fn record_preflight_error(&mut self, code: &str, message: &str) {
+        if !is_receipt_log(self.format) {
+            return;
+        }
+        let data = BTreeMap::from([
+            (
+                "error_code".to_owned(),
+                json::JsonValue::String(code.to_owned()),
+            ),
+            (
+                "error_message_sha256".to_owned(),
+                json::JsonValue::String(sha256_hex(message.as_bytes())),
+            ),
+        ]);
+        let fingerprint = v2_hash(&json::JsonValue::Object(data.clone()));
+        self.ensure_run_started("preflight", fingerprint, BTreeMap::new());
+        self.write_v2_record("preflight.error", json::JsonValue::Object(data));
+    }
+
     fn emit_result(&self) -> Result<(), String> {
         self.failure
             .as_ref()
@@ -1220,76 +1294,32 @@ impl runtime::EventSink for CliEventSink {
                 object.remove("schema_version");
                 redact_v2_paths(&mut object);
                 let fingerprint = v2_hash(&json::JsonValue::Object(object.clone()));
-                if self.v2_run.is_none() {
-                    let mut data = BTreeMap::new();
-                    let mut identity = BTreeMap::new();
-                    if let Some(run_identity) = &self.identity {
+                let mut identity = BTreeMap::new();
+                if let Some(run_identity) = &self.identity {
+                    identity.insert(
+                        "program_sha256".to_owned(),
+                        json::JsonValue::String(run_identity.program_sha256.clone()),
+                    );
+                    if let Some(manifest_sha256) = &run_identity.manifest_sha256 {
                         identity.insert(
-                            "program_sha256".to_owned(),
-                            json::JsonValue::String(run_identity.program_sha256.clone()),
+                            "manifest_sha256".to_owned(),
+                            json::JsonValue::String(manifest_sha256.clone()),
                         );
-                        if let Some(manifest_sha256) = &run_identity.manifest_sha256 {
-                            identity.insert(
-                                "manifest_sha256".to_owned(),
-                                json::JsonValue::String(manifest_sha256.clone()),
-                            );
-                        }
                     }
+                }
+                for key in ["train_sha256", "test_sha256", "checkpoint_before_sha256"] {
+                    if let Some(value) = object.get(key) {
+                        identity.insert(key.to_owned(), value.clone());
+                    }
+                }
+                if let Some(json::JsonValue::Object(payload)) = object.get("payload") {
                     for key in ["train_sha256", "test_sha256", "checkpoint_before_sha256"] {
-                        if let Some(value) = object.get(key) {
+                        if let Some(value) = payload.get(key) {
                             identity.insert(key.to_owned(), value.clone());
                         }
                     }
-                    if let Some(json::JsonValue::Object(payload)) = object.get("payload") {
-                        for key in ["train_sha256", "test_sha256", "checkpoint_before_sha256"] {
-                            if let Some(value) = payload.get(key) {
-                                identity.insert(key.to_owned(), value.clone());
-                            }
-                        }
-                    }
-                    identity.insert(
-                        "schema".to_owned(),
-                        json::JsonValue::String("seloryn.run-identity.v1".to_owned()),
-                    );
-                    let plan = json::JsonValue::Object(BTreeMap::from([
-                        (
-                            "identity".to_owned(),
-                            json::JsonValue::Object(identity.clone()),
-                        ),
-                        (
-                            "source_event".to_owned(),
-                            json::JsonValue::String(kind.clone()),
-                        ),
-                        (
-                            "run_fingerprint".to_owned(),
-                            json::JsonValue::String(fingerprint.clone()),
-                        ),
-                    ]));
-                    let plan_hash = v2_hash(&plan);
-                    self.v2_run = Some(format!("r_{}", &plan_hash["sha256:".len()..]));
-                    data.insert(
-                        "language_version".to_owned(),
-                        json::JsonValue::String(LANGUAGE_VERSION.to_owned()),
-                    );
-                    data.insert(
-                        "runtime_package".to_owned(),
-                        json::JsonValue::String(PACKAGE_VERSION.to_owned()),
-                    );
-                    data.insert(
-                        "source_event".to_owned(),
-                        json::JsonValue::String(kind.clone()),
-                    );
-                    data.insert(
-                        "run_fingerprint".to_owned(),
-                        json::JsonValue::String(fingerprint),
-                    );
-                    data.insert(
-                        "attempt_id".to_owned(),
-                        json::JsonValue::String(self.attempt_id.clone()),
-                    );
-                    data.insert("identity".to_owned(), json::JsonValue::Object(identity));
-                    self.write_v2_record("run.start", json::JsonValue::Object(data));
                 }
+                self.ensure_run_started(&kind, fingerprint, identity);
                 let audit_kind_is_training_complete = matches!(
                     object.get("audit_kind"),
                     Some(json::JsonValue::String(audit_kind))
@@ -2998,14 +3028,32 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
         return run_json_data_path(&path, options);
     }
     let label = display_argument(path.as_os_str());
+    let mut event_sink = CliEventSink::new(
+        options.log,
+        Some(RunIdentity {
+            program_sha256: sha256_hex(label.as_bytes()),
+            manifest_sha256: None,
+        }),
+    );
     let bytes = match fs::read(&path) {
         Ok(bytes) => bytes,
         Err(error) => {
+            if let Some(status) = finish_preflight_event(
+                &mut event_sink,
+                "SEL-C003",
+                &format!("failed to read source `{label}`: {error}"),
+            ) {
+                return status;
+            }
             return write_io_diagnostic(&format!(
                 "SEL-C003 failed to read source `{label}`: {error}\n"
             ));
         }
     };
+    event_sink.identity = Some(RunIdentity {
+        program_sha256: sha256_hex(&bytes),
+        manifest_sha256: None,
+    });
     let source = match String::from_utf8(bytes) {
         Ok(source) => source,
         Err(error) => {
@@ -3015,12 +3063,23 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
                 format!("source is not valid UTF-8 at byte offset {offset}"),
                 diagnostic::Span::new(offset, offset.saturating_add(1)),
             );
+            if let Some(status) =
+                finish_preflight_event(&mut event_sink, diagnostic.code, &diagnostic.message)
+            {
+                return status;
+            }
             return write_diagnostics(&path, "", &[diagnostic], options);
         }
     };
 
     let parsed = parser::parse(&source);
     if !parsed.diagnostics.is_empty() {
+        if let Some(diagnostic) = parsed.diagnostics.first()
+            && let Some(status) =
+                finish_preflight_event(&mut event_sink, diagnostic.code, &diagnostic.message)
+        {
+            return status;
+        }
         return write_diagnostics(&path, &source, &parsed.diagnostics, options);
     }
     let Some(program) = parsed.program else {
@@ -3029,21 +3088,25 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
             "parser returned no program without diagnostics",
             diagnostic::Span::new(0, 0),
         );
+        if let Some(status) =
+            finish_preflight_event(&mut event_sink, diagnostic.code, &diagnostic.message)
+        {
+            return status;
+        }
         return write_diagnostics(&path, &source, &[diagnostic], options);
     };
     let semantic_diagnostics = semantic::check(&program);
     if !semantic_diagnostics.is_empty() {
+        if let Some(diagnostic) = semantic_diagnostics.first()
+            && let Some(status) =
+                finish_preflight_event(&mut event_sink, diagnostic.code, &diagnostic.message)
+        {
+            return status;
+        }
         return write_diagnostics(&path, &source, &semantic_diagnostics, options);
     }
 
     let base_dir = path.parent().unwrap_or_else(|| std::path::Path::new("."));
-    let mut event_sink = CliEventSink::new(
-        options.log,
-        Some(RunIdentity {
-            program_sha256: sha256_hex(source.as_bytes()),
-            manifest_sha256: None,
-        }),
-    );
     let execution =
         runtime::execute_with_context_and_events(&program, base_dir, 128, 4, &mut event_sink);
     match execution {
@@ -3108,6 +3171,14 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
             }
         }
     }
+}
+
+fn finish_preflight_event(event_sink: &mut CliEventSink, code: &str, message: &str) -> Option<u8> {
+    event_sink.record_preflight_error(code, message);
+    event_sink.finish("error", Some(code), None);
+    event_sink
+        .take_failure()
+        .map(|error| write_io_error("event log", error))
 }
 
 fn run_job(action: JobAction) -> u8 {
@@ -3384,12 +3455,36 @@ fn run_project_path_with_diagnostic_path(
     diagnostic_path: &std::path::Path,
     options: Options,
 ) -> u8 {
+    let mut event_sink = CliEventSink::new(
+        options.log,
+        Some(RunIdentity {
+            program_sha256: sha256_hex(path.to_string_lossy().as_bytes()),
+            manifest_sha256: None,
+        }),
+    );
     let loaded = match project::load(path) {
         Ok(loaded) => loaded,
-        Err(diagnostic) => return write_diagnostics(diagnostic_path, "", &[diagnostic], options),
+        Err(diagnostic) => {
+            if let Some(status) =
+                finish_preflight_event(&mut event_sink, diagnostic.code, &diagnostic.message)
+            {
+                return status;
+            }
+            return write_diagnostics(diagnostic_path, "", &[diagnostic], options);
+        }
     };
+    event_sink.identity = Some(RunIdentity {
+        program_sha256: loaded.program_sha256.clone(),
+        manifest_sha256: Some(loaded.manifest_sha256.clone()),
+    });
     let semantic_diagnostics = semantic::check(&loaded.program);
     if !semantic_diagnostics.is_empty() {
+        if let Some(diagnostic) = semantic_diagnostics.first()
+            && let Some(status) =
+                finish_preflight_event(&mut event_sink, diagnostic.code, &diagnostic.message)
+        {
+            return status;
+        }
         return write_diagnostics(
             diagnostic_path,
             &loaded.source,
@@ -3397,13 +3492,6 @@ fn run_project_path_with_diagnostic_path(
             options,
         );
     }
-    let mut event_sink = CliEventSink::new(
-        options.log,
-        Some(RunIdentity {
-            program_sha256: loaded.program_sha256.clone(),
-            manifest_sha256: Some(loaded.manifest_sha256.clone()),
-        }),
-    );
     let execution = runtime::execute_with_capabilities_and_training_limits(
         &loaded.program,
         &loaded.base_dir,

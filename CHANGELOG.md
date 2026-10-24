@@ -7,6 +7,12 @@ not a promise that GitHub publication already happened.
 
 ## [Unreleased]
 
+- **Candidate:** `seloryn run --log=json2` now emits a bounded
+  `run.start` → `preflight.error` → `run.end` receipt for source-loading,
+  manifest-loading and static-check failures. The receipt preserves the
+  stable diagnostic code and a message fingerprint without exposing paths or
+  message text; dataset/checkpoint failures remain outside this preflight
+  contract.
 - **Candidate:** release staging now groups a runtime archive and VSIX on one
   language compatibility line, writes `release-manifest.json` and external
   `SHA256SUMS`, and refuses a mismatched version base.
