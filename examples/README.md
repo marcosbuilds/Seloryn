@@ -1,22 +1,74 @@
-# Examples
+# Examples and first supported preview workflow
 
-Each example here is classified by the behavior it actually exercises. A
-file is only described as runnable when the current CLI and tests execute it.
+Each example is classified by what its current CLI and tests actually
+exercise. A file or project is called **verified preview** only when a named
+black-box probe or an explicit evidence record supports that description.
+These examples are not a promise of a stable ABI or production support.
+
+## First supported workflow
+
+[`projects/auditable-local-inference`](projects/auditable-local-inference) is
+the first product-shaped preview workflow: local CPU training and inference for
+a small tabular equipment-health model. It keeps the dataset, model and run
+contracts separate, owns the training loop in `.sely`, writes a hash-bound
+checkpoint, emits JSON2 audit evidence and rejects contract/checkpoint
+tampering.
+
+The reproducible adoption gate is:
+
+```text
+cargo build --release --locked
+python tests/auditable_local_inference_probe.py
+```
+
+The gate must print `Auditable local inference proof: PASS`. It checks static
+validation, source ownership, decreasing training loss, holdout evaluation,
+independent Python agreement, checkpoint reload, receipt verification, isolated
+replay and six negative boundary cases. See the
+[adoption proposal](../docs/project/next-gates.md) for the exact pass criteria
+and limitations.
+
+For direct inspection after building a local binary:
+
+```text
+seloryn doctor examples/projects/auditable-local-inference --format=json
+seloryn check examples/projects/auditable-local-inference --format=json
+'{"mode":"train"}' | seloryn run examples/projects/auditable-local-inference --format=json --log=json2
+'{"mode":"infer","feature_names":["temperature","vibration","load","age_days"],"features":[0.90,0.92,0.88,0.91]}' | seloryn run examples/projects/auditable-local-inference --format=json --log=json2
+```
+
+The direct run creates the example checkpoint. The probe uses temporary copies,
+so it is the safer command for an external verification pass.
+
+## Example map
 
 ```text
 examples/
-  autograd/                   narrow scalar reverse-mode examples
-  tensors/                     standalone CPU tensor programs
-  projects/json-config/        local module + native json + external JSON
-  projects/checkpoint-validation/ bounded checkpoint schema validation
-  projects/linear-training/    narrow fixture-driven linear training contract
-  projects/mlp-training/       verified bounded CPU MLP training, holdout and resume
-  projects/mlp-inference/      bounded batch inference from a verified MLP checkpoint
-  projects/self-hosted-linear/ Seloryn-authored tensor objective and SGD loop
-  projects/evaluation-pipeline/ local modules + JSON validation + tensor metrics
+  autograd/                           narrow scalar and tensor reverse-mode examples
+  tensors/                            standalone bounded CPU tensor programs
+  projects/auditable-local-inference first product-shaped, source-owned workflow
+  projects/self-hosted-mlp            source-owned custom ReLU MLP proof
+  projects/self-hosted-language-model source-owned CPU bigram proof; one-token context
+  projects/source-contract-reuse  experimental shared optimizer contract proof
+  projects/mlp-training               bounded native CPU MLP trainer and resume fixture
+  projects/mlp-inference              bounded batch inference from an MLP checkpoint
+  projects/self-hosted-linear         source-owned tensor objective and SGD loop
+  projects/gpu-linear-training        closed scalar F32 GPU profile; host dependent
+  projects/json-array-pipeline        bounded numeric JSON-array conversion
+  projects/json-config                local module plus bounded JSON read/encode/get
+  projects/checkpoint-validation      bounded checkpoint schema validation
+  projects/evaluation-pipeline        local modules, JSON validation and tensor metrics
+  projects/linear-training            narrow fixture-driven linear-training contract
 ```
 
-Run a standalone tensor example with a locally built release binary:
+The map distinguishes evidence slices; it is not a feature roadmap. In
+particular, the GPU linear project does not make the tensor or MLP projects GPU
+capable, and the language-model project does not claim transformer, serving or
+long-context support.
+
+## Standalone examples
+
+Run these with a locally built release binary:
 
 ```text
 seloryn run examples/tensors/tensor-matmul.sely
@@ -24,9 +76,11 @@ seloryn run examples/tensors/tensor-index.sely
 seloryn run examples/tensors/tensor-numeric.sely
 seloryn run examples/tensors/tensor-reduce.sely
 seloryn run examples/tensors/linear-forward.sely
+seloryn run examples/autograd/scalar-gradient.sely
+seloryn run examples/autograd/scalar-gradcheck.sely
 ```
 
-Run a project example by passing its project directory:
+## Project examples
 
 ```text
 seloryn check examples/projects/json-config
@@ -39,23 +93,10 @@ seloryn check examples/projects/mlp-inference
 seloryn run examples/projects/mlp-inference
 seloryn check examples/projects/self-hosted-linear
 seloryn run examples/projects/self-hosted-linear
-```
-
-Run the scalar reverse-mode example:
-
-```text
-seloryn run examples/autograd/scalar-gradient.sely
-seloryn run examples/autograd/scalar-gradcheck.sely
-```
-
-Run the checkpoint schema fixture:
-
-```text
 seloryn run examples/projects/checkpoint-validation
 ```
 
-The project examples are deliberately small integration fixtures. They do not
-claim a package registry, general model framework, unrestricted file access,
-general tensor autodiff, a reusable optimizer framework or production training
-support. The bounded tensor/autodiff and Seloryn-authored SGD examples are
-explicitly limited to the contracts listed above.
+The project READMEs state the narrower contract for each fixture. No example
+claims a package registry, unrestricted file access, arbitrary model loading,
+general tensor autodiff, a reusable optimizer framework, HTTP serving,
+distributed execution or production training support.

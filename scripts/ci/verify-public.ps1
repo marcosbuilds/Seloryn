@@ -48,8 +48,12 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Workspace doctor/init verification failed' }
     & python tests/operational_reliability_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Operational reliability verification failed' }
+    & python tests/cancel_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Cooperative cancellation verification failed' }
     & python tests/streaming_v2_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Hash-chained training stream verification failed' }
+    & python tests/source_contract_reuse_probe.py
+    if ($LASTEXITCODE -ne 0) { throw 'Source contract reuse verification failed' }
     & python tests/self_hosted_probe.py
     if ($LASTEXITCODE -ne 0) { throw 'Seloryn-authored training verification failed' }
     & python tests/self_hosted_language_model_probe.py

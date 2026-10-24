@@ -1,0 +1,9 @@
+[package]
+name = "source-contract-reuse"
+language = "0.12"
+source_root = "src"
+entry = "source-contract-reuse-entry.sely"
+
+[capabilities]
+read = []
+write = []

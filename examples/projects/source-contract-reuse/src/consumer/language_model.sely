@@ -1,0 +1,10 @@
+module consumer.language_model
+
+from contract.optim import Sgd, sgd, step
+from contract.parameters import Parameter, parameter
+
+pub fn updated_last_weight() -> F32:
+    let optimizer: Sgd = sgd(tensor_f32([0.2], []))
+    let weight: Parameter = parameter("language-model.weights", tensor_f32([2.0, -1.0, 0.0, 3.0], [2, 2]))
+    let updated: Parameter = step(optimizer, weight, tensor_f32([1.0, 2.0, -1.0, 0.5], [2, 2]))
+    return tensor_get_f32(updated.value, [1, 1])

@@ -1,0 +1,8 @@
+from consumer.language_model import updated_last_weight
+from consumer.mlp import updated_first_weight
+from data import to_f64
+from json import from_f64, object
+
+fn main() -> Result[Json, JsonIoError]:
+    let report: Json = object(["mlp_first_weight", "language_model_last_weight"], [from_f64(to_f64(updated_first_weight())), from_f64(to_f64(updated_last_weight()))])?
+    return Ok(report)

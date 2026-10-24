@@ -25,6 +25,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
     mpsc::{SyncSender, sync_channel},
 };
 use std::thread::{self, JoinHandle};
@@ -32,6 +33,89 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
+
+const CANCELLATION_ERROR_CODE: &str = "SEL-CANCELLED";
+const CANCELLATION_MESSAGE: &str = "execution cancellation requested";
+const EXIT_CANCELLED: u8 = 130;
+
+static CANCELLATION_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+mod cancellation {
+    use std::io;
+
+    const SIGINT: i32 = 2;
+    const SIGTERM: i32 = 15;
+    const SIG_ERR: usize = usize::MAX;
+
+    unsafe extern "C" {
+        fn signal(signal: i32, handler: usize) -> usize;
+    }
+
+    unsafe extern "C" fn handler(_: i32) {
+        super::CANCELLATION_REQUESTED.store(true, super::Ordering::Relaxed);
+    }
+
+    pub fn install() -> io::Result<()> {
+        let (int_result, term_result) = unsafe {
+            (
+                signal(SIGINT, handler as usize),
+                signal(SIGTERM, handler as usize),
+            )
+        };
+        if int_result == SIG_ERR || term_result == SIG_ERR {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+mod cancellation {
+    use std::io;
+
+    const CTRL_C_EVENT: u32 = 0;
+    const CTRL_BREAK_EVENT: u32 = 1;
+
+    #[link(name = "Kernel32")]
+    unsafe extern "system" {
+        fn SetConsoleCtrlHandler(handler: Option<extern "system" fn(u32) -> i32>, add: i32) -> i32;
+    }
+
+    extern "system" fn handler(event: u32) -> i32 {
+        if matches!(event, CTRL_C_EVENT | CTRL_BREAK_EVENT) {
+            super::CANCELLATION_REQUESTED.store(true, super::Ordering::Relaxed);
+            return 1;
+        }
+        0
+    }
+
+    pub fn install() -> io::Result<()> {
+        let installed = unsafe { SetConsoleCtrlHandler(Some(handler), 1) };
+        if installed == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
+mod cancellation {
+    use std::io;
+
+    pub fn install() -> io::Result<()> {
+        Ok(())
+    }
+}
+
+fn install_cancellation_handler() -> io::Result<()> {
+    CANCELLATION_REQUESTED.store(false, Ordering::Relaxed);
+    cancellation::install()
+}
+
+fn cancellation_requested() -> bool {
+    CANCELLATION_REQUESTED.load(Ordering::Relaxed)
+}
 
 pub(crate) const LANGUAGE_VERSION: &str = "0.12";
 const PACKAGE_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -583,6 +667,7 @@ impl AsyncLogWriter {
 struct CliEventSink {
     format: LogFormat,
     failure: Option<io::Error>,
+    cancellation_observed: bool,
     identity: Option<RunIdentity>,
     attempt_id: String,
     signing_key: Option<Vec<u8>>,
@@ -599,6 +684,7 @@ impl CliEventSink {
         Self {
             format,
             failure: None,
+            cancellation_observed: false,
             identity,
             attempt_id: receipt_attempt_id(),
             signing_key: (format == LogFormat::Json2Signed)
@@ -627,6 +713,10 @@ impl CliEventSink {
 
     fn has_run(&self) -> bool {
         self.v2_run.is_some()
+    }
+
+    fn was_cancelled(&self) -> bool {
+        self.cancellation_observed
     }
 
     fn set_result_sha256(&mut self, value: String) {
@@ -744,6 +834,11 @@ impl CliEventSink {
 
 impl runtime::EventSink for CliEventSink {
     fn emit(&mut self, event: runtime::RuntimeEvent) -> Result<(), String> {
+        let cancellation_was_requested = cancellation_requested();
+        if cancellation_was_requested && !is_receipt_log(self.format) {
+            self.cancellation_observed = true;
+            return Err(CANCELLATION_MESSAGE.to_owned());
+        }
         let line = match self.format {
             LogFormat::Off => return Ok(()),
             LogFormat::Human => render_runtime_event_human(&event),
@@ -859,6 +954,10 @@ impl runtime::EventSink for CliEventSink {
                     }
                 }
                 self.write_v2_record(&kind, json::JsonValue::Object(object));
+                if cancellation_was_requested {
+                    self.cancellation_observed = true;
+                    return Err(CANCELLATION_MESSAGE.to_owned());
+                }
                 return self.emit_result();
             }
         };
@@ -2175,6 +2274,9 @@ fn probe_json(report: &gpu::ProbeReport) -> BTreeMap<String, json::JsonValue> {
 }
 
 fn run_path(path: PathBuf, options: Options) -> u8 {
+    if let Err(error) = install_cancellation_handler() {
+        return write_io_error("cancellation handler", error);
+    }
     if path.is_dir() {
         return run_project_path(&path, options);
     }
@@ -2261,6 +2363,17 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
             status
         }
         Err(error) => {
+            if event_sink.was_cancelled() {
+                event_sink.finish(
+                    "error",
+                    Some(CANCELLATION_ERROR_CODE),
+                    Some(CANCELLATION_MESSAGE),
+                );
+                if let Some(error) = event_sink.take_failure() {
+                    return write_io_error("event log", error);
+                }
+                return write_cancellation_diagnostic(options);
+            }
             event_sink.finish("error", Some(error.code), Some(&error.message));
             if let Some(error) = event_sink.take_failure() {
                 return write_io_error("event log", error);
@@ -2411,6 +2524,17 @@ fn run_project_path_with_diagnostic_path(
             status
         }
         Err(error) => {
+            if event_sink.was_cancelled() {
+                event_sink.finish(
+                    "error",
+                    Some(CANCELLATION_ERROR_CODE),
+                    Some(CANCELLATION_MESSAGE),
+                );
+                if let Some(error) = event_sink.take_failure() {
+                    return write_io_error("event log", error);
+                }
+                return write_cancellation_diagnostic(options);
+            }
             event_sink.finish("error", Some(error.code), Some(&error.message));
             if let Some(error) = event_sink.take_failure() {
                 return write_io_error("event log", error);
@@ -2938,6 +3062,30 @@ fn write_stdout_for_run(message: &str, suppress_diagnostic: bool) -> u8 {
         Ok(()) => EXIT_OK,
         Err(_error) if suppress_diagnostic => EXIT_IO,
         Err(error) => write_io_error("stdout", error),
+    }
+}
+
+fn write_cancellation_diagnostic(options: Options) -> u8 {
+    if is_receipt_log(options.log) {
+        return EXIT_CANCELLED;
+    }
+    let message = if options.format == OutputFormat::Json {
+        json::encode(&json::JsonValue::Object(BTreeMap::from([
+            (
+                "code".to_owned(),
+                json::JsonValue::String(CANCELLATION_ERROR_CODE.to_owned()),
+            ),
+            (
+                "message".to_owned(),
+                json::JsonValue::String(CANCELLATION_MESSAGE.to_owned()),
+            ),
+        ]))) + "\n"
+    } else {
+        format!("{CANCELLATION_ERROR_CODE} {CANCELLATION_MESSAGE}\n")
+    };
+    match io::stderr().write_all(message.as_bytes()) {
+        Ok(()) => EXIT_CANCELLED,
+        Err(error) => write_io_error("stderr", error),
     }
 }
 

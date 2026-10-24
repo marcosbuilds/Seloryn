@@ -5,6 +5,11 @@ an assertion that the whole language is production-ready. The raw run records,
 generated datasets and reference programs remain in the private operator
 evidence directory so generated data does not become repository noise.
 
+This is a historical snapshot, not a measurement of the current `origin/master`:
+the recorded run used public commit `fff625e`, language `0.08` and runtime
+`0.8.0`. It must not be used as current `0.12` performance, compatibility or
+production evidence without rerunning the workloads.
+
 ## Environment and method
 
 - source/runtime: public commit `fff625e`, language `0.08`, runtime `0.8.0`;

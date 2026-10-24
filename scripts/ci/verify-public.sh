@@ -23,7 +23,9 @@ python3 tests/mlp_training_probe.py
 python3 tests/mlp_inference_probe.py
 python3 tests/workspace_probe.py
 python3 tests/operational_reliability_probe.py
+python3 tests/cancel_probe.py
 python3 tests/streaming_v2_probe.py
+python3 tests/source_contract_reuse_probe.py
 python3 tests/self_hosted_probe.py
 python3 tests/self_hosted_language_model_probe.py
 python3 tests/auditable_local_inference_probe.py

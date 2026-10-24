@@ -92,6 +92,14 @@ evidence.
   probe does not treat POSIX signal delivery as equivalent to a proven Seloryn
   cancellation contract.
 
+The separate [`cancel_probe.py`](../../tests/cancel_probe.py) covers the
+cooperative path rather than forced termination. For a receipt-enabled run,
+`SIGINT`/`SIGTERM` on Unix and `Ctrl+C`/`Ctrl+Break` on Windows are observed at
+runtime event boundaries and produce a valid `run.end` with
+`error_code=SEL-CANCELLED` and exit code `130`. This is a bounded cancellation
+slice: it does not claim preemption inside every loop, cleanup after a forced
+kill, or resumability from the cancelled run.
+
 This evidence covers one bounded CPU MLP profile and one release binary. It
 does not cover arbitrary programs, long-duration soak behavior, cross-machine
 reproducibility, graceful cancellation, distributed execution, GPU training,

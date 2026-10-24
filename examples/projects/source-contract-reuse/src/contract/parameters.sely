@@ -1,0 +1,11 @@
+module contract.parameters
+
+pub record Parameter:
+    name: Text
+    value: Tensor[F32]
+
+pub fn parameter(name: Text, value: Tensor[F32]) -> Parameter:
+    return Parameter(name, value)
+
+pub fn replace(parameter: Parameter, value: Tensor[F32]) -> Parameter:
+    return Parameter(parameter.name, value)

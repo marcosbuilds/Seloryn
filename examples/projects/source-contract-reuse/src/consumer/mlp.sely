@@ -1,0 +1,10 @@
+module consumer.mlp
+
+from contract.optim import Sgd, sgd_rate, step
+from contract.parameters import Parameter, parameter
+
+pub fn updated_first_weight() -> F32:
+    let optimizer: Sgd = sgd_rate(0.1)
+    let weight: Parameter = parameter("mlp.weight", tensor_f32([1.0, 2.0], [2]))
+    let updated: Parameter = step(optimizer, weight, tensor_f32([0.5, -1.0], [2]))
+    return tensor_get_f32(updated.value, [0])

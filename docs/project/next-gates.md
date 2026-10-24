@@ -75,6 +75,14 @@ promise that every design proposal already exists.
   checkpoint, separate inference, structured audit event and six negative
   boundary cases. A pure-Python standard-library implementation is used only
   as an independent numerical oracle.
+- Cooperative cancellation is now a real, bounded slice: `SIGINT`/`SIGTERM`
+  on Unix and `Ctrl+C`/`Ctrl+Break` on Windows produce a valid JSON2 `run.end`
+  with `error_code=SEL-CANCELLED` and exit code `130`; the public black-box
+  probe verifies that no success result is emitted. This does not claim
+  preemption of every loop, cleanup after forced termination, or resumability.
+- `source-contract-reuse` demonstrates one source-owned `Parameter`/`Sgd`
+  contract consumed by an MLP and a language-model function. It is an
+  experimental same-project proof, not a package, registry, resolver or ABI.
 - The next continuation is also closed with evidence: the contiguous tensor
   access fast path reduced the recorded five-run median from `0.182768 s` to
   `0.157362 s` (`13.9%`) without changing the numerical result; both source-
@@ -118,7 +126,8 @@ promise that every design proposal already exists.
    installer execution, upgrade/rollback behavior and a release remain pending
    explicit publication authorization and corresponding platform evidence.
 6. **Receipt continuation — source-owned training slice completed:** identity,
-   successful isolated replay for native and source-owned CPU training,
+   successful isolated replay for native and source-owned CPU training, and
+   cooperative cancellation with an explicit `SEL-CANCELLED` end event,
    semantic-event comparison, structured path redaction and keyed HMAC
    authentication are now tested. Remaining gates are pre-run failure receipts,
    initial checkpoint snapshots for resume replay, filesystem-wide output
