@@ -86,6 +86,25 @@ def main() -> int:
         }
         assert len((job_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()) == 1
 
+        # The lock itself is part of the trusted storage boundary. If the
+        # final component is replaced with a symlink/reparse point, status
+        # must reject it before opening or locking the target.
+        lock_path = job_dir / "job.lock"
+        lock_target = job_dir / "job-lock-target"
+        lock_path.rename(lock_target)
+        try:
+            lock_path.symlink_to(lock_target.name)
+        except (OSError, NotImplementedError):
+            lock_target.rename(lock_path)
+        else:
+            try:
+                failed_code(run(root, "status", "alpha"), "SEL-J012")
+            finally:
+                if lock_path.is_symlink():
+                    lock_path.unlink()
+                if lock_target.exists():
+                    lock_target.rename(lock_path)
+
         reused = successful_json(run(root, "create", str(spec), "--id=alpha"))
         assert reused["reused"] is True, reused
         assert reused["sequence"] == 0, reused

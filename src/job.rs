@@ -11,6 +11,9 @@ use crate::json::{self, JsonValue};
 
 const JOB_SCHEMA: &str = "seloryn.job.v1";
 const EVENT_SCHEMA: &str = "seloryn.job-event.v1";
+const COMMIT_SCHEMA: &str = "seloryn.job-commit.v1";
+const COMMIT_MARKER: &str = ".job-commit.json";
+const COMMIT_DIRECTORY_PREFIX: &str = ".job-commit-tmp-";
 const MAX_JOB_ID_BYTES: usize = 64;
 const MAX_SPEC_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PREFLIGHT_SOURCE_BYTES: usize = 16 * 1024 * 1024;
@@ -595,7 +598,7 @@ pub(crate) fn list(root: &Path) -> Result<JsonValue, JobError> {
             let metadata = fs::symlink_metadata(&path).map_err(|error| {
                 JobError::io("SEL-J010", "failed to inspect a job directory entry", error)
             })?;
-            if metadata.file_type().is_symlink() {
+            if metadata_is_reparse(&metadata) {
                 return Err(JobError::new(
                     "SEL-J012",
                     "job store contains a symlink or reparse point",
@@ -687,26 +690,7 @@ pub(crate) fn transition(
         lease_id: record.state.lease_id.clone(),
         lease_expires_at: record.state.lease_expires_at,
     };
-    let event_path = directory.join("events.jsonl");
-    let mut events = fs::read(&event_path)
-        .map_err(|error| JobError::io("SEL-J007", "failed to read the job event log", error))?;
-    if !events.ends_with(b"\n") {
-        return Err(JobError::new(
-            "SEL-J008",
-            "job event log does not end at a complete line",
-        ));
-    }
-    events.extend_from_slice(event_line(&event).as_bytes());
-    atomic_write(&event_path, &events)?;
-
-    record.state.status = next;
-    record.state.sequence = event.sequence;
-    record.state.updated_at = now;
-    atomic_write(
-        &directory.join("state.json"),
-        state_json(&record.state).as_bytes(),
-    )?;
-    let record = load_record_unlocked(&directory)?;
+    let record = commit_event(&directory, &mut record, event)?;
     Ok(result_json(
         Operation::Transition,
         &record,
@@ -1040,8 +1024,9 @@ pub(crate) fn recover_lost(root: &Path, job_id: &str) -> Result<JsonValue, JobEr
 }
 
 fn commit_event(directory: &Path, record: &mut Record, event: Event) -> Result<Record, JobError> {
+    recover_pending_commit(directory)?;
     let event_path = directory.join("events.jsonl");
-    let mut events = fs::read(&event_path)
+    let events = fs::read(&event_path)
         .map_err(|error| JobError::io("SEL-J007", "failed to read the job event log", error))?;
     if !events.ends_with(b"\n") {
         return Err(JobError::new(
@@ -1049,23 +1034,339 @@ fn commit_event(directory: &Path, record: &mut Record, event: Event) -> Result<R
             "job event log does not end at a complete line",
         ));
     }
-    events.extend_from_slice(event_line(&event).as_bytes());
-    atomic_write(&event_path, &events)?;
+    let stored_state = fs::read(directory.join("state.json"))
+        .map_err(|error| JobError::io("SEL-J007", "failed to read job state", error))?;
+    let expected_sequence = record
+        .state
+        .sequence
+        .checked_add(1)
+        .ok_or_else(|| JobError::new("SEL-J019", "job sequence counter overflowed"))?;
+    if event.sequence != expected_sequence {
+        return Err(JobError::new(
+            "SEL-J007",
+            "job event sequence does not follow the current state",
+        ));
+    }
 
-    record.state.status = event.to;
-    record.state.sequence = event.sequence;
-    record.state.updated_at = event.at;
-    record.state.attempt = event.attempt.unwrap_or(record.state.attempt);
-    record.state.owner = event.owner;
-    record.state.attempt_id = event.attempt_id;
-    record.state.claimed_at = event.claimed_at;
-    record.state.lease_id = event.lease_id;
-    record.state.lease_expires_at = event.lease_expires_at;
-    atomic_write(
-        &directory.join("state.json"),
-        state_json(&record.state).as_bytes(),
-    )?;
+    let mut next_state = record.state.clone();
+    apply_event(&mut next_state, &event);
+    let mut next_events = events.clone();
+    next_events.extend_from_slice(event_line(&event).as_bytes());
+    let pending = PendingCommit {
+        temp_directory: format!(
+            "{COMMIT_DIRECTORY_PREFIX}{}-{}",
+            std::process::id(),
+            unix_nanos()
+        ),
+        base_events_sha256: crate::sha256_hex(&events),
+        base_state_sha256: crate::sha256_hex(&stored_state),
+        events_sha256: crate::sha256_hex(&next_events),
+        state_sha256: crate::sha256_hex(state_json(&next_state).as_bytes()),
+        sequence: event.sequence,
+    };
+    let temporary = directory.join(&pending.temp_directory);
+    fs::create_dir(&temporary).map_err(|error| {
+        JobError::io(
+            "SEL-J010",
+            "failed to create the job commit transaction",
+            error,
+        )
+    })?;
+    let prepare_result = (|| -> Result<(), JobError> {
+        atomic_write(&temporary.join("events.jsonl"), &next_events)?;
+        atomic_write(
+            &temporary.join("state.json"),
+            state_json(&next_state).as_bytes(),
+        )?;
+        atomic_write(
+            &directory.join(COMMIT_MARKER),
+            pending_commit_json(&pending).as_bytes(),
+        )?;
+        Ok(())
+    })();
+    if let Err(error) = prepare_result {
+        let _ = fs::remove_file(directory.join(COMMIT_MARKER));
+        let _ = remove_commit_directory(&temporary);
+        return Err(error);
+    }
+
+    recover_pending_commit(directory)?;
     load_record_unlocked(directory)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct PendingCommit {
+    temp_directory: String,
+    base_events_sha256: String,
+    base_state_sha256: String,
+    events_sha256: String,
+    state_sha256: String,
+    sequence: u64,
+}
+
+fn apply_event(state: &mut JobState, event: &Event) {
+    state.status = event.to;
+    state.sequence = event.sequence;
+    state.updated_at = event.at;
+    state.attempt = event.attempt.unwrap_or(state.attempt);
+    state.owner = event.owner.clone();
+    state.attempt_id = event.attempt_id.clone();
+    state.claimed_at = event.claimed_at;
+    state.lease_id = event.lease_id.clone();
+    state.lease_expires_at = event.lease_expires_at;
+}
+
+fn pending_commit_json(commit: &PendingCommit) -> String {
+    json::encode(&JsonValue::Object(BTreeMap::from([
+        (
+            "base_events_sha256".to_owned(),
+            JsonValue::String(commit.base_events_sha256.clone()),
+        ),
+        (
+            "base_state_sha256".to_owned(),
+            JsonValue::String(commit.base_state_sha256.clone()),
+        ),
+        (
+            "events_sha256".to_owned(),
+            JsonValue::String(commit.events_sha256.clone()),
+        ),
+        (
+            "schema".to_owned(),
+            JsonValue::String(COMMIT_SCHEMA.to_owned()),
+        ),
+        (
+            "sequence".to_owned(),
+            JsonValue::Number(commit.sequence.to_string()),
+        ),
+        (
+            "state_sha256".to_owned(),
+            JsonValue::String(commit.state_sha256.clone()),
+        ),
+        (
+            "temp_directory".to_owned(),
+            JsonValue::String(commit.temp_directory.clone()),
+        ),
+    ]))) + "\n"
+}
+
+fn parse_pending_commit(source: &str) -> Result<PendingCommit, JobError> {
+    let value = json::parse(source, 16 * 1024, 8).map_err(|error| {
+        JobError::new(
+            "SEL-J007",
+            format!("job commit transaction is invalid: {}", error.message),
+        )
+    })?;
+    let object = object(value, "job commit transaction")?;
+    if object_string_from(&object, "schema")? != COMMIT_SCHEMA {
+        return Err(JobError::new(
+            "SEL-J007",
+            "job commit transaction schema is unsupported",
+        ));
+    }
+    let temp_directory = object_string_from(&object, "temp_directory")?.to_owned();
+    let Some(temp_suffix) = temp_directory.strip_prefix(COMMIT_DIRECTORY_PREFIX) else {
+        return Err(JobError::new(
+            "SEL-J007",
+            "job commit transaction directory is invalid",
+        ));
+    };
+    if temp_suffix.is_empty()
+        || temp_directory.len() > 128
+        || temp_suffix.chars().any(|character| {
+            !character.is_ascii_alphanumeric() && character != '-' && character != '_'
+        })
+    {
+        return Err(JobError::new(
+            "SEL-J007",
+            "job commit transaction directory is invalid",
+        ));
+    }
+    Ok(PendingCommit {
+        temp_directory,
+        base_events_sha256: object_string_from(&object, "base_events_sha256")?.to_owned(),
+        base_state_sha256: object_string_from(&object, "base_state_sha256")?.to_owned(),
+        events_sha256: object_string_from(&object, "events_sha256")?.to_owned(),
+        state_sha256: object_string_from(&object, "state_sha256")?.to_owned(),
+        sequence: object_u64(&object, "sequence")?,
+    })
+}
+
+fn recover_pending_commit(directory: &Path) -> Result<(), JobError> {
+    let marker_path = directory.join(COMMIT_MARKER);
+    let marker_source = match fs::symlink_metadata(&marker_path) {
+        Ok(metadata) => {
+            if metadata_is_reparse(&metadata) {
+                return Err(JobError::new(
+                    "SEL-J012",
+                    "job store contains a symlink or reparse point",
+                ));
+            }
+            read_required(&marker_path, "job commit transaction")?
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(JobError::io(
+                "SEL-J010",
+                "failed to inspect the job commit transaction",
+                error,
+            ));
+        }
+    };
+    let pending = parse_pending_commit(&marker_source)?;
+    let temporary = directory.join(&pending.temp_directory);
+    let temporary_exists = match fs::symlink_metadata(&temporary) {
+        Ok(metadata) => {
+            if metadata_is_reparse(&metadata) || !metadata.is_dir() {
+                return Err(JobError::new(
+                    "SEL-J012",
+                    "job commit transaction contains a symlink or reparse point",
+                ));
+            }
+            true
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        Err(error) => {
+            return Err(JobError::io(
+                "SEL-J010",
+                "failed to inspect the job commit transaction directory",
+                error,
+            ));
+        }
+    };
+    let event_path = directory.join("events.jsonl");
+    let state_path = directory.join("state.json");
+    reject_symlink(&event_path)?;
+    reject_symlink(&state_path)?;
+    let current_events = fs::read(&event_path)
+        .map_err(|error| JobError::io("SEL-J007", "failed to read the job event log", error))?;
+    let current_state = fs::read(&state_path)
+        .map_err(|error| JobError::io("SEL-J007", "failed to read job state", error))?;
+    let current_events_sha256 = crate::sha256_hex(&current_events);
+    let current_state_sha256 = crate::sha256_hex(&current_state);
+    let current_is_base = current_events_sha256 == pending.base_events_sha256
+        && current_state_sha256 == pending.base_state_sha256;
+    let current_is_committed = current_events_sha256 == pending.events_sha256
+        && current_state_sha256 == pending.state_sha256;
+    if !current_is_base && !current_is_committed {
+        let event_matches = current_events_sha256 == pending.events_sha256
+            || current_events_sha256 == pending.base_events_sha256;
+        let state_matches = current_state_sha256 == pending.state_sha256
+            || current_state_sha256 == pending.base_state_sha256;
+        if !event_matches || !state_matches {
+            return Err(JobError::new(
+                "SEL-J007",
+                "job commit transaction conflicts with current event/state files",
+            ));
+        }
+    }
+
+    let (candidate_events, candidate_state) = if temporary_exists {
+        let temporary_events_path = temporary.join("events.jsonl");
+        let temporary_state_path = temporary.join("state.json");
+        reject_symlink(&temporary_events_path)?;
+        reject_symlink(&temporary_state_path)?;
+        let events = fs::read(temporary_events_path).map_err(|error| {
+            JobError::io("SEL-J010", "failed to read the pending event log", error)
+        })?;
+        let state = fs::read(temporary_state_path)
+            .map_err(|error| JobError::io("SEL-J010", "failed to read pending job state", error))?;
+        if crate::sha256_hex(&events) != pending.events_sha256
+            || crate::sha256_hex(&state) != pending.state_sha256
+        {
+            return Err(JobError::new(
+                "SEL-J007",
+                "job commit transaction candidate hashes do not match",
+            ));
+        }
+        parse_events(
+            std::str::from_utf8(&events).map_err(|_| {
+                JobError::new("SEL-J007", "pending job event log is not valid UTF-8")
+            })?,
+        )?;
+        parse_state(
+            std::str::from_utf8(&state)
+                .map_err(|_| JobError::new("SEL-J007", "pending job state is not valid UTF-8"))?,
+        )?;
+        (Some(events), Some(state))
+    } else {
+        (None, None)
+    };
+
+    if !current_is_committed {
+        let events = candidate_events.as_deref().ok_or_else(|| {
+            JobError::new("SEL-J007", "job commit transaction candidates are missing")
+        })?;
+        let state = candidate_state.as_deref().ok_or_else(|| {
+            JobError::new("SEL-J007", "job commit transaction candidates are missing")
+        })?;
+        if current_events_sha256 != pending.events_sha256 {
+            atomic_write(&event_path, events)?;
+        }
+        if current_state_sha256 != pending.state_sha256 {
+            atomic_write(&state_path, state)?;
+        }
+    }
+
+    let final_events = fs::read(&event_path)
+        .map_err(|error| JobError::io("SEL-J007", "failed to verify the job event log", error))?;
+    let final_state = fs::read(&state_path)
+        .map_err(|error| JobError::io("SEL-J007", "failed to verify job state", error))?;
+    if crate::sha256_hex(&final_events) != pending.events_sha256
+        || crate::sha256_hex(&final_state) != pending.state_sha256
+    {
+        return Err(JobError::new(
+            "SEL-J010",
+            format!(
+                "job commit sequence {} could not be verified after replacement",
+                pending.sequence
+            ),
+        ));
+    }
+    if temporary_exists {
+        remove_commit_directory(&temporary).map_err(|error| {
+            JobError::io(
+                "SEL-J010",
+                "failed to clean the completed job commit transaction",
+                error,
+            )
+        })?;
+    }
+    fs::remove_file(&marker_path).map_err(|error| {
+        JobError::io(
+            "SEL-J010",
+            "failed to clear the completed job commit transaction",
+            error,
+        )
+    })?;
+    sync_directory(directory);
+    Ok(())
+}
+
+fn remove_commit_directory(path: &Path) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata_is_reparse(&metadata) || !metadata.is_dir() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "job commit transaction directory is not a regular directory",
+        ));
+    }
+    for name in ["events.jsonl", "state.json"] {
+        let child = path.join(name);
+        match fs::symlink_metadata(&child) {
+            Ok(metadata) => {
+                if metadata_is_reparse(&metadata) || !metadata.is_file() {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "job commit transaction contains an unexpected file",
+                    ));
+                }
+                fs::remove_file(child)?;
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+    fs::remove_dir(path)
 }
 
 pub(crate) fn render_human(value: &JsonValue) -> String {
@@ -1360,13 +1661,27 @@ struct JobLock {
 impl JobLock {
     fn acquire(directory: &Path) -> Result<Self, JobError> {
         let path = directory.join("job.lock");
-        let file = OpenOptions::new()
-            .create(true)
-            .truncate(false)
-            .read(true)
-            .write(true)
-            .open(&path)
-            .map_err(|error| JobError::io("SEL-J010", "failed to open the job lock", error))?;
+        reject_symlink(&path)?;
+        let file = open_lock_file(&path).map_err(|error| {
+            if path_is_reparse(&path) {
+                JobError::new("SEL-J012", "job store contains a symlink or reparse point")
+            } else {
+                JobError::io("SEL-J010", "failed to open the job lock", error)
+            }
+        })?;
+        let metadata = file
+            .metadata()
+            .map_err(|error| JobError::io("SEL-J010", "failed to inspect the job lock", error))?;
+        if metadata_is_reparse(&metadata) {
+            return Err(JobError::new(
+                "SEL-J012",
+                "job store contains a symlink or reparse point",
+            ));
+        }
+        if !metadata.is_file() {
+            return Err(JobError::new("SEL-J007", "job lock is not a regular file"));
+        }
+        reject_symlink(&path)?;
         for _ in 0..LOCK_WAIT_ATTEMPTS {
             match try_lock(&file) {
                 Ok(true) => return Ok(Self { _file: file }),
@@ -1381,6 +1696,49 @@ impl JobLock {
             "job is busy; no transition was committed",
         ))
     }
+}
+
+fn open_lock_file(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.create(true).truncate(false).read(true).write(true);
+    configure_lock_open(&mut options);
+    options.open(path)
+}
+
+#[cfg(unix)]
+fn configure_lock_open(options: &mut OpenOptions) {
+    use std::os::unix::fs::OpenOptionsExt;
+
+    // Reject a replaced final path component instead of following it. These
+    // are the values exposed by the supported POSIX kernels in CI; other Unix
+    // targets retain the metadata checks below but may not have this flag.
+    #[cfg(target_os = "linux")]
+    const NO_FOLLOW: i32 = 0x20000;
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    const NO_FOLLOW: i32 = 0x100;
+    #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "ios")))]
+    const NO_FOLLOW: i32 = 0;
+
+    options.custom_flags(NO_FOLLOW);
+}
+
+#[cfg(windows)]
+fn configure_lock_open(options: &mut OpenOptions) {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    // Open the final reparse point itself so its attributes can be rejected
+    // instead of following a junction/symlink to an attacker-selected file.
+    const FILE_FLAG_OPEN_REPARSE_POINT: u32 = 0x0020_0000;
+    options.custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+}
+
+#[cfg(not(any(unix, windows)))]
+fn configure_lock_open(_options: &mut OpenOptions) {}
+
+fn path_is_reparse(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata_is_reparse(&metadata))
+        .unwrap_or(false)
 }
 
 #[cfg(unix)]
@@ -1472,6 +1830,7 @@ fn load_record_unlocked_read_only_with_spec(
     verify_spec_hash: bool,
 ) -> Result<Record, JobError> {
     reject_symlink(directory)?;
+    recover_pending_commit(directory)?;
     let state_path = directory.join("state.json");
     reject_symlink(&state_path)?;
     let state_source = read_required(&state_path, "job state")?;
@@ -2059,7 +2418,7 @@ fn job_directory(root: &Path, job_id: &str) -> PathBuf {
 fn ensure_root_directory(root: &Path) -> Result<(), JobError> {
     let metadata = fs::symlink_metadata(root)
         .map_err(|error| JobError::io("SEL-J007", "failed to inspect the job root", error))?;
-    if !metadata.is_dir() {
+    if metadata_is_reparse(&metadata) || !metadata.is_dir() {
         return Err(JobError::new("SEL-J007", "job root is not a directory"));
     }
     Ok(())
@@ -2091,6 +2450,7 @@ fn ensure_directory(path: &Path, name: &str) -> Result<(), JobError> {
 }
 
 fn ensure_store_contained(root: &Path, jobs_root: &Path) -> Result<(), JobError> {
+    reject_symlink(root)?;
     reject_symlink(&root.join(".seloryn"))?;
     reject_symlink(jobs_root)?;
     let canonical_root = fs::canonicalize(root)
@@ -2229,6 +2589,8 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), JobError> {
     let parent = path
         .parent()
         .ok_or_else(|| JobError::new("SEL-J010", "cannot determine job storage parent"))?;
+    reject_symlink(parent)?;
+    reject_symlink(path)?;
     fs::create_dir_all(parent)
         .map_err(|error| JobError::io("SEL-J010", "failed to create job storage", error))?;
     let file_name = path
@@ -2310,12 +2672,83 @@ fn sync_directory(path: &Path) {
 
 #[cfg(test)]
 mod tests {
-    use super::lease_deadline_from_duration;
+    use super::*;
+    use std::ffi::OsStr;
     use std::time::Duration;
 
     #[test]
     fn lease_deadline_rounds_fractional_second_up_before_adding_ttl() {
         assert_eq!(lease_deadline_from_duration(Duration::new(12, 0), 1), 13);
         assert_eq!(lease_deadline_from_duration(Duration::new(12, 1), 1), 14);
+    }
+
+    #[test]
+    fn pending_commit_recovery_reconciles_event_first_replacement() {
+        let root = std::env::temp_dir().join(format!(
+            "seloryn-job-commit-recovery-{}-{}",
+            std::process::id(),
+            unix_nanos()
+        ));
+        fs::create_dir_all(&root).expect("test root");
+        let spec_path = root.join("spec.json");
+        fs::write(&spec_path, b"{\"kind\":\"test\"}\n").expect("test spec");
+        create(&root, &spec_path, Some(OsStr::new("job"))).expect("create job");
+
+        let directory = job_directory(&root, "job");
+        let event_path = directory.join("events.jsonl");
+        let state_path = directory.join("state.json");
+        let base_events = fs::read(&event_path).expect("base events");
+        let base_state = fs::read(&state_path).expect("base state");
+        let record = load_record(&directory).expect("load base record");
+        let event = Event {
+            sequence: 1,
+            job_id: "job".to_owned(),
+            from: Some(Status::Accepted),
+            to: Status::Queued,
+            at: record.state.updated_at.saturating_add(1),
+            spec_sha256: record.state.spec_sha256.clone(),
+            attempt: Some(record.state.attempt),
+            kind: "admin".to_owned(),
+            owner: None,
+            attempt_id: None,
+            claimed_at: None,
+            lease_id: None,
+            lease_expires_at: None,
+        };
+        let mut next_state = record.state.clone();
+        apply_event(&mut next_state, &event);
+        let mut next_events = base_events.clone();
+        next_events.extend_from_slice(event_line(&event).as_bytes());
+        let pending = PendingCommit {
+            temp_directory: format!("{COMMIT_DIRECTORY_PREFIX}test"),
+            base_events_sha256: crate::sha256_hex(&base_events),
+            base_state_sha256: crate::sha256_hex(&base_state),
+            events_sha256: crate::sha256_hex(&next_events),
+            state_sha256: crate::sha256_hex(state_json(&next_state).as_bytes()),
+            sequence: 1,
+        };
+        let temporary = directory.join(&pending.temp_directory);
+        fs::create_dir(&temporary).expect("transaction directory");
+        fs::write(temporary.join("events.jsonl"), &next_events).expect("pending events");
+        fs::write(
+            temporary.join("state.json"),
+            state_json(&next_state).as_bytes(),
+        )
+        .expect("pending state");
+        fs::write(directory.join(COMMIT_MARKER), pending_commit_json(&pending))
+            .expect("commit marker");
+
+        // Model the observed failure window: event replacement succeeded but
+        // state replacement did not. Recovery must finish the same commit.
+        fs::write(&event_path, &next_events).expect("partial event replacement");
+        let recovered = load_record(&directory).expect("recover pending commit");
+        assert_eq!(recovered.state, next_state);
+        assert_eq!(
+            fs::read(&state_path).expect("recovered state"),
+            state_json(&next_state).as_bytes()
+        );
+        assert!(!directory.join(COMMIT_MARKER).exists());
+        assert!(!temporary.exists());
+        fs::remove_dir_all(root).expect("remove test root");
     }
 }
