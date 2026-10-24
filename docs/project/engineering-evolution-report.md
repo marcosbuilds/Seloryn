@@ -3,7 +3,7 @@
 Date: 2026-10-24  
 Repository: `marcosbuilds/Seloryn`  
 Final branch: `master`  
-Final commit: `ac4b7a30a568662c31bf2954686198651859fd4d`
+Final commit: `a091ef3a86fd6cefd66a50f83398006de5b6562c`
 
 ## Executive result
 
@@ -63,6 +63,7 @@ Key integrated commits on `master`:
 | `19a707a` | OpenAI-compatible local token measurement adapter |
 | `c866cf7` | `seloryn inspect` structured source/project inspection slice |
 | `ac4b7a3` | Real agent transcript fixture, token report, schema and CI validation |
+| `a091ef3` | Consolidated final evidence report and documentation index |
 
 The developer-experience change was independently implemented in worktree
 `structured-inspection` and reviewed before cherry-pick. It reuses the parser,
