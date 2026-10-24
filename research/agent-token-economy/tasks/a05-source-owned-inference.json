@@ -1,0 +1,15 @@
+{
+  "schema": "seloryn.agent-token-economy.task",
+  "schema_version": 1,
+  "id": "A-05",
+  "ordinal": 5,
+  "frozen": true,
+  "hypothesis": "A",
+  "title": "Keep inference source-owned",
+  "prompt": "In the current Seloryn checkout, complete the small source-owned inference workflow in the task fixture: define the bounded computation, evaluate a holdout input, validate the model contract, and expose a reproducible result. The acceptance path must not hide the work behind a native trainer helper. Do not change VERSION.toml, publish, or use the network. Emit only the observable acceptance fields in the task-named adapter file.",
+  "deliverable": {"kind": "repository-change-and-adapter", "adapter_file": "submission-a-05.json", "required_observations": ["source_owned", "holdout_result", "model_contract_validated", "deterministic_result"]},
+  "acceptance": {"fixture": "fixtures/a05-source-owned-inference", "command": ["python", "fixtures/a05-source-owned-inference/accept-a-05.py", "{workspace}"], "independent": true},
+  "tool_parity": {"profile": "parity-v1", "network": "disabled"},
+  "limits": ["small bounded CPU fixture", "no transformer or serving claim", "no VERSION.toml change", "no release or push"],
+  "provider_telemetry": ["tokens", "calls", "attempts", "duration_seconds", "cost_usd", "success", "human_intervention", "files_changed", "lines_added", "lines_deleted", "regressions"]
+}

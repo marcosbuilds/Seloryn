@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seloryn.dev/schemas/agent-token-economy-manifest-v1.json",
+  "title": "Seloryn agent token economy manifest",
+  "type": "object",
+  "required": ["schema", "schema_version", "suite_id", "suite_version", "frozen_revision", "frozen", "task_count", "hypotheses", "tool_parity", "measurement_contract", "protected_paths", "tasks"],
+  "properties": {
+    "schema": {"const": "seloryn.agent-token-economy.manifest"},
+    "schema_version": {"const": 1},
+    "suite_id": {"const": "agent-token-economy"},
+    "suite_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "frozen_revision": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "frozen": {"const": true},
+    "task_count": {"const": 10},
+    "hypotheses": {"type": "object", "required": ["A", "B"], "additionalProperties": false},
+    "tool_parity": {"type": "object", "required": ["profile", "required_tools", "network", "context", "human_intervention"]},
+    "measurement_contract": {"type": "object", "required": ["provider_metrics", "missing_value", "token_policy", "cost_policy", "regression_policy", "retention"]},
+    "protected_paths": {"type": "array", "contains": {"const": "VERSION.toml"}},
+    "tasks": {"type": "array", "minItems": 10, "maxItems": 10, "items": {"type": "object", "required": ["id", "ordinal", "hypothesis", "spec", "fixture"]}}
+  },
+  "additionalProperties": false
+}

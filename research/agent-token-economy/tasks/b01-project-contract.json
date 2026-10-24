@@ -1,0 +1,15 @@
+{
+  "schema": "seloryn.agent-token-economy.task",
+  "schema_version": 1,
+  "id": "B-01",
+  "ordinal": 6,
+  "frozen": true,
+  "hypothesis": "B",
+  "title": "Integrate a strict project contract",
+  "prompt": "In the current Seloryn checkout, add or repair the bounded project-manifest workflow from the task fixture. Valid configuration must resolve an entry point; malformed, future or wrong-typed configuration must fail before source execution with a structured diagnostic. Do not change VERSION.toml, publish, or use the network. Emit only the observable acceptance fields in the task-named adapter file.",
+  "deliverable": {"kind": "repository-change-and-adapter", "adapter_file": "submission-b-01.json", "required_observations": ["valid_project_resolves", "malformed_rejected", "future_version_rejected", "preflight_before_execution"]},
+  "acceptance": {"fixture": "fixtures/b01-project-contract", "command": ["python", "fixtures/b01-project-contract/accept-b-01.py", "{workspace}"], "independent": true},
+  "tool_parity": {"profile": "parity-v1", "network": "disabled"},
+  "limits": ["local manifest only", "no registry or package download", "no VERSION.toml change", "no release or push"],
+  "provider_telemetry": ["tokens", "calls", "attempts", "duration_seconds", "cost_usd", "success", "human_intervention", "files_changed", "lines_added", "lines_deleted", "regressions"]
+}

@@ -1,0 +1,15 @@
+{
+  "schema": "seloryn.agent-token-economy.task",
+  "schema_version": 1,
+  "id": "B-04",
+  "ordinal": 9,
+  "frozen": true,
+  "hypothesis": "B",
+  "title": "Recover a local job lease safely",
+  "prompt": "In the current Seloryn checkout, add or repair the bounded local job lifecycle case from the task fixture. Preflight must be read-only, leases must be atomic and expirable, stale ownership must not be accepted, and recovery must be event-authoritative. Do not invent a worker or remote execution system. Do not change VERSION.toml, publish, or use the network. Emit only the observable acceptance fields in the task-named adapter file.",
+  "deliverable": {"kind": "repository-change-and-adapter", "adapter_file": "submission-b-04.json", "required_observations": ["read_only_preflight", "atomic_lease", "stale_owner_rejected", "event_authoritative_recovery"]},
+  "acceptance": {"fixture": "fixtures/b04-job-recovery", "command": ["python", "fixtures/b04-job-recovery/accept-b-04.py", "{workspace}"], "independent": true},
+  "tool_parity": {"profile": "parity-v1", "network": "disabled"},
+  "limits": ["local coordination only", "no worker, retry or remote execution", "no VERSION.toml change", "no release or push"],
+  "provider_telemetry": ["tokens", "calls", "attempts", "duration_seconds", "cost_usd", "success", "human_intervention", "files_changed", "lines_added", "lines_deleted", "regressions"]
+}

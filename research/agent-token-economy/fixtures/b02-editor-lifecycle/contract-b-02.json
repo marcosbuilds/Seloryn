@@ -1,0 +1,1 @@
+{"task_id":"B-02","required_observations":["monotonic_versions","stale_change_rejected","close_clears_state","framing_validated"]}

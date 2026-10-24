@@ -1,0 +1,15 @@
+{
+  "schema": "seloryn.agent-token-economy.task",
+  "schema_version": 1,
+  "id": "A-02",
+  "ordinal": 2,
+  "frozen": true,
+  "hypothesis": "A",
+  "title": "Preserve a fallibility boundary",
+  "prompt": "In the current Seloryn checkout, implement or repair the bounded Option/Result boundary from the task fixture. The accepted path must remain explicit and the invalid path must be rejected with a stable typed diagnostic rather than an implicit conversion. Add a deterministic acceptance regression. Do not change VERSION.toml, publish, or use the network. Emit only the observable acceptance fields in the task-named adapter file.",
+  "deliverable": {"kind": "repository-change-and-adapter", "adapter_file": "submission-a-02.json", "required_observations": ["explicit_success_path", "invalid_conversion_rejected", "diagnostic_code", "negative_case"]},
+  "acceptance": {"fixture": "fixtures/a02-fallibility-boundary", "command": ["python", "fixtures/a02-fallibility-boundary/accept-a-02.py", "{workspace}"], "independent": true},
+  "tool_parity": {"profile": "parity-v1", "network": "disabled"},
+  "limits": ["no broad type-system redesign", "no hidden exception path", "no VERSION.toml change", "no release or push"],
+  "provider_telemetry": ["tokens", "calls", "attempts", "duration_seconds", "cost_usd", "success", "human_intervention", "files_changed", "lines_added", "lines_deleted", "regressions"]
+}

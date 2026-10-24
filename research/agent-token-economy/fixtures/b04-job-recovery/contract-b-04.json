@@ -1,0 +1,1 @@
+{"task_id":"B-04","required_observations":["read_only_preflight","atomic_lease","stale_owner_rejected","event_authoritative_recovery"]}

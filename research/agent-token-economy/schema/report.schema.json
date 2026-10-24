@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://seloryn.dev/schemas/agent-token-economy-report-v1.json",
+  "title": "Agent token economy evaluation report",
+  "type": "object",
+  "required": ["schema", "schema_version", "suite", "mode", "evidence_class", "not_an_evaluation", "results", "hypotheses", "limitations"],
+  "properties": {
+    "schema": {"const": "seloryn.agent-token-economy.report"},
+    "schema_version": {"const": 1},
+    "suite": {"type": "object"},
+    "mode": {"type": "string", "enum": ["dry-run", "replay"]},
+    "evidence_class": {"type": "string"},
+    "not_an_evaluation": {"type": "boolean"},
+    "results": {"type": "array"},
+    "hypotheses": {"type": "object", "required": ["A", "B"]},
+    "limitations": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

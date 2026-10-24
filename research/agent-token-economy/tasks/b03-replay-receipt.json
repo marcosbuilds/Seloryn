@@ -1,0 +1,15 @@
+{
+  "schema": "seloryn.agent-token-economy.task",
+  "schema_version": 1,
+  "id": "B-03",
+  "ordinal": 8,
+  "frozen": true,
+  "hypothesis": "B",
+  "title": "Make a bounded receipt replayable",
+  "prompt": "In the current Seloryn checkout, add or repair the bounded receipt/replay case from the task fixture. A successful local receipt must carry stable identity and be replayable; tampering and duplicate-key input must be rejected; paths must be redacted. Do not change VERSION.toml, publish, or use the network. Emit only the observable acceptance fields in the task-named adapter file.",
+  "deliverable": {"kind": "repository-change-and-adapter", "adapter_file": "submission-b-03.json", "required_observations": ["identity_bound", "successful_replay", "tamper_rejected", "path_redacted"]},
+  "acceptance": {"fixture": "fixtures/b03-replay-receipt", "command": ["python", "fixtures/b03-replay-receipt/accept-b-03.py", "{workspace}"], "independent": true},
+  "tool_parity": {"profile": "parity-v1", "network": "disabled"},
+  "limits": ["local receipt only", "no credentials or raw prompts", "no VERSION.toml change", "no release or push"],
+  "provider_telemetry": ["tokens", "calls", "attempts", "duration_seconds", "cost_usd", "success", "human_intervention", "files_changed", "lines_added", "lines_deleted", "regressions"]
+}
