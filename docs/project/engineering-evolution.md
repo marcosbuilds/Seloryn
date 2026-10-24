@@ -23,7 +23,7 @@ AUDIT -> PLAN -> IMPLEMENT -> TEST -> REVIEW -> MEASURE -> INTEGRATE -> VERIFY
 |---|---|---|---|
 | P0 — Integrity | Baseline preserved, CI failures investigated, supported-platform CI green, no weakened correctness tests | **Complete for the current restoration slice** | [CI run 40](https://github.com/marcosbuilds/Seloryn/actions/runs/40058223002), commits [`fccdbf4`](https://github.com/marcosbuilds/Seloryn/commit/fccdbf4916a5aac4e09e3c9dc4db7145ae39acbd), [`66e4c93`](https://github.com/marcosbuilds/Seloryn/commit/66e4c93517ca9a610a43a6ca374cdb115f04eafb), [`e0f22b7`](https://github.com/marcosbuilds/Seloryn/commit/e0f22b72ad747141db6f1051eb91edee7fe5fcc5) |
 | P1 — Organization | Public documentation agrees with implementation; `master` and historical refs preserved; integration and release policy are explicit | **In progress** | Documentation corrections are landed. GitHub reports `master` unprotected and no rulesets; owner/admin configuration is still required. |
-| P2 — Evidence | Conformance, benchmark and comparison proofs are reproducible, independent and honest about limits | **Conformance foundation implemented; cross-platform integration pending** | [`conformance.md`](conformance.md), [`conformance_matrix.json`](../../tests/conformance_matrix.json) and [`conformance.py`](../../scripts/ci/conformance.py) map 23 capabilities to 38 existing probes, source paths, platform requirements and limits. The isolated Windows run passed core, editor, hardware, release and benchmark suites; this unpushed worktree still needs the new workflow to run on Linux/macOS. No general performance superiority or AI token-economy claim is accepted. |
+| P2 — Evidence | Conformance, benchmark and comparison proofs are reproducible, independent and honest about limits | **Conformance foundation implemented; sanitized artifact integration pending remote verification** | [`conformance.md`](conformance.md), [`conformance_matrix.json`](../../tests/conformance_matrix.json) and [`conformance.py`](../../scripts/ci/conformance.py) map 23 capabilities to 38 existing probes, source paths, platform requirements and limits. The workflow validates that matrix and preserves sanitized machine-readable summaries per OS while the existing probes remain blocking. No general performance superiority or AI token-economy claim is accepted. |
 | P3 — Developer experience | Diagnostics, CLI/LSP and agent-facing inspection improvements have measurable acceptance criteria | **Bounded slices verified; continuation open** | Current LSP, diagnostics and project-contract probes are documented in [`status.md`](status.md) and [`next-gates.md`](next-gates.md). |
 | P4 — Performance | Changes are selected from measurements and compared under controlled conditions | **Evidence-only baseline** | Shared-runner benchmarks are non-blocking. No version gain is recorded without a controlled before/after result. |
 | P5 — AI workflow | Any productivity or token-efficiency claim has a defined experiment and independent measurement | **Not demonstrated** | Existing auditable local-inference proofs do not measure agent tokens, cost, retries or task success. |
@@ -44,6 +44,19 @@ AUDIT -> PLAN -> IMPLEMENT -> TEST -> REVIEW -> MEASURE -> INTEGRATE -> VERIFY
   match the version ledger and receive explicit owner authorization.
 - Every material change is reviewed against the repository contracts and is
   committed only with its relevant local and remote evidence.
+
+## CI evidence artifact contract
+
+The public workflow emits one `seloryn-ci-evidence-<os>` artifact per matrix
+runner. It contains only JSON files following the source-owned
+`seloryn.ci-evidence.v1` schema: one record per benchmark/probe and a
+`manifest.json` with the source commit, runner label, exit status, duration,
+sanitized summary and explicit `passed`, `failed` or `not-run` states. Raw
+stdout/stderr is never persisted. Workspace paths and credential-shaped values
+are redacted, while binary hashes and numerical results remain available for
+review. The wrapped command's exit status remains blocking, and a missing or
+failed expected record makes the manifest incomplete; artifact retention does
+not weaken correctness gates.
 
 ## Active queue
 

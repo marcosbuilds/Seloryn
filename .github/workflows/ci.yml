@@ -49,6 +49,14 @@ jobs:
         run: cargo test --release --all-targets --locked -- --test-threads=1
       - name: Release build
         run: cargo build --release --locked
+      - name: CI evidence helper contract
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name ci-evidence-helper
+          --kind test
+          --
+          python tests/ci_evidence_probe.py
       - name: Build previous release performance baseline
         shell: pwsh
         run: |
@@ -64,22 +72,198 @@ jobs:
           $baselineBinary = Join-Path $baselineRoot ('target/release/' + $binaryName)
           if (-not (Test-Path -LiteralPath $baselineBinary -PathType Leaf)) { throw "baseline binary missing: $baselineBinary" }
           "SELORYN_BASELINE_BINARY=$baselineBinary" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-      - name: Portable public conformance matrix
-        run: python scripts/ci/conformance.py --run --suite core
+      - name: Validate public conformance matrix
+        run: python scripts/ci/conformance.py --validate
+      - name: Independent N1 CLI comparison
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name n1-cli
+          --kind probe
+          --
+          python tests/n1_probe.py
+      - name: Independent N2 CLI comparison
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name n2-cli
+          --kind probe
+          --
+          python tests/n2_probe.py
+      - name: Independent N3a CLI comparison
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name n3a-cli
+          --kind probe
+          --
+          python tests/n3_probe.py
+      - name: Independent N3b tensor autograd comparison
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name n3b-tensor
+          --kind probe
+          --
+          python tests/n3_tensor_probe.py
+      - name: Public projects and bundle probe
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name public-projects
+          --kind probe
+          --
+          python tests/release_probe.py
+      - name: Independent project manifest probe
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name project-manifest
+          --kind probe
+          --
+          python tests/project_manifest_probe.py
+      - name: Independent local import contract probe
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name local-import
+          --kind probe
+          --
+          python tests/import_contract_probe.py
+      - name: Independent CPU MLP training proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name cpu-mlp-training
+          --kind probe
+          --
+          python tests/mlp_training_probe.py
+      - name: Independent hash-chained training stream proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name training-stream
+          --kind probe
+          --
+          python tests/streaming_v2_probe.py
+      - name: Independent Seloryn-authored training proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name self-hosted-mlp
+          --kind probe
+          --
+          python tests/self_hosted_probe.py
+      - name: Independent self-hosted language-model proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name self-hosted-language-model
+          --kind probe
+          --
+          python tests/self_hosted_language_model_probe.py
+      - name: Independent auditable local-inference proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name auditable-local-inference
+          --kind probe
+          --
+          python tests/auditable_local_inference_probe.py
       - name: Reproducible source-owned performance benchmark
         shell: pwsh
         # Shared runners are suitable for collecting comparable evidence, but
         # not for a hard five-sample performance gate. Functional correctness
         # remains blocking; performance promotion requires a controlled review.
-        run: python tests/performance_probe.py --baseline $env:SELORYN_BASELINE_BINARY --runs 5
-      - name: Hardware conformance matrix when an adapter exists
-        run: python scripts/ci/conformance.py --run --suite hardware
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name performance
+          --kind benchmark
+          --
+          python tests/performance_probe.py
+          --baseline "$env:SELORYN_BASELINE_BINARY"
+          --runs 5
+      - name: Operational reliability and workspace confinement proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name operational-reliability
+          --kind probe
+          --
+          python tests/operational_reliability_probe.py
+      - name: Job lifecycle contract proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name job-lifecycle
+          --kind probe
+          --
+          python tests/job_lifecycle_probe.py
+      - name: Job lease contract proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name job-lease
+          --kind probe
+          --
+          python tests/job_lease_probe.py
+      - name: Job recovery contract proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name job-recovery
+          --kind probe
+          --
+          python tests/job_recovery_probe.py
+      - name: Job concurrency contract proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name job-concurrency
+          --kind probe
+          --
+          python tests/job_concurrency_probe.py
+      - name: Job preflight contract proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name job-preflight
+          --kind probe
+          --
+          python tests/job_preflight_probe.py
+      - name: Python/Seloryn language-model comparison
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name language-model-comparison
+          --kind probe
+          --
+          python tests/compare_language_model.py
+      - name: GPU compute probe when an adapter exists
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name gpu-compute
+          --kind probe
+          --
+          python tests/gpu_probe.py
+      - name: GPU linear training proof when an adapter exists
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name gpu-training
+          --kind probe
+          --
+          python tests/gpu_training_probe.py
       - name: Install VS Code packaging dependencies
         run: npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
-      - name: Editor conformance matrix
-        run: python scripts/ci/conformance.py --run --suite editor
-      - name: Release and installer conformance matrix
-        run: python scripts/ci/conformance.py --run --suite release
+      - name: Build deterministic VSIX preview
+        run: npm run package --prefix tooling/vscode
+      - name: VS Code extension and CLI diagnostic integration
+        run: npm run test:cli --prefix tooling/vscode
+      - name: VS Code extension metadata and API-double tests
+        run: npm test --prefix tooling/vscode
       - name: PowerShell 5.1 CLI smoke
         if: runner.os == 'Windows'
         shell: powershell
@@ -116,3 +300,26 @@ jobs:
           if errorlevel 66 exit /b 1
           if not errorlevel 65 exit /b 1
           exit /b 0
+      - name: Windows installer and terminal lifecycle
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: .\tests\installer_probe.ps1
+      - name: Finalize sanitized CI evidence
+        if: always()
+        run: >
+          python scripts/ci/ci_evidence.py finalize
+          --output-dir .ci-evidence
+          --expected ci-evidence-helper n1-cli n2-cli n3a-cli n3b-tensor
+          public-projects project-manifest local-import cpu-mlp-training
+          training-stream self-hosted-mlp self-hosted-language-model
+          auditable-local-inference performance operational-reliability
+          job-lifecycle job-lease job-recovery job-concurrency job-preflight
+          language-model-comparison gpu-compute gpu-training
+      - name: Upload sanitized CI evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: seloryn-ci-evidence-${{ matrix.os }}
+          path: .ci-evidence
+          if-no-files-found: error
+          retention-days: 30
