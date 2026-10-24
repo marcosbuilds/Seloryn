@@ -7,7 +7,7 @@ release claim.
 
 | Phase | Current state | Evidence in this candidate | Remaining gate |
 |---|---|---|---|
-| P0 — integrity and trust | Verified for the declared platforms | Locked Rust gates, Python probes, release build, CI run [#55](https://github.com/marcosbuilds/Seloryn/actions/runs/40105464169), sanitized evidence workflow | Independent PR approval before integration to `master` |
+| P0 — integrity and trust | Verified for the declared platforms when the current PR head's workflow is green | Locked Rust gates, Python probes, release build, [PR checks](https://github.com/marcosbuilds/Seloryn/pull/1/checks), sanitized evidence workflow | Independent PR approval before integration to `master` |
 | P1 — repository organization | Verified | `master` preserved, no `main` branch, About metadata, active `Protect master - verified CI` ruleset, naming and filename policies | Apply the same policy to later PRs; no release publication is implied |
 | P2 — public proofs | Verified in bounded scope | `tests/conformance_matrix.json`, `scripts/ci/conformance.py`, `benchmarks/runner.py`, six benchmark contracts, token-pair fixtures and schemas | More repeated controlled samples and provider exports before performance/productivity claims |
 | P3 — AI developer experience | Verified bounded slice | `seloryn inspect`, `seloryn.analysis.v1`, redacted `seloryn.context.v1`, LSP and structured-inspection probe | Indexed/incremental analysis, rename and broader change tooling remain future work |

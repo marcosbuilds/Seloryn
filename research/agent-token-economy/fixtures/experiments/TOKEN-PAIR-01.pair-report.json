@@ -1,6 +1,72 @@
 {
   "conditions": {
     "python": {
+      "meter": {
+        "environment": {
+          "network": "disabled",
+          "seed": 0
+        },
+        "local_visible": true,
+        "local_visible_usage": {
+          "input": {
+            "present": true,
+            "scope": "visible_text_fields_only",
+            "text_present": true,
+            "text_sha256": "477881fc7f1c16f440717857978771e8574538456fc2b301e73239f8a80388d7",
+            "tokens": 99,
+            "unicode_codepoints": 421,
+            "utf8_bytes": 421
+          },
+          "output": {
+            "present": true,
+            "scope": "visible_text_fields_only",
+            "text_present": true,
+            "text_sha256": "5d4e99c5198da21317f273f2220856132026b916c655175d89fceab7f5b1ad54",
+            "tokens": 210,
+            "unicode_codepoints": 540,
+            "utf8_bytes": 540
+          },
+          "scope": "visible_text_fields_only"
+        },
+        "not_provider_billing": true,
+        "privacy": {
+          "content_identity": "sha256_only",
+          "environment": "sanitized",
+          "raw_content": "redacted_by_default"
+        },
+        "provider_usage": {
+          "cached_input_tokens": null,
+          "input_tokens": null,
+          "output_tokens": null,
+          "present": false,
+          "reasoning_tokens": null,
+          "reported_fields": [],
+          "source": "missing",
+          "total_tokens": null
+        },
+        "record_id": null,
+        "schema": "seloryn.agent-meter",
+        "schema_version": 1,
+        "status": "measured",
+        "tokenizer": {
+          "available": true,
+          "library": "tiktoken",
+          "model": "gpt-4o",
+          "requested_encoding": null,
+          "resolved_encoding": "o200k_base",
+          "version": "0.14.0"
+        },
+        "uncertainty": {
+          "local_visible_text": "complete",
+          "provider_billing": "unknown",
+          "reasons": [
+            "message_wrappers_not_counted",
+            "provider_usage_missing",
+            "reasoning_or_hidden_tokens_not_visible"
+          ],
+          "status": "partial"
+        }
+      },
       "token_count": {
         "condition": "python",
         "evidence_class": "visible-transcript-only",
@@ -99,6 +165,72 @@
       }
     },
     "seloryn": {
+      "meter": {
+        "environment": {
+          "network": "disabled",
+          "seed": 0
+        },
+        "local_visible": true,
+        "local_visible_usage": {
+          "input": {
+            "present": true,
+            "scope": "visible_text_fields_only",
+            "text_present": true,
+            "text_sha256": "477881fc7f1c16f440717857978771e8574538456fc2b301e73239f8a80388d7",
+            "tokens": 99,
+            "unicode_codepoints": 421,
+            "utf8_bytes": 421
+          },
+          "output": {
+            "present": true,
+            "scope": "visible_text_fields_only",
+            "text_present": true,
+            "text_sha256": "602d19e2c654cc2089002dc1dcaa3956786a34412f4d5abf6f9be5774d0b17e0",
+            "tokens": 7,
+            "unicode_codepoints": 24,
+            "utf8_bytes": 24
+          },
+          "scope": "visible_text_fields_only"
+        },
+        "not_provider_billing": true,
+        "privacy": {
+          "content_identity": "sha256_only",
+          "environment": "sanitized",
+          "raw_content": "redacted_by_default"
+        },
+        "provider_usage": {
+          "cached_input_tokens": null,
+          "input_tokens": null,
+          "output_tokens": null,
+          "present": false,
+          "reasoning_tokens": null,
+          "reported_fields": [],
+          "source": "missing",
+          "total_tokens": null
+        },
+        "record_id": null,
+        "schema": "seloryn.agent-meter",
+        "schema_version": 1,
+        "status": "measured",
+        "tokenizer": {
+          "available": true,
+          "library": "tiktoken",
+          "model": "gpt-4o",
+          "requested_encoding": null,
+          "resolved_encoding": "o200k_base",
+          "version": "0.14.0"
+        },
+        "uncertainty": {
+          "local_visible_text": "complete",
+          "provider_billing": "unknown",
+          "reasons": [
+            "message_wrappers_not_counted",
+            "provider_usage_missing",
+            "reasoning_or_hidden_tokens_not_visible"
+          ],
+          "status": "partial"
+        }
+      },
       "token_count": {
         "condition": "seloryn",
         "evidence_class": "visible-transcript-only",
@@ -171,6 +303,7 @@
     "seed": 0
   },
   "evidence_class": "paired-visible-transcript-local-reconstruction",
+  "git_commit": "12ae9e32d0f7ecfa9ef4820c484d3652b04d6259",
   "interpretation": {
     "cost": "unknown",
     "productivity": "unknown",
@@ -183,7 +316,7 @@
   "observed_environment": {
     "platform": "Windows-10-10.0.26200-SP0",
     "python": "3.10.0",
-    "seloryn_binary_sha256": "d9d256b82f80a6b5229eee88d804e5691caf2c5f6e769438765cd4c7b7693754",
+    "seloryn_binary_sha256": "66cdf996d56f7d527d39f3c5f111374f14820de0e3f9b26f3419da3d053cfb2d",
     "tiktoken": "0.14.0"
   },
   "parity": {

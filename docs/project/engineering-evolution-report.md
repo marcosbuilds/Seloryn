@@ -2,11 +2,11 @@
 
 > **Current continuation snapshot (PR):** this report preserves the historical
 > `master` snapshot below and adds the continuation evidence from branch
-> `proof/token-pair-and-governance`. The current candidate is commit `5454c41`
-> and is reviewed through pull request
+> `proof/token-pair-and-governance`. The current candidate is the head of pull
+> request
 > [#1](https://github.com/marcosbuilds/Seloryn/pull/1). Its required CI run is
-> [run #55](https://github.com/marcosbuilds/Seloryn/actions/runs/40105464169),
-> with Ubuntu 24.04, macOS 15 and Windows 2022 successful. The pull request is
+> shown on the [PR checks page](https://github.com/marcosbuilds/Seloryn/pull/1/checks);
+> the three-platform workflow must be successful for the current head. The pull request is
 > intentionally still open because the active `Protect master - verified CI`
 > ruleset requires one independent approval; no approval is fabricated here.
 
@@ -21,9 +21,13 @@ Evidence snapshot commit: `ac4b7a30a568662c31bf2954686198651859fd4d`
 Report commits: `a091ef3`, `235df5c`
 
 Current candidate branch: `proof/token-pair-and-governance`
-Current candidate commit: `5454c41df02532f02b786f6e6eb71ac8f7ef40aa`
+Current candidate commit: see the PR head and corresponding CI artifact manifest
 
 ## Executive result
+
+Sections A–G below are the historical `master` evidence snapshot identified
+above. Section H and the linked program-coverage matrix describe the current
+continuation candidate.
 
 The restoration and evidence program was executed through implementation,
 independent review, local verification, remote CI and documentation. The
@@ -88,7 +92,11 @@ The developer-experience change was independently implemented in worktree
 project resolver, semantic checker and `seloryn.analysis.v1` envelope; it does
 not claim indexed analysis, incremental parsing, rename or formatter support.
 
-## C. GitHub organization and release governance
+## C. Historical GitHub organization and release governance
+
+This section describes the historical `master` snapshot named at the top of
+the report. The current PR configuration is recorded in Section H and in the
+program-coverage matrix.
 
 - Public source of truth remains `master`.
 - Research/proof work was isolated in agent worktrees and integrated only after
@@ -122,10 +130,10 @@ Local Windows validation at the final implementation state:
 | Token adapter tests | 3 tests passed with `tiktoken 0.14.0` |
 | Visible transcript test and schema validation | passed; transcript report generated |
 
-The remote run #48 passed all three supported CI matrix jobs, including the
+The historical remote run #48 passed all three supported CI matrix jobs, including the
 release build/tests, benchmark contract validation, structured inspection,
 editor checks, reliability probes and sanitized evidence finalization. It
-retained these artifacts through 2026-11-23:
+retained these artifacts according to the workflow's configured retention:
 
 - `seloryn-ci-evidence-ubuntu-24.04`, SHA-256
   `7ecc113b50abb6829e732cae14ccadd0b09ad80325a93655a00bd50e03b3f45a`;
@@ -282,7 +290,8 @@ the agent-runtime and token-economy audit. It adds:
   model-specific BPE tokens and provider-reported usage separate;
 - the frozen `TOKEN-PAIR-01` Python/Seloryn experiment with identical visible
   prompt, manifest, model and encoding, while explicitly recording
-  `functionally_equivalent: false`;
+  `functionally_equivalent: false`, the source commit and the Seloryn binary
+  hash;
 - the filename audit and naming policy. `tensor_get_f32` remains canonical:
   its `tensor_` namespace, operation and dtype are all part of the published
   meaning. Ambiguous aliases such as `getf32`, `ten_get_f32` and
@@ -293,8 +302,9 @@ the agent-runtime and token-economy audit. It adds:
 The current candidate was validated locally with formatting, locked Rust
 check/test/clippy/release-build gates, the meter and pair tests, structured
 inspection, job-worker/lifecycle/recovery/preflight probes, and the frozen
-agent-evaluation suite. The remote run #55 is the cross-platform authority for
-the current commit.
+agent-evaluation suite. The current PR checks page is the cross-platform
+authority for its head; CI artifact manifests identify the exact commit,
+runner and binary hashes for each completed run.
 
 The current candidate still does **not** claim general LLM/transformer
 training, full GPU tensor/autodiff/MLP support, distributed execution, a
