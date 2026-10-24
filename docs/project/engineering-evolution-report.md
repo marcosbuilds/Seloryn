@@ -104,7 +104,8 @@ program-coverage matrix.
   completed slices.
 - The final CI workflow run is [run #48](https://github.com/marcosbuilds/Seloryn/actions/runs/40063341549),
   triggered by the final commit, with Ubuntu, macOS and Windows jobs successful.
-- GitHub returned no repository rulesets and `master` is still unprotected.
+- Historical snapshot: GitHub returned no repository rulesets and `master` was
+  still unprotected at that time; the current ruleset is recorded in Section H.
   This is the remaining owner/admin blocker. The required action is to enable
   branch protection or a ruleset requiring the `Verify Seloryn` checks, review
   policy, no force-push and no deletion.
