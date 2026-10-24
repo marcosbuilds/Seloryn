@@ -1,0 +1,17 @@
+{
+  "schema": "seloryn.agent-visible-transcript.v1",
+  "run_id": "TOKEN-AGENT-01",
+  "task_id": "tokenization-documentation-validation",
+  "condition": "seloryn-local-agent",
+  "capture_scope": "user_prompt_and_agent_final_only",
+  "messages": [
+    {
+      "role": "user",
+      "text": "Execute o experimento congelado TOKEN-AGENT-01 no repositório Seloryn, sem editar, criar, apagar ou commitar arquivos. Tarefa: (1) leia research/agent-token-economy/token_count.py e transcript_token_count.py; (2) execute localmente o contador para exatamente estes textos, usando o modelo gpt-4o: \"hello world\", \"caractere por caractere\", \"Tensor[F32, shape=[2, 2]]\"; (3) verifique se os resultados distinguem codepoints, bytes UTF-8 e tokens; (4) responda com um resumo curto contendo os três resultados e as limitações: BPE/modelo-específico, texto visível apenas, não é cobrança OpenAI. Não faça alegações de produtividade ou economia. Este é um experimento de validação documental, não uma alteração de produto."
+    },
+    {
+      "role": "assistant",
+      "text": "Experimento TOKEN-AGENT-01 concluído localmente com `gpt-4o` (`o200k_base`, `tiktoken 0.14.0`):\n\n| Texto | Codepoints | Bytes UTF-8 | Tokens |\n|---|---:|---:|---:|\n| `hello world` | 11 | 11 | 2 |\n| `caractere por caractere` | 23 | 23 | 6 |\n| `Tensor[F32, shape=[2, 2]]` | 25 | 25 | 11 |\n\nOs resultados distinguem tokens de codepoints/bytes; neste conjunto ASCII, codepoints e bytes coincidem, mas os tokens não.\n\nLimitações: contagem BPE específica do modelo; considera apenas texto visível; não representa cobrança ou contabilidade da OpenAI.\n\nNenhum arquivo foi editado, criado, apagado ou commitado. As alterações Git listadas já existiam."
+    }
+  ]
+}

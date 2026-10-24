@@ -16,6 +16,22 @@ equals one token and it is not a provider billing oracle. A transcript can be
 measured with `--model` or an explicit encoding after installing the optional
 requirements file.
 
+For an agent experiment, export a transcript using the
+`seloryn.agent-visible-transcript.v1` shape and run
+`research/agent-token-economy/transcript_token_count.py`. The result separates
+visible input-role and assistant-role text and is labelled
+`visible-transcript-only`; it cannot establish billed totals or a language
+advantage without paired provider telemetry.
+
+The first real bounded validation is preserved as
+[`TOKEN-AGENT-01.json`](../../research/agent-token-economy/fixtures/experiments/TOKEN-AGENT-01.json).
+One subagent executed the fixed three-string task against `gpt-4o` and reported
+`hello world` as 2 tokens, `caractere por caractere` as 6, and
+`Tensor[F32, shape=[2, 2]]` as 11 under `o200k_base`/`tiktoken 0.14.0`.
+This proves the local instrument distinguishes visible BPE tokens from
+codepoints and bytes; it does not prove provider billing, hidden-context
+accounting, productivity, or token economy.
+
 This change adds the measurement instrument only. No external model was
 controlled, no provider result was fabricated, no token total or cost was
 estimated, and no productivity or token-efficiency advantage has been
@@ -31,6 +47,7 @@ python research/agent-token-economy/runner.py dry-run
 python research/agent-token-economy/runner.py replay --records research/agent-token-economy/fixtures/replay/provider-records.jsonl --workspace research/agent-token-economy/fixtures/replay/workspaces
 python research/agent-token-economy/tests/test_runner.py
 python research/agent-token-economy/tests/test_token_count.py
+python research/agent-token-economy/tests/test_transcript_token_count.py
 ```
 
 The current result is intentionally inconclusive. The kit records acceptance

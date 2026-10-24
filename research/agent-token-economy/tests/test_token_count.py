@@ -39,6 +39,24 @@ class TokenCountContractTests(unittest.TestCase):
         self.assertGreater(result["units"]["tokens"], 0)
         self.assertEqual(result["tokens"][-1]["byte_end"], result["units"]["utf8_bytes"])
 
+    def test_documentation_validation_strings_have_reproducible_counts(self) -> None:
+        expected = {
+            "hello world": (11, 11, 2),
+            "caractere por caractere": (23, 23, 6),
+            "Tensor[F32, shape=[2, 2]]": (25, 25, 11),
+        }
+        for text, units in expected.items():
+            result = MODULE.count_text(text, model="gpt-4o")
+            self.assertEqual(
+                (
+                    result["units"]["unicode_codepoints"],
+                    result["units"]["utf8_bytes"],
+                    result["units"]["tokens"],
+                ),
+                units,
+                text,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

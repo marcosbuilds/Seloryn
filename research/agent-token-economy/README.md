@@ -36,6 +36,14 @@ budget must be used for every compared condition.
   encodings. It reports Unicode code points, UTF-8 bytes and tokens as
   separate units and marks the result as a local reconstruction, never as API
   billing.
+- `transcript_token_count.py` — applies the adapter to a visible agent
+  transcript and separates input-role and assistant-role text. Hidden context,
+  tool serialization and provider billing remain explicitly unknown.
+- `schema/visible-transcript.schema.json` — contract for the minimized visible
+  transcript envelope.
+- `fixtures/experiments/TOKEN-AGENT-01.json` — real bounded subagent transcript
+  used to validate the documentation claim. It captures only the user prompt
+  and final assistant answer; it is not provider telemetry.
 - `tests/test_runner.py` — standard-library tests for validation, dry-run,
   replay and missing-token semantics.
 - `tests/test_token_count.py` — token/character/byte separation checks when the
@@ -61,6 +69,10 @@ python research/agent-token-economy/runner.py replay \
 python research/agent-token-economy/runner.py report --input replay.json --format markdown
 python research/agent-token-economy/tests/test_runner.py
 python research/agent-token-economy/tests/test_token_count.py
+python research/agent-token-economy/tests/test_transcript_token_count.py
+python research/agent-token-economy/transcript_token_count.py \
+  --input research/agent-token-economy/fixtures/experiments/TOKEN-AGENT-01.json \
+  --model gpt-4o
 ```
 
 Install the optional tokenizer adapter with
@@ -69,6 +81,9 @@ Use `token_count.py --model <model> --text <text>` or an explicit
 `--encoding`. A character count, byte count or local reconstruction is never
 substituted for provider-reported usage; chat wrappers, tool calls and hidden
 context can make API billing differ from visible-text tokenization.
+The model-specific BPE premise follows [OpenAI's tokenizer documentation](https://platform.openai.com/tokenizer)
+and the official [`tiktoken`](https://github.com/openai/tiktoken) implementation
+notes; it is not a character-by-character accounting rule.
 
 `replay` does not infer totals from input/output tokens, infer zero from a
 missing field, infer files or lines from a workspace, infer human intervention
