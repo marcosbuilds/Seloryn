@@ -1,12 +1,17 @@
 # Auditoria cirúrgica de nomes de arquivos e diretórios
 
+> **Snapshot histórico:** a inventariação abaixo foi realizada no commit
+> `6218216`. Os números e os caminhos não rastreados são preservados como
+> evidência da auditoria original; a atualização executada no candidato atual
+> aparece ao final deste documento.
+
 ## Escopo e conclusão
 
 Auditoria realizada em `D:/Project/Seloryn/seloryn`, no commit `621821689be96ed987e4ec299a91e952ca527d40`, com foco em caminhos rastreados pelo Git, `research/agent-token-economy`, testes, scripts e workflows.
 
 Nenhum arquivo de código foi alterado. Este relatório é o único arquivo produzido por esta auditoria.
 
-O único candidato que justifica uma simplificação imediata é `research/agent-token-economy/transcript_token_count.py`. A recomendação é introduzir `transcript.py` como nome canônico e manter `transcript_token_count.py` como wrapper de compatibilidade, incluindo o encaminhamento da CLI. Uma renomeação direta não é segura porque o nome está presente em workflow, documentação, teste, no prompt do experimento congelado e no carregamento dinâmico do teste.
+O único candidato que justificava uma simplificação imediata era `research/agent-token-economy/transcript_token_count.py`. Essa migração foi executada: `transcript.py` é o nome canônico e `transcript_token_count.py` permanece como wrapper de compatibilidade, incluindo o encaminhamento da CLI. Uma renomeação direta não seria segura porque o nome histórico está presente em workflow, documentação, teste, no prompt do experimento congelado e no carregamento dinâmico do teste.
 
 Os demais nomes longos são, em sua maioria, contratos ou identificadores úteis: nomes de tarefas congeladas, fixtures, probes independentes, entradas declaradas em `seloryn.toml`, referências de benchmark, scripts por plataforma e relatórios canônicos. Encurtá-los agora reduziria rastreabilidade ou exigiria uma migração ampla sem benefício proporcional.
 
@@ -143,9 +148,26 @@ rg -n --hidden -g "!target" -g "!.git" "self_hosted_language_model_probe|auditab
 
 Também foram usadas consultas PowerShell sobre a saída de `git ls-files` para calcular comprimento de caminho e nome-base, separar os maiores caminhos e contar arquivos por escopo. Para referências de candidatos, foi usada busca literal com `rg -l --fixed-strings`.
 
+## Atualização do estado executado
+
+No candidato atual, a migração do contador foi concluída e validada por
+`research/agent-token-economy/tests/test_transcript.py`, `py_compile`, validação
+de schema e CI. O shim histórico continua preservado. Os demais caminhos
+longos permanecem inalterados porque são contratos, IDs de evidência,
+entrypoints declarados ou nomes que melhoram a descoberta fora do diretório.
+Não há renomeação adicional autorizada por esta auditoria.
+
+| Item | Estado atual | Decisão |
+|---|---|---|
+| `transcript.py` | Implementado como canônico | Manter |
+| `transcript_token_count.py` | Shim compatível histórico | Manter até remoção versionada futura |
+| `test_transcript.py` | Nome canônico do teste | Manter |
+| `tensor_get_f32` | Nome de builtin publicado e semântico | Manter; não criar aliases ambíguos |
+| demais nomes de domínio, probes, fixtures e entrypoints | Contratos rastreáveis | Não renomear cosmeticamente |
+
 ## Limitações da auditoria
 
 - Referências construídas dinamicamente, aliases de shell, caches, artefatos gerados e nomes mantidos fora do repositório não podem ser provados apenas por busca textual.
 - `rg -l` mede referências textuais; não prova que uma referência é executada nem detecta todos os usos indiretos por glob, importação dinâmica ou convenção.
-- O inventário rastreado contém 353 arquivos; os cinco caminhos não rastreados em `research/agent-token-economy/paired/` foram somente observados e ficaram fora da recomendação de renomeação.
-- Nenhuma renomeação, atualização de workflow, alteração de manifest ou teste de migração foi realizada, pois o escopo desta tarefa era produzir somente a auditoria.
+- O inventário histórico rastreado contém 353 arquivos; os cinco caminhos não rastreados em `research/agent-token-economy/paired/` foram somente observados e ficaram fora da recomendação de renomeação.
+- A auditoria original não realizou renomeações; a migração posterior do contador foi executada em alteração separada, com wrapper e testes preservados.

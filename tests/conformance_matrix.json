@@ -235,6 +235,15 @@
       "notes": "Read-only seloryn-run.v1 source validation and confinement rejection."
     },
     {
+      "id": "job-worker",
+      "path": "tests/job_worker_probe.py",
+      "command": ["python", "tests/job_worker_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "local process"],
+      "notes": "Bounded direct-process worker, lease fencing, cancellation/timeout cleanup and committed result receipt."
+    },
+    {
       "id": "language-model-comparison",
       "path": "tests/compare_language_model.py",
       "command": ["python", "tests/compare_language_model.py"],
@@ -536,13 +545,13 @@
       "area": "operations",
       "claim": "Local job spec/state/event contracts, read-only preflight and bounded reservation lease.",
       "status": "experimental-implemented",
-      "implementation": ["src/job.rs"],
-      "positive_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight"],
-      "negative_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight"],
+      "implementation": ["src/job.rs", "src/job_worker.rs", "src/main.rs"],
+      "positive_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight", "job-worker"],
+      "negative_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight", "job-worker"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary", "local filesystem"],
       "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
-      "limits": ["No worker, process fencing, retry, remote execution or live-process recovery is claimed."]
+      "limits": ["The worker is direct-process and bounded; no descendant process-group/job-object fencing, retry, remote execution or escaped-child recovery is claimed."]
     },
     {
       "id": "operational-reliability",

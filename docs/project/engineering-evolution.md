@@ -23,8 +23,8 @@ The consolidated outcome is recorded in the [final evidence report](engineering-
 
 | Stage | Acceptance scope | State | Evidence or blocker |
 |---|---|---|---|
-| P0 — Integrity | Baseline preserved, CI failures investigated, supported-platform CI green, no weakened correctness tests | **Complete for the current restoration slice** | [CI run 40](https://github.com/marcosbuilds/Seloryn/actions/runs/40058223002), commits [`fccdbf4`](https://github.com/marcosbuilds/Seloryn/commit/fccdbf4916a5aac4e09e3c9dc4db7145ae39acbd), [`66e4c93`](https://github.com/marcosbuilds/Seloryn/commit/66e4c93517ca9a610a43a6ca374cdb115f04eafb), [`e0f22b7`](https://github.com/marcosbuilds/Seloryn/commit/e0f22b72ad747141db6f1051eb91edee7fe5fcc5) |
-| P1 — Organization | Public documentation agrees with implementation; `master` and historical refs preserved; integration and release policy are explicit | **In progress** | Documentation corrections are landed. GitHub reports `master` unprotected and no rulesets; owner/admin configuration is still required. |
+| P0 — Integrity | Baseline preserved, CI failures investigated, supported-platform CI green, no weakened correctness tests | **Complete for the current candidate when run #56 finishes** | [CI run #56](https://github.com/marcosbuilds/Seloryn/actions/runs/40106473930), plus the local locked Rust/Python gates. |
+| P1 — Organization | Public documentation agrees with implementation; `master` and historical refs preserved; integration and release policy are explicit | **Verified for repository configuration; PR approval pending** | The active [Protect master - verified CI ruleset](https://github.com/marcosbuilds/Seloryn/rules/25783776) requires one independent approval, conversation resolution and Ubuntu/macOS/Windows checks before merge. |
 | P2 — Evidence | Conformance, benchmark and comparison proofs are reproducible, independent and honest about limits | **Conformance and benchmark correctness contracts verified on the current host** | [`conformance.md`](conformance.md) and the public [`Benchmark Suite`](../../benchmarks/README.md) provide executable contracts. The local six-case run passes BENCH-01 through BENCH-06 after the independent BENCH-04 oracle was aligned to the candidate's declared `Tensor[F32]` arithmetic. CI validates both suites, publishes sanitized evidence and retains advisory per-OS reports; no general performance superiority or AI token-economy claim is accepted. |
 | P3 — Developer experience | Diagnostics, CLI/LSP and agent-facing inspection improvements have measurable acceptance criteria | **Bounded inspection slice verified; continuation open** | `seloryn inspect` now provides compact resolved-file symbols, imports and diagnostics in `seloryn.analysis.v1`; the release probe and LSP regression pass. Indexed/incremental analysis and rename remain outside the gate. |
 | P4 — Performance | Changes are selected from measurements and compared under controlled conditions | **Measured baseline; optimization not accepted** | Commit [`117dc93`](https://github.com/marcosbuilds/Seloryn/commit/117dc93) adds six paired stdlib-reference cases with median/p95 reporting and no aggregate score. The current correctness run passes all six cases; timing remains case-local, descriptive and advisory, so no version gain is recorded. |
@@ -62,8 +62,8 @@ not weaken correctness gates.
 
 ## Active queue
 
-1. Obtain or document GitHub owner/admin action for branch protection and the
-   required `Verify Seloryn` status checks.
+1. Obtain the required independent approval for PR #1 and merge only after
+   the protected-branch checks remain green.
 2. Increase controlled benchmark samples on a declared host when a performance
    decision is needed; preserve the existing correctness and timing reports and
    do not convert shared-runner timing into a product claim.
@@ -73,7 +73,7 @@ not weaken correctness gates.
    written; the current job boundary authorizes only the verified direct
    Seloryn worker slice and does not authorize descendant process groups,
    retry/idempotency policy or remote execution.
-5. Build the final report from this ledger, the contract files and the linked
+5. Keep the final report aligned with the current candidate SHA and linked
    executions. Do not mark an item complete from source presence alone.
 
 ## Current release boundary

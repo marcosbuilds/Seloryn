@@ -25,6 +25,7 @@ seloryn job heartbeat <job-id> --lease-id=<id> [--ttl-seconds=<n>] [--root=<dire
 seloryn job release <job-id> --lease-id=<id> [--root=<directory>] [--format=human|json]
 seloryn job recover <job-id> [--root=<directory>] [--format=human|json]
 seloryn job preflight <job-id> [--root=<directory>] [--format=human|json]
+seloryn job run <job-id> [--owner=<owner>] [--binary=<seloryn>] [--root=<directory>] [--format=human|json]
 seloryn lsp --stdio
 ```
 
@@ -165,13 +166,20 @@ ASCII path-safe and valid job operations use versioned JSON envelopes when
 `--format=json` is selected; malformed CLI syntax still uses the global usage
 diagnostic.
 
-This is a contract, persistence and reservation-coordination slice, not a
-worker or scheduler. It does not execute a spec, claim crash recovery of a
-running process, provide process fencing, retry, quotas, remote execution or a
-public registry. `run` remains the
-backward-compatible direct execution command. These limits are intentional
-until a separate worker/supervisor gate proves them with process, concurrency
-and interruption tests.
+`job run` is the bounded local worker for the strict `seloryn-run.v1` source
+contract. It snapshots only the validated source, invokes the validated
+Seloryn binary without a shell or arbitrary executable, fences executor state
+with the lease, applies the configured timeout and cancellation path, bounds
+stdout/stderr to hashes and byte counts, and writes a committed atomic result
+receipt. The behavior is exercised by
+[`tests/job_worker_probe.py`](../../tests/job_worker_probe.py) and the Rust
+worker tests.
+
+This is a direct-process worker, not a general scheduler. It does not claim
+descendant process-group/job-object fencing, retries, quotas, remote
+execution, a public registry or recovery of a child that escaped the worker.
+Those are separate next gates. `run` remains the backward-compatible direct
+source execution command.
 
 ## Future commands
 
