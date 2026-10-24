@@ -1,10 +1,27 @@
 # Seloryn Engineering Evolution — Final Evidence Report
 
-Date: 2026-10-24  
-Repository: `marcosbuilds/Seloryn`  
-Final branch: `master`  
-Evidence snapshot commit: `ac4b7a30a568662c31bf2954686198651859fd4d`  
+> **Current continuation snapshot (PR):** this report preserves the historical
+> `master` snapshot below and adds the continuation evidence from branch
+> `proof/token-pair-and-governance`. The current candidate is commit `5454c41`
+> and is reviewed through pull request
+> [#1](https://github.com/marcosbuilds/Seloryn/pull/1). Its required CI run is
+> [run #55](https://github.com/marcosbuilds/Seloryn/actions/runs/40105464169),
+> with Ubuntu 24.04, macOS 15 and Windows 2022 successful. The pull request is
+> intentionally still open because the active `Protect master - verified CI`
+> ruleset requires one independent approval; no approval is fabricated here.
+
+The historical snapshot is retained so that the report does not rewrite the
+project's prior evidence. The current phase coverage and exact residual gates
+are summarized in [`program-coverage.md`](program-coverage.md).
+
+Date: 2026-10-24
+Repository: `marcosbuilds/Seloryn`
+Historical evidence branch: `master`
+Evidence snapshot commit: `ac4b7a30a568662c31bf2954686198651859fd4d`
 Report commits: `a091ef3`, `235df5c`
+
+Current candidate branch: `proof/token-pair-and-governance`
+Current candidate commit: `5454c41df02532f02b786f6e6eb71ac8f7ef40aa`
 
 ## Executive result
 
@@ -250,3 +267,38 @@ distribution work.
 
 This report is an evidence record, not a release announcement. No release was
 published.
+
+## H. Continuation delta — current candidate
+
+The continuation phase was deliberately scoped to the executable gaps found by
+the agent-runtime and token-economy audit. It adds:
+
+- a bounded `seloryn job run` worker with validated source snapshots, lease
+  fencing, timeout/cancellation cleanup, bounded stdout/stderr evidence and an
+  atomic committed receipt;
+- a deterministic, redacted `seloryn.context.v1` context package for the
+  existing inspection path;
+- a provider-neutral meter that keeps Unicode code points, UTF-8 bytes, local
+  model-specific BPE tokens and provider-reported usage separate;
+- the frozen `TOKEN-PAIR-01` Python/Seloryn experiment with identical visible
+  prompt, manifest, model and encoding, while explicitly recording
+  `functionally_equivalent: false`;
+- the filename audit and naming policy. `tensor_get_f32` remains canonical:
+  its `tensor_` namespace, operation and dtype are all part of the published
+  meaning. Ambiguous aliases such as `getf32`, `ten_get_f32` and
+  `tensor_getr_f32` are not introduced;
+- GitHub About metadata and the protected `master` ruleset, including required
+  review, conversation resolution and three-platform CI checks.
+
+The current candidate was validated locally with formatting, locked Rust
+check/test/clippy/release-build gates, the meter and pair tests, structured
+inspection, job-worker/lifecycle/recovery/preflight probes, and the frozen
+agent-evaluation suite. The remote run #55 is the cross-platform authority for
+the current commit.
+
+The current candidate still does **not** claim general LLM/transformer
+training, full GPU tensor/autodiff/MLP support, distributed execution, a
+package registry, stable ABI, general job supervision, descendant
+process-group fencing, retries, remote workers, provider billing or a measured
+token-economy advantage. Those are documented next gates, not silently
+converted into passes.
