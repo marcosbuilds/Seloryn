@@ -33,6 +33,24 @@ identity fields remain future work; they are not claimed by the current CLI.
 | Runtime | `SEL-R***` | overflow, division by zero, invalid call, collection limit or impossible match |
 | Security | `SEL-S***` | denied network destination |
 | Tooling | `SEL-C***` | unsupported CLI command or target |
+| Job contract | `SEL-J001`–`SEL-J012` | invalid spec, job storage, event history or containment boundary |
+| Job reservation | `SEL-J013`–`SEL-J020` | invalid reservation state, owner/bearer, expiry, identity or TTL |
+
+Job reservation errors are intentionally explicit about the current boundary:
+
+| Code | Meaning |
+|---|---|
+| `SEL-J013` | job state cannot be claimed |
+| `SEL-J014` | another active bearer owns the reservation, or the claim retry is invalid |
+| `SEL-J015` | job is terminal `lost`; create a new job |
+| `SEL-J016` | local reservation lease expired, or is still active for recovery |
+| `SEL-J017` | supplied bearer/owner is not the active one |
+| `SEL-J018` | public transition attempted to write an executor-owned state |
+| `SEL-J019` | persisted lease or attempt identity is inconsistent |
+| `SEL-J020` | TTL is outside the bounded local range |
+
+These errors do not imply that Seloryn has started a worker, proven process
+liveness or fenced a stale process.
 
 ### Runtime failure semantics
 

@@ -79,6 +79,11 @@ struct JobState {
     spec_sha256: String,
     created_at: u64,
     updated_at: u64,
+    owner: Option<String>,
+    attempt_id: Option<String>,
+    claimed_at: Option<u64>,
+    lease_id: Option<String>,
+    lease_expires_at: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +94,13 @@ struct Event {
     to: Status,
     at: u64,
     spec_sha256: String,
+    attempt: Option<u64>,
+    kind: String,
+    owner: Option<String>,
+    attempt_id: Option<String>,
+    claimed_at: Option<u64>,
+    lease_id: Option<String>,
+    lease_expires_at: Option<u64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -115,6 +127,10 @@ enum Operation {
     Create,
     Status,
     Transition,
+    Claim,
+    Heartbeat,
+    Release,
+    Recover,
 }
 
 impl Operation {
@@ -123,6 +139,10 @@ impl Operation {
             Self::Create => "create",
             Self::Status => "status",
             Self::Transition => "transition",
+            Self::Claim => "claim",
+            Self::Heartbeat => "heartbeat",
+            Self::Release => "release",
+            Self::Recover => "recover",
         }
     }
 }
@@ -182,6 +202,11 @@ pub(crate) fn create(
         spec_sha256: spec_sha256.clone(),
         created_at: now,
         updated_at: now,
+        owner: None,
+        attempt_id: None,
+        claimed_at: None,
+        lease_id: None,
+        lease_expires_at: None,
     };
     let event = Event {
         sequence: 0,
@@ -190,6 +215,13 @@ pub(crate) fn create(
         to: Status::Accepted,
         at: now,
         spec_sha256: spec_sha256.clone(),
+        attempt: Some(1),
+        kind: "create".to_owned(),
+        owner: None,
+        attempt_id: None,
+        claimed_at: None,
+        lease_id: None,
+        lease_expires_at: None,
     };
     match fs::create_dir(&temporary) {
         Ok(()) => {
@@ -343,6 +375,12 @@ pub(crate) fn transition(
     ensure_job_contained(root, &directory)?;
     let _lock = JobLock::acquire(&directory)?;
     let mut record = load_record_unlocked(&directory)?;
+    if is_executor_owned(record.state.status) || is_executor_owned(next) {
+        return Err(JobError::new(
+            "SEL-J018",
+            "public transition cannot fabricate or mutate executor-owned state",
+        ));
+    }
     if record.state.status == next {
         return Ok(result_json(
             Operation::Transition,
@@ -351,7 +389,16 @@ pub(crate) fn transition(
             Some(next),
         ));
     }
-    validate_transition(record.state.status, next)?;
+    if record.state.status != Status::Accepted || next != Status::Queued {
+        return Err(JobError::new(
+            "SEL-J005",
+            format!(
+                "public transition {} -> {} is not an administrative transition",
+                record.state.status.as_str(),
+                next.as_str()
+            ),
+        ));
+    }
     let now = unix_seconds();
     let event = Event {
         sequence: record.state.sequence.saturating_add(1),
@@ -360,6 +407,13 @@ pub(crate) fn transition(
         to: next,
         at: now,
         spec_sha256: record.state.spec_sha256.clone(),
+        attempt: Some(record.state.attempt),
+        kind: "admin".to_owned(),
+        owner: record.state.owner.clone(),
+        attempt_id: record.state.attempt_id.clone(),
+        claimed_at: record.state.claimed_at,
+        lease_id: record.state.lease_id.clone(),
+        lease_expires_at: record.state.lease_expires_at,
     };
     let event_path = directory.join("events.jsonl");
     let mut events = fs::read(&event_path)
@@ -387,6 +441,361 @@ pub(crate) fn transition(
         None,
         Some(next),
     ))
+}
+
+pub(crate) fn claim(
+    root: &Path,
+    job_id: &str,
+    requested_owner: Option<&OsStr>,
+    requested_lease_id: Option<&OsStr>,
+    ttl_seconds: u64,
+) -> Result<JsonValue, JobError> {
+    validate_job_id(job_id)?;
+    validate_ttl(ttl_seconds)?;
+    let requested_owner = match requested_owner {
+        Some(value) => Some(
+            value
+                .to_str()
+                .ok_or_else(|| JobError::new("SEL-J014", "lease owner must be valid UTF-8"))?
+                .to_owned(),
+        ),
+        None => None,
+    };
+    if let Some(owner) = &requested_owner {
+        validate_identity(owner, "lease owner")?;
+    }
+    let requested_lease_id = match requested_lease_id {
+        Some(value) => {
+            let value = value
+                .to_str()
+                .ok_or_else(|| JobError::new("SEL-J014", "lease id must be valid UTF-8"))?;
+            validate_lease_id(value)?;
+            Some(value.to_owned())
+        }
+        None => None,
+    };
+    let directory = job_directory(root, job_id);
+    ensure_store_contained(
+        root,
+        directory.parent().expect("job directory has a parent"),
+    )?;
+    ensure_job_contained(root, &directory)?;
+    let _lock = JobLock::acquire(&directory)?;
+    let mut record = load_record_unlocked(&directory)?;
+    match record.state.status {
+        Status::Accepted | Status::Queued => {
+            if record.state.owner.is_some()
+                || record.state.attempt_id.is_some()
+                || record.state.claimed_at.is_some()
+                || record.state.lease_id.is_some()
+                || record.state.lease_expires_at.is_some()
+            {
+                return Err(JobError::new(
+                    "SEL-J019",
+                    "queued job has inconsistent lease identity",
+                ));
+            }
+        }
+        Status::Starting => {
+            if requested_lease_id.is_some()
+                && requested_lease_id.as_deref() == record.state.lease_id.as_deref()
+            {
+                if !lease_active(&record.state, unix_seconds()) {
+                    return Err(JobError::new(
+                        "SEL-J016",
+                        format!("job {job_id} lease expired; recover it explicitly"),
+                    ));
+                }
+                if let Some(requested_owner) = requested_owner.as_deref()
+                    && record.state.owner.as_deref() != Some(requested_owner)
+                {
+                    return Err(JobError::new(
+                        "SEL-J017",
+                        "lease owner does not match the bearer lease",
+                    ));
+                }
+                return Ok(claim_result(&record, true));
+            }
+            if record.state.lease_id.is_some() && !lease_active(&record.state, unix_seconds()) {
+                return Err(JobError::new(
+                    "SEL-J016",
+                    format!("job {job_id} lease expired; recover it explicitly"),
+                ));
+            }
+            return Err(JobError::new(
+                "SEL-J014",
+                format!(
+                    "job {job_id} is busy/in_progress under owner {}",
+                    record.state.owner.as_deref().unwrap_or("unknown")
+                ),
+            ));
+        }
+        Status::Running => {
+            return Err(JobError::new(
+                "SEL-J014",
+                format!("job {job_id} is busy/in_progress"),
+            ));
+        }
+        Status::Lost => {
+            return Err(JobError::new(
+                "SEL-J015",
+                format!("job {job_id} is terminal/lost; create a new job"),
+            ));
+        }
+        status => {
+            return Err(JobError::new(
+                "SEL-J013",
+                format!("job {job_id} cannot be claimed from {}", status.as_str()),
+            ));
+        }
+    }
+    let owner = requested_owner.unwrap_or_else(generated_owner);
+    validate_identity(&owner, "lease owner")?;
+    if requested_lease_id.is_some() {
+        return Err(JobError::new(
+            "SEL-J014",
+            "a lease id can only retry the active bearer lease",
+        ));
+    }
+    let events_source = read_required(&directory.join("events.jsonl"), "job event log")?;
+    let events = parse_events(&events_source)?;
+    let attempt = if events.iter().any(|event| event.to == Status::Starting) {
+        record
+            .state
+            .attempt
+            .checked_add(1)
+            .ok_or_else(|| JobError::new("SEL-J019", "job attempt counter overflowed"))?
+    } else {
+        record.state.attempt
+    };
+    if attempt == 0 {
+        return Err(JobError::new("SEL-J019", "job attempt must be positive"));
+    }
+    let now = unix_seconds();
+    let attempt_id = generated_attempt_id(&owner);
+    let lease_id = generated_lease_id(&owner, &attempt_id);
+    let lease_expires_at = now.saturating_add(ttl_seconds);
+    let event = Event {
+        sequence: record.state.sequence.saturating_add(1),
+        job_id: job_id.to_owned(),
+        from: Some(record.state.status),
+        to: Status::Starting,
+        at: now,
+        spec_sha256: record.state.spec_sha256.clone(),
+        attempt: Some(attempt),
+        kind: "claim".to_owned(),
+        owner: Some(owner.clone()),
+        attempt_id: Some(attempt_id.clone()),
+        claimed_at: Some(now),
+        lease_id: Some(lease_id.clone()),
+        lease_expires_at: Some(lease_expires_at),
+    };
+    let record = commit_event(&directory, &mut record, event)?;
+    Ok(claim_result(&record, false))
+}
+
+fn claim_result(record: &Record, idempotent: bool) -> JsonValue {
+    let mut result = match result_json(Operation::Claim, record, None, Some(Status::Starting)) {
+        JsonValue::Object(value) => value,
+        _ => unreachable!(),
+    };
+    result.insert("lease".to_owned(), JsonValue::String("held".to_owned()));
+    if idempotent {
+        result.insert("idempotent".to_owned(), JsonValue::Bool(true));
+    }
+    JsonValue::Object(result)
+}
+
+pub(crate) fn heartbeat(
+    root: &Path,
+    job_id: &str,
+    lease_id: &str,
+    ttl_seconds: u64,
+) -> Result<JsonValue, JobError> {
+    validate_job_id(job_id)?;
+    validate_lease_id(lease_id)?;
+    validate_ttl(ttl_seconds)?;
+    let directory = job_directory(root, job_id);
+    ensure_store_contained(
+        root,
+        directory.parent().expect("job directory has a parent"),
+    )?;
+    ensure_job_contained(root, &directory)?;
+    let _lock = JobLock::acquire(&directory)?;
+    let mut record = load_record_unlocked(&directory)?;
+    if record.state.status != Status::Starting {
+        return Err(JobError::new(
+            "SEL-J017",
+            "heartbeat is only valid while the lease is starting",
+        ));
+    }
+    require_lease(&record.state, lease_id)?;
+    let now = unix_seconds();
+    if !lease_active(&record.state, now) {
+        return Err(JobError::new("SEL-J016", "lease has expired"));
+    }
+    let current_expiry = record
+        .state
+        .lease_expires_at
+        .ok_or_else(|| JobError::new("SEL-J019", "starting job has no lease expiry"))?;
+    let lease_expires_at = now
+        .saturating_add(ttl_seconds)
+        .max(current_expiry.saturating_add(1));
+    let event = Event {
+        sequence: record.state.sequence.saturating_add(1),
+        job_id: job_id.to_owned(),
+        from: Some(Status::Starting),
+        to: Status::Starting,
+        at: now,
+        spec_sha256: record.state.spec_sha256.clone(),
+        attempt: Some(record.state.attempt),
+        kind: "heartbeat".to_owned(),
+        owner: record.state.owner.clone(),
+        attempt_id: record.state.attempt_id.clone(),
+        claimed_at: record.state.claimed_at,
+        lease_id: Some(lease_id.to_owned()),
+        lease_expires_at: Some(lease_expires_at),
+    };
+    let record = commit_event(&directory, &mut record, event)?;
+    Ok(result_json(
+        Operation::Heartbeat,
+        &record,
+        None,
+        Some(Status::Starting),
+    ))
+}
+
+pub(crate) fn release(root: &Path, job_id: &str, lease_id: &str) -> Result<JsonValue, JobError> {
+    validate_job_id(job_id)?;
+    validate_lease_id(lease_id)?;
+    let directory = job_directory(root, job_id);
+    ensure_store_contained(
+        root,
+        directory.parent().expect("job directory has a parent"),
+    )?;
+    ensure_job_contained(root, &directory)?;
+    let _lock = JobLock::acquire(&directory)?;
+    let mut record = load_record_unlocked(&directory)?;
+    if record.state.status != Status::Starting {
+        return Err(JobError::new(
+            "SEL-J017",
+            "release is only valid while the lease is starting",
+        ));
+    }
+    require_lease(&record.state, lease_id)?;
+    if !lease_active(&record.state, unix_seconds()) {
+        return Err(JobError::new("SEL-J016", "lease has expired"));
+    }
+    let event = Event {
+        sequence: record.state.sequence.saturating_add(1),
+        job_id: job_id.to_owned(),
+        from: Some(Status::Starting),
+        to: Status::Queued,
+        at: unix_seconds(),
+        spec_sha256: record.state.spec_sha256.clone(),
+        attempt: Some(record.state.attempt),
+        kind: "release".to_owned(),
+        owner: None,
+        attempt_id: None,
+        claimed_at: None,
+        lease_id: None,
+        lease_expires_at: None,
+    };
+    let record = commit_event(&directory, &mut record, event)?;
+    Ok(result_json(
+        Operation::Release,
+        &record,
+        None,
+        Some(Status::Queued),
+    ))
+}
+
+pub(crate) fn recover_lost(root: &Path, job_id: &str) -> Result<JsonValue, JobError> {
+    validate_job_id(job_id)?;
+    let directory = job_directory(root, job_id);
+    ensure_store_contained(
+        root,
+        directory.parent().expect("job directory has a parent"),
+    )?;
+    ensure_job_contained(root, &directory)?;
+    let _lock = JobLock::acquire(&directory)?;
+    let mut record = load_record_unlocked(&directory)?;
+    if record.state.status == Status::Lost {
+        return Ok(result_json(Operation::Recover, &record, Some(true), None));
+    }
+    if record.state.status != Status::Starting {
+        return Err(JobError::new(
+            "SEL-J015",
+            format!(
+                "job {job_id} can only be recovered from starting, not {}",
+                record.state.status.as_str()
+            ),
+        ));
+    }
+    let now = unix_seconds();
+    if record.state.lease_id.is_none() || record.state.lease_expires_at.is_none() {
+        return Err(JobError::new(
+            "SEL-J019",
+            "legacy starting job has no lease; automatic recovery is refused",
+        ));
+    }
+    if lease_active(&record.state, now) {
+        return Err(JobError::new(
+            "SEL-J016",
+            format!("job {job_id} lease is still active"),
+        ));
+    }
+    let event = Event {
+        sequence: record.state.sequence.saturating_add(1),
+        job_id: job_id.to_owned(),
+        from: Some(record.state.status),
+        to: Status::Lost,
+        at: now,
+        spec_sha256: record.state.spec_sha256.clone(),
+        attempt: Some(record.state.attempt),
+        kind: "recover".to_owned(),
+        owner: record.state.owner.clone(),
+        attempt_id: record.state.attempt_id.clone(),
+        claimed_at: record.state.claimed_at,
+        lease_id: None,
+        lease_expires_at: None,
+    };
+    let record = commit_event(&directory, &mut record, event)?;
+    Ok(result_json(
+        Operation::Recover,
+        &record,
+        Some(false),
+        Some(Status::Lost),
+    ))
+}
+
+fn commit_event(directory: &Path, record: &mut Record, event: Event) -> Result<Record, JobError> {
+    let event_path = directory.join("events.jsonl");
+    let mut events = fs::read(&event_path)
+        .map_err(|error| JobError::io("SEL-J007", "failed to read the job event log", error))?;
+    if !events.ends_with(b"\n") {
+        return Err(JobError::new(
+            "SEL-J008",
+            "job event log does not end at a complete line",
+        ));
+    }
+    events.extend_from_slice(event_line(&event).as_bytes());
+    atomic_write(&event_path, &events)?;
+
+    record.state.status = event.to;
+    record.state.sequence = event.sequence;
+    record.state.updated_at = event.at;
+    record.state.attempt = event.attempt.unwrap_or(record.state.attempt);
+    record.state.owner = event.owner;
+    record.state.attempt_id = event.attempt_id;
+    record.state.claimed_at = event.claimed_at;
+    record.state.lease_id = event.lease_id;
+    record.state.lease_expires_at = event.lease_expires_at;
+    atomic_write(
+        &directory.join("state.json"),
+        state_json(&record.state).as_bytes(),
+    )?;
+    load_record_unlocked(directory)
 }
 
 pub(crate) fn render_human(value: &JsonValue) -> String {
@@ -433,14 +842,69 @@ fn validate_job_id(value: &str) -> Result<(), JobError> {
     Ok(())
 }
 
+fn validate_identity(value: &str, label: &str) -> Result<(), JobError> {
+    if value.is_empty() || value.len() > MAX_JOB_ID_BYTES || !value.is_ascii() {
+        return Err(JobError::new(
+            "SEL-J014",
+            format!("{label} must contain 1 to {MAX_JOB_ID_BYTES} ASCII bytes"),
+        ));
+    }
+    if !value.bytes().enumerate().all(|(index, byte)| {
+        byte.is_ascii_alphanumeric() || byte == b'_' || (byte == b'-' && index > 0)
+    }) || !value.as_bytes()[0].is_ascii_alphanumeric()
+    {
+        return Err(JobError::new(
+            "SEL-J014",
+            format!(
+                "{label} must start with a letter or digit and contain only letters, digits, _ or -"
+            ),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_lease_id(value: &str) -> Result<(), JobError> {
+    validate_identity(value, "lease id")
+}
+
+fn validate_ttl(ttl_seconds: u64) -> Result<(), JobError> {
+    if !(1..=3600).contains(&ttl_seconds) {
+        return Err(JobError::new(
+            "SEL-J020",
+            "lease TTL must be between 1 and 3600 seconds",
+        ));
+    }
+    Ok(())
+}
+
+fn lease_active(state: &JobState, now: u64) -> bool {
+    state
+        .lease_expires_at
+        .is_some_and(|expires_at| expires_at > now)
+}
+
+fn require_lease(state: &JobState, lease_id: &str) -> Result<(), JobError> {
+    if state.lease_id.as_deref() != Some(lease_id) {
+        return Err(JobError::new("SEL-J017", "lease id is invalid"));
+    }
+    Ok(())
+}
+
 fn validate_transition(from: Status, to: Status) -> Result<(), JobError> {
     let allowed = match from {
-        Status::Accepted => matches!(to, Status::Queued | Status::Cancelling | Status::Failed),
+        Status::Accepted => matches!(
+            to,
+            Status::Queued | Status::Starting | Status::Cancelling | Status::Failed
+        ),
         Status::Queued => matches!(to, Status::Starting | Status::Cancelling | Status::Failed),
         Status::Starting => {
             matches!(
                 to,
-                Status::Running | Status::Cancelling | Status::Failed | Status::Lost
+                Status::Running
+                    | Status::Queued
+                    | Status::Cancelling
+                    | Status::Failed
+                    | Status::Lost
             )
         }
         Status::Running => {
@@ -467,6 +931,152 @@ fn validate_transition(from: Status, to: Status) -> Result<(), JobError> {
             ),
         ))
     }
+}
+
+fn is_executor_owned(status: Status) -> bool {
+    matches!(
+        status,
+        Status::Starting
+            | Status::Running
+            | Status::Committing
+            | Status::Succeeded
+            | Status::Cancelling
+            | Status::Cancelled
+            | Status::Failed
+            | Status::Lost
+            | Status::RetryWait
+    )
+}
+
+fn validate_event(state: &JobState, event: &Event) -> Result<(), JobError> {
+    if event.from != Some(state.status) {
+        return Err(JobError::new(
+            "SEL-J007",
+            "job event predecessor does not match the derived state",
+        ));
+    }
+    match event.kind.as_str() {
+        "admin" => {
+            if state.status != Status::Accepted
+                || event.to != Status::Queued
+                || event.attempt != Some(state.attempt)
+                || event.owner != state.owner
+                || event.attempt_id != state.attempt_id
+                || event.claimed_at != state.claimed_at
+                || event.lease_id != state.lease_id
+                || event.lease_expires_at != state.lease_expires_at
+            {
+                return Err(JobError::new(
+                    "SEL-J007",
+                    "admin event is not the accepted-to-queued transition",
+                ));
+            }
+        }
+        "claim" => {
+            let attempt = event
+                .attempt
+                .ok_or_else(|| JobError::new("SEL-J007", "claim event has no attempt"))?;
+            let next_attempt = state.attempt.checked_add(1);
+            if !matches!(state.status, Status::Accepted | Status::Queued)
+                || event.to != Status::Starting
+                || (attempt != state.attempt && Some(attempt) != next_attempt)
+                || event.owner.is_none()
+                || event.attempt_id.is_none()
+                || event.claimed_at != Some(event.at)
+                || event.lease_id.is_none()
+                || event.lease_expires_at.is_none()
+                || event.lease_expires_at <= Some(event.at)
+            {
+                return Err(JobError::new(
+                    "SEL-J007",
+                    "claim event has invalid lease data",
+                ));
+            }
+            validate_identity(event.owner.as_deref().unwrap_or_default(), "lease owner")?;
+            validate_identity(
+                event.attempt_id.as_deref().unwrap_or_default(),
+                "attempt id",
+            )?;
+            validate_lease_id(event.lease_id.as_deref().unwrap_or_default())?;
+            validate_transition(state.status, event.to)?;
+        }
+        "heartbeat" => {
+            if state.status != Status::Starting
+                || event.to != Status::Starting
+                || event.attempt != Some(state.attempt)
+                || event.owner != state.owner
+                || event.attempt_id != state.attempt_id
+                || event.claimed_at != state.claimed_at
+                || event.lease_id != state.lease_id
+                || event.lease_expires_at <= Some(event.at)
+                || event.lease_expires_at <= state.lease_expires_at
+            {
+                return Err(JobError::new(
+                    "SEL-J007",
+                    "heartbeat event does not extend the active lease",
+                ));
+            }
+        }
+        "release" => {
+            if state.status != Status::Starting
+                || event.to != Status::Queued
+                || event.attempt != Some(state.attempt)
+                || event.owner.is_some()
+                || event.attempt_id.is_some()
+                || event.claimed_at.is_some()
+                || event.lease_id.is_some()
+                || event.lease_expires_at.is_some()
+            {
+                return Err(JobError::new(
+                    "SEL-J007",
+                    "release event did not clear the lease",
+                ));
+            }
+            validate_transition(state.status, event.to)?;
+        }
+        "recover" => {
+            if state.status != Status::Starting
+                || event.to != Status::Lost
+                || event.attempt != Some(state.attempt)
+                || event.owner != state.owner
+                || event.attempt_id != state.attempt_id
+                || event.claimed_at != state.claimed_at
+                || event.lease_id.is_some()
+                || event.lease_expires_at.is_some()
+                || state
+                    .lease_expires_at
+                    .is_none_or(|expires| expires > event.at)
+            {
+                return Err(JobError::new(
+                    "SEL-J007",
+                    "recover event has invalid expiry data",
+                ));
+            }
+            validate_transition(state.status, event.to)?;
+        }
+        "legacy" | "transition" => {
+            validate_transition(state.status, event.to)?;
+            if event.attempt.is_some() && event.attempt != Some(state.attempt) {
+                return Err(JobError::new(
+                    "SEL-J007",
+                    "legacy event changed the attempt",
+                ));
+            }
+            if event.owner != state.owner
+                || event.attempt_id != state.attempt_id
+                || event.claimed_at != state.claimed_at
+                || event.lease_id != state.lease_id
+                || event.lease_expires_at != state.lease_expires_at
+            {
+                return Err(JobError::new(
+                    "SEL-J007",
+                    "legacy event changed lease identity",
+                ));
+            }
+        }
+        _ => return Err(JobError::new("SEL-J007", "job event kind is unsupported")),
+    }
+    Ok(())
 }
 
 struct Record {
@@ -626,14 +1236,36 @@ fn derive_state(events: &[Event], stored: &JobState) -> Result<JobState, JobErro
             "job event log has an invalid creation event",
         ));
     }
+    let creation_attempt_is_valid = match first.kind.as_str() {
+        "create" => first.attempt == Some(1),
+        "legacy" | "transition" => first.attempt.is_none() || first.attempt == Some(1),
+        _ => false,
+    };
+    if first.owner.is_some()
+        || first.attempt_id.is_some()
+        || first.claimed_at.is_some()
+        || first.lease_id.is_some()
+        || first.lease_expires_at.is_some()
+        || !creation_attempt_is_valid
+    {
+        return Err(JobError::new(
+            "SEL-J007",
+            "job event log has invalid creation identity",
+        ));
+    }
     let mut state = JobState {
         job_id: first.job_id.clone(),
         status: first.to,
         sequence: 0,
-        attempt: stored.attempt,
+        attempt: first.attempt.unwrap_or(1),
         spec_sha256: first.spec_sha256.clone(),
         created_at: first.at,
         updated_at: first.at,
+        owner: first.owner.clone(),
+        attempt_id: first.attempt_id.clone(),
+        claimed_at: first.claimed_at,
+        lease_id: first.lease_id.clone(),
+        lease_expires_at: first.lease_expires_at,
     };
     for (expected, event) in events.iter().enumerate().skip(1) {
         let expected = expected as u64;
@@ -647,17 +1279,29 @@ fn derive_state(events: &[Event], stored: &JobState) -> Result<JobState, JobErro
                 "job event log contains a broken sequence or predecessor",
             ));
         }
-        validate_transition(state.status, event.to)?;
+        validate_event(&state, event)?;
         state.status = event.to;
         state.sequence = event.sequence;
         state.updated_at = event.at;
+        state.attempt = event.attempt.unwrap_or(state.attempt);
+        state.owner = event.owner.clone();
+        state.attempt_id = event.attempt_id.clone();
+        state.claimed_at = event.claimed_at;
+        state.lease_id = event.lease_id.clone();
+        state.lease_expires_at = event.lease_expires_at;
     }
     if stored.job_id != state.job_id
-        || stored.attempt != 1
+        || stored.attempt != state.attempt
         || stored.created_at != state.created_at
         || stored.spec_sha256 != state.spec_sha256
         || stored.sequence > state.sequence
-        || (stored.sequence == state.sequence && stored.status != state.status)
+        || (stored.sequence == state.sequence
+            && (stored.status != state.status
+                || stored.owner != state.owner
+                || stored.attempt_id != state.attempt_id
+                || stored.claimed_at != state.claimed_at
+                || stored.lease_id != state.lease_id
+                || stored.lease_expires_at != state.lease_expires_at))
     {
         return Err(JobError::new(
             "SEL-J007",
@@ -673,8 +1317,41 @@ fn derive_state(events: &[Event], stored: &JobState) -> Result<JobState, JobErro
             "state snapshot does not match its event sequence",
         ));
     }
-    state.attempt = stored.attempt;
+    validate_state_identity(&state)?;
     Ok(state)
+}
+
+fn validate_state_identity(state: &JobState) -> Result<(), JobError> {
+    if state.attempt == 0 {
+        return Err(JobError::new(
+            "SEL-J007",
+            "job attempt must be a positive integer",
+        ));
+    }
+    if let Some(owner) = &state.owner {
+        validate_identity(owner, "lease owner")?;
+    }
+    if let Some(attempt_id) = &state.attempt_id {
+        validate_identity(attempt_id, "attempt id")?;
+    }
+    if let Some(lease_id) = &state.lease_id {
+        validate_lease_id(lease_id)?;
+    }
+    if state.lease_id.is_some() != state.lease_expires_at.is_some() {
+        return Err(JobError::new(
+            "SEL-J007",
+            "job lease identity has an incomplete expiry pair",
+        ));
+    }
+    if state.lease_id.is_some()
+        && (state.owner.is_none() || state.attempt_id.is_none() || state.claimed_at.is_none())
+    {
+        return Err(JobError::new(
+            "SEL-J007",
+            "job lease identity is incomplete",
+        ));
+    }
+    Ok(())
 }
 
 fn parse_state(source: &str) -> Result<JobState, JobError> {
@@ -696,6 +1373,11 @@ fn parse_state(source: &str) -> Result<JobState, JobError> {
         spec_sha256: object_string_from(&object, "spec_sha256")?.to_owned(),
         created_at: object_u64(&object, "created_at")?,
         updated_at: object_u64(&object, "updated_at")?,
+        owner: object_optional_string(&object, "owner")?.map(ToOwned::to_owned),
+        attempt_id: object_optional_string(&object, "attempt_id")?.map(ToOwned::to_owned),
+        claimed_at: object_optional_u64(&object, "claimed_at")?,
+        lease_id: object_optional_string(&object, "lease_id")?.map(ToOwned::to_owned),
+        lease_expires_at: object_optional_u64(&object, "lease_expires_at")?,
     })
 }
 
@@ -729,6 +1411,15 @@ fn parse_events(source: &str) -> Result<Vec<Event>, JobError> {
             to: Status::parse(object_string_from(&object, "to")?)?,
             at: object_u64(&object, "at")?,
             spec_sha256: object_string_from(&object, "spec_sha256")?.to_owned(),
+            attempt: object_optional_u64(&object, "attempt")?,
+            kind: object_optional_string(&object, "kind")?
+                .unwrap_or("legacy")
+                .to_owned(),
+            owner: object_optional_string(&object, "owner")?.map(ToOwned::to_owned),
+            attempt_id: object_optional_string(&object, "attempt_id")?.map(ToOwned::to_owned),
+            claimed_at: object_optional_u64(&object, "claimed_at")?,
+            lease_id: object_optional_string(&object, "lease_id")?.map(ToOwned::to_owned),
+            lease_expires_at: object_optional_u64(&object, "lease_expires_at")?,
         });
     }
     if source.is_empty() || !source.ends_with('\n') {
@@ -796,8 +1487,49 @@ fn object_string<'a>(value: &'a JsonValue, key: &str) -> Option<&'a str> {
     }
 }
 
+fn object_optional_string<'a>(
+    object: &'a BTreeMap<String, JsonValue>,
+    key: &str,
+) -> Result<Option<&'a str>, JobError> {
+    match object.get(key) {
+        None | Some(JsonValue::Null) => Ok(None),
+        Some(JsonValue::String(value)) => Ok(Some(value)),
+        Some(_) => Err(JobError::new(
+            "SEL-J007",
+            format!("job field {key} must be a string or null"),
+        )),
+    }
+}
+
+fn object_optional_u64(
+    object: &BTreeMap<String, JsonValue>,
+    key: &str,
+) -> Result<Option<u64>, JobError> {
+    match object.get(key) {
+        None | Some(JsonValue::Null) => Ok(None),
+        Some(JsonValue::Number(value)) => value.parse::<u64>().map(Some).map_err(|_| {
+            JobError::new(
+                "SEL-J007",
+                format!("job field {key} must be a non-negative integer or null"),
+            )
+        }),
+        Some(_) => Err(JobError::new(
+            "SEL-J007",
+            format!("job field {key} must be an integer or null"),
+        )),
+    }
+}
+
 fn state_json(state: &JobState) -> String {
     json::encode(&JsonValue::Object(BTreeMap::from([
+        (
+            "attempt_id".to_owned(),
+            state
+                .attempt_id
+                .clone()
+                .map(JsonValue::String)
+                .unwrap_or(JsonValue::Null),
+        ),
         (
             "attempt".to_owned(),
             JsonValue::Number(state.attempt.to_string()),
@@ -806,7 +1538,37 @@ fn state_json(state: &JobState) -> String {
             "created_at".to_owned(),
             JsonValue::Number(state.created_at.to_string()),
         ),
+        (
+            "claimed_at".to_owned(),
+            state
+                .claimed_at
+                .map(|value| JsonValue::Number(value.to_string()))
+                .unwrap_or(JsonValue::Null),
+        ),
         ("job_id".to_owned(), JsonValue::String(state.job_id.clone())),
+        (
+            "lease_expires_at".to_owned(),
+            state
+                .lease_expires_at
+                .map(|value| JsonValue::Number(value.to_string()))
+                .unwrap_or(JsonValue::Null),
+        ),
+        (
+            "lease_id".to_owned(),
+            state
+                .lease_id
+                .clone()
+                .map(JsonValue::String)
+                .unwrap_or(JsonValue::Null),
+        ),
+        (
+            "owner".to_owned(),
+            state
+                .owner
+                .clone()
+                .map(JsonValue::String)
+                .unwrap_or(JsonValue::Null),
+        ),
         (
             "schema".to_owned(),
             JsonValue::String(JOB_SCHEMA.to_owned()),
@@ -832,7 +1594,29 @@ fn state_json(state: &JobState) -> String {
 
 fn event_line(event: &Event) -> String {
     json::encode(&JsonValue::Object(BTreeMap::from([
+        (
+            "attempt".to_owned(),
+            event
+                .attempt
+                .map(|value| JsonValue::Number(value.to_string()))
+                .unwrap_or(JsonValue::Null),
+        ),
+        (
+            "attempt_id".to_owned(),
+            event
+                .attempt_id
+                .clone()
+                .map(JsonValue::String)
+                .unwrap_or(JsonValue::Null),
+        ),
         ("at".to_owned(), JsonValue::Number(event.at.to_string())),
+        (
+            "claimed_at".to_owned(),
+            event
+                .claimed_at
+                .map(|value| JsonValue::Number(value.to_string()))
+                .unwrap_or(JsonValue::Null),
+        ),
         (
             "from".to_owned(),
             event
@@ -841,6 +1625,30 @@ fn event_line(event: &Event) -> String {
                 .unwrap_or(JsonValue::Null),
         ),
         ("job_id".to_owned(), JsonValue::String(event.job_id.clone())),
+        ("kind".to_owned(), JsonValue::String(event.kind.clone())),
+        (
+            "lease_expires_at".to_owned(),
+            event
+                .lease_expires_at
+                .map(|value| JsonValue::Number(value.to_string()))
+                .unwrap_or(JsonValue::Null),
+        ),
+        (
+            "lease_id".to_owned(),
+            event
+                .lease_id
+                .clone()
+                .map(JsonValue::String)
+                .unwrap_or(JsonValue::Null),
+        ),
+        (
+            "owner".to_owned(),
+            event
+                .owner
+                .clone()
+                .map(JsonValue::String)
+                .unwrap_or(JsonValue::Null),
+        ),
         (
             "schema".to_owned(),
             JsonValue::String(EVENT_SCHEMA.to_owned()),
@@ -861,7 +1669,7 @@ fn event_line(event: &Event) -> String {
 }
 
 fn job_summary(record: &Record) -> JsonValue {
-    JsonValue::Object(BTreeMap::from([
+    let mut summary = BTreeMap::from([
         (
             "attempt".to_owned(),
             JsonValue::Number(record.state.attempt.to_string()),
@@ -886,7 +1694,32 @@ fn job_summary(record: &Record) -> JsonValue {
             "updated_at".to_owned(),
             JsonValue::Number(record.state.updated_at.to_string()),
         ),
-    ]))
+    ]);
+    if let Some(owner) = &record.state.owner {
+        summary.insert("owner".to_owned(), JsonValue::String(owner.clone()));
+    }
+    if let Some(attempt_id) = &record.state.attempt_id {
+        summary.insert(
+            "attempt_id".to_owned(),
+            JsonValue::String(attempt_id.clone()),
+        );
+    }
+    if let Some(claimed_at) = record.state.claimed_at {
+        summary.insert(
+            "claimed_at".to_owned(),
+            JsonValue::Number(claimed_at.to_string()),
+        );
+    }
+    if let Some(lease_id) = &record.state.lease_id {
+        summary.insert("lease_id".to_owned(), JsonValue::String(lease_id.clone()));
+    }
+    if let Some(lease_expires_at) = record.state.lease_expires_at {
+        summary.insert(
+            "lease_expires_at".to_owned(),
+            JsonValue::Number(lease_expires_at.to_string()),
+        );
+    }
+    JsonValue::Object(summary)
 }
 
 fn result_json(
@@ -1033,6 +1866,32 @@ fn generated_job_id() -> String {
         crate::PACKAGE_VERSION,
     );
     format!("job-{}", &crate::sha256_hex(entropy.as_bytes())[..24])
+}
+
+fn generated_owner() -> String {
+    format!("cli-{}", std::process::id())
+}
+
+fn generated_attempt_id(owner: &str) -> String {
+    let entropy = format!(
+        "{}:{}:{}:{}",
+        owner,
+        std::process::id(),
+        unix_nanos(),
+        crate::PACKAGE_VERSION,
+    );
+    format!("attempt-{}", &crate::sha256_hex(entropy.as_bytes())[..24])
+}
+
+fn generated_lease_id(owner: &str, attempt_id: &str) -> String {
+    let entropy = format!(
+        "{}:{}:{}:{}",
+        owner,
+        attempt_id,
+        unix_nanos(),
+        crate::PACKAGE_VERSION,
+    );
+    format!("lease-{}", &crate::sha256_hex(entropy.as_bytes())[..32])
 }
 
 fn unix_seconds() -> u64 {

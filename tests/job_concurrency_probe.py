@@ -51,17 +51,22 @@ def main() -> int:
         queued = run(root, "transition", "shared", "queued")
         assert queued.returncode == 0, (queued.returncode, queued.stdout, queued.stderr)
 
-        def transition_again(_: int) -> subprocess.CompletedProcess[str]:
-            return run(root, "transition", "shared", "starting")
+        def claim_again(index: int) -> subprocess.CompletedProcess[str]:
+            return run(root, "claim", "shared", f"--owner=worker-{index}")
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
-            transitions = list(pool.map(transition_again, range(1000)))
-        assert all(result.returncode == 0 for result in transitions), [
+            transitions = list(pool.map(claim_again, range(1000)))
+        successful_claims = [result for result in transitions if result.returncode == 0]
+        assert len(successful_claims) == 1, [
             (result.returncode, result.stdout, result.stderr)
             for result in transitions
-            if result.returncode != 0
         ][:5]
-        assert all(json.loads(result.stdout)["status"] == "starting" for result in transitions)
+        assert all(
+            result.returncode == 65 and json.loads(result.stderr)["code"] in ("SEL-J014", "SEL-J011")
+            for result in transitions
+            if result.returncode != 0
+        )
+        assert json.loads(successful_claims[0].stdout)["status"] == "starting"
 
         events = (root / ".seloryn" / "jobs" / "shared" / "events.jsonl").read_text(
             encoding="utf-8"

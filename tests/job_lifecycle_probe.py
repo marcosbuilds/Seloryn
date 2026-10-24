@@ -94,23 +94,23 @@ def main() -> int:
         different_spec.write_text('{"kind":"evaluate"}\n', encoding="utf-8")
         failed_code(run(root, "create", str(different_spec), "--id=alpha"), "SEL-J004")
 
-        for next_status in ("queued", "starting", "running", "committing", "succeeded"):
-            transitioned = successful_json(run(root, "transition", "alpha", next_status))
-            assert transitioned["status"] == next_status, transitioned
+        transitioned = successful_json(run(root, "transition", "alpha", "queued"))
+        assert transitioned["status"] == "queued", transitioned
         current = successful_json(run(root, "status", "alpha"))
-        assert current["status"] == "succeeded", current
-        assert current["sequence"] == 5, current
+        assert current["status"] == "queued", current
+        assert current["sequence"] == 1, current
         assert current["attempt"] == 1, current
 
-        failed_code(run(root, "transition", "alpha", "running"), "SEL-J005")
+        failed_code(run(root, "transition", "alpha", "starting"), "SEL-J018")
+        failed_code(run(root, "transition", "alpha", "succeeded"), "SEL-J018")
         failed_code(run(root, "transition", "alpha", "not-a-state"), "SEL-J006")
         failed_code(run(root, "status", "../escape"), "SEL-J003")
-        assert len((job_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()) == 6
+        assert len((job_dir / "events.jsonl").read_text(encoding="utf-8").splitlines()) == 2
 
         listed = successful_json(run(root, "list"))
         assert listed["schema"] == "seloryn.job-list.v1", listed
         assert [item["job_id"] for item in listed["jobs"]] == ["alpha"], listed
-        assert listed["jobs"][0]["status"] == "succeeded", listed
+        assert listed["jobs"][0]["status"] == "queued", listed
 
         generated = successful_json(run(root, "create", str(spec)))
         assert re.fullmatch(r"job-[a-f0-9]{24}", generated["job_id"]), generated

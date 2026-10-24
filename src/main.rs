@@ -128,7 +128,7 @@ pub(crate) const EXIT_IO: u8 = 74;
 
 const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn doctor [project] [--format=human|json]\n  seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`doctor` performs read-only project validation and reports production blockers; it never executes project code.\n`init` creates a validated project skeleton without overwriting an existing path.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `from training import gpu` (the compatible `train_linear_gpu` name remains accepted) in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
 
-const JOB_HELP_TEXT: &str = "Jobs:\n  seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]\n  seloryn job status <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job list [--root=<directory>] [--format=human|json]\n  seloryn job transition <job-id> <status> [--root=<directory>] [--format=human|json]\n";
+const JOB_HELP_TEXT: &str = "Jobs:\n  seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]\n  seloryn job status <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job list [--root=<directory>] [--format=human|json]\n  seloryn job transition <job-id> <status> [--root=<directory>] [--format=human|json]\n  seloryn job claim <job-id> [--owner=<owner>] [--lease-id=<id>] [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job heartbeat <job-id> --lease-id=<id> [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job release <job-id> --lease-id=<id> [--root=<directory>] [--format=human|json]\n  seloryn job recover <job-id> [--root=<directory>] [--format=human|json]\n";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OutputFormat {
@@ -234,6 +234,32 @@ enum JobAction {
         root: OsString,
         format: OutputFormat,
     },
+    Claim {
+        id: OsString,
+        owner: Option<OsString>,
+        lease_id: Option<OsString>,
+        ttl_seconds: u64,
+        root: OsString,
+        format: OutputFormat,
+    },
+    Heartbeat {
+        id: OsString,
+        lease_id: OsString,
+        ttl_seconds: u64,
+        root: OsString,
+        format: OutputFormat,
+    },
+    Release {
+        id: OsString,
+        lease_id: OsString,
+        root: OsString,
+        format: OutputFormat,
+    },
+    Recover {
+        id: OsString,
+        root: OsString,
+        format: OutputFormat,
+    },
 }
 
 fn main() -> ExitCode {
@@ -307,17 +333,36 @@ fn parse_job(args: &[OsString]) -> Action {
     };
     let mut positionals = Vec::new();
     let mut id = None;
+    let mut owner = None;
+    let mut lease_id = None;
+    let mut ttl_seconds = None;
     let mut root = OsString::from(".");
     let mut format = OutputFormat::Human;
     let mut index = 1;
     while index < args.len() {
         let argument = &args[index];
-        if argument == "--id" || argument == "--root" || argument == "--format" {
+        if argument == "--id"
+            || argument == "--owner"
+            || argument == "--lease-id"
+            || argument == "--ttl-seconds"
+            || argument == "--root"
+            || argument == "--format"
+        {
             let Some(value) = args.get(index + 1) else {
                 return unsupported_arguments(args);
             };
             if argument == "--id" {
                 id = Some(value.clone());
+            } else if argument == "--owner" {
+                owner = Some(value.clone());
+            } else if argument == "--lease-id" {
+                lease_id = Some(value.clone());
+            } else if argument == "--ttl-seconds" {
+                let Some(parsed) = value.to_str().and_then(|value| value.parse::<u64>().ok())
+                else {
+                    return unsupported_arguments(args);
+                };
+                ttl_seconds = Some(parsed);
             } else if argument == "--root" {
                 root = value.clone();
             } else {
@@ -332,6 +377,24 @@ fn parse_job(args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--id="))
         {
             id = Some(OsString::from(value));
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--owner="))
+        {
+            owner = Some(OsString::from(value));
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--lease-id="))
+        {
+            lease_id = Some(OsString::from(value));
+        } else if let Some(value) = argument
+            .to_str()
+            .and_then(|value| value.strip_prefix("--ttl-seconds="))
+        {
+            let Some(parsed) = value.parse::<u64>().ok() else {
+                return unsupported_arguments(args);
+            };
+            ttl_seconds = Some(parsed);
         } else if let Some(value) = argument
             .to_str()
             .and_then(|value| value.strip_prefix("--root="))
@@ -356,24 +419,97 @@ fn parse_job(args: &[OsString]) -> Action {
         index += 1;
     }
     match command {
-        "create" if positionals.len() == 1 => Action::Job(JobAction::Create {
-            spec: positionals.remove(0),
-            id,
-            root,
-            format,
-        }),
-        "status" if positionals.len() == 1 && id.is_none() => Action::Job(JobAction::Status {
-            id: positionals.remove(0),
-            root,
-            format,
-        }),
-        "list" if positionals.is_empty() && id.is_none() => {
+        "create"
+            if positionals.len() == 1
+                && owner.is_none()
+                && lease_id.is_none()
+                && ttl_seconds.is_none() =>
+        {
+            Action::Job(JobAction::Create {
+                spec: positionals.remove(0),
+                id,
+                root,
+                format,
+            })
+        }
+        "status"
+            if positionals.len() == 1
+                && id.is_none()
+                && owner.is_none()
+                && lease_id.is_none()
+                && ttl_seconds.is_none() =>
+        {
+            Action::Job(JobAction::Status {
+                id: positionals.remove(0),
+                root,
+                format,
+            })
+        }
+        "list"
+            if positionals.is_empty()
+                && id.is_none()
+                && owner.is_none()
+                && lease_id.is_none()
+                && ttl_seconds.is_none() =>
+        {
             Action::Job(JobAction::List { root, format })
         }
-        "transition" if positionals.len() == 2 && id.is_none() => {
+        "transition"
+            if positionals.len() == 2
+                && id.is_none()
+                && owner.is_none()
+                && lease_id.is_none()
+                && ttl_seconds.is_none() =>
+        {
             Action::Job(JobAction::Transition {
                 id: positionals.remove(0),
                 status: positionals.remove(0),
+                root,
+                format,
+            })
+        }
+        "claim" if positionals.len() == 1 && id.is_none() => Action::Job(JobAction::Claim {
+            id: positionals.remove(0),
+            owner,
+            lease_id,
+            ttl_seconds: ttl_seconds.unwrap_or(60),
+            root,
+            format,
+        }),
+        "heartbeat"
+            if positionals.len() == 1 && id.is_none() && owner.is_none() && lease_id.is_some() =>
+        {
+            Action::Job(JobAction::Heartbeat {
+                id: positionals.remove(0),
+                lease_id: lease_id.expect("checked above"),
+                ttl_seconds: ttl_seconds.unwrap_or(60),
+                root,
+                format,
+            })
+        }
+        "release"
+            if positionals.len() == 1
+                && id.is_none()
+                && owner.is_none()
+                && lease_id.is_some()
+                && ttl_seconds.is_none() =>
+        {
+            Action::Job(JobAction::Release {
+                id: positionals.remove(0),
+                lease_id: lease_id.expect("checked above"),
+                root,
+                format,
+            })
+        }
+        "recover"
+            if positionals.len() == 1
+                && id.is_none()
+                && owner.is_none()
+                && lease_id.is_none()
+                && ttl_seconds.is_none() =>
+        {
+            Action::Job(JobAction::Recover {
+                id: positionals.remove(0),
                 root,
                 format,
             })
@@ -2564,6 +2700,102 @@ fn run_job(action: JobAction) -> u8 {
                 );
             };
             (format, job::transition(&PathBuf::from(root), id, status))
+        }
+        JobAction::Claim {
+            id,
+            owner,
+            lease_id,
+            ttl_seconds,
+            root,
+            format,
+        } => {
+            let Some(id) = id.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J003",
+                        message: "job id must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            (
+                format,
+                job::claim(
+                    &PathBuf::from(root),
+                    id,
+                    owner.as_deref(),
+                    lease_id.as_deref(),
+                    ttl_seconds,
+                ),
+            )
+        }
+        JobAction::Heartbeat {
+            id,
+            lease_id,
+            ttl_seconds,
+            root,
+            format,
+        } => {
+            let Some(id) = id.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J003",
+                        message: "job id must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            let Some(lease_id) = lease_id.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J017",
+                        message: "lease id must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            (
+                format,
+                job::heartbeat(&PathBuf::from(root), id, lease_id, ttl_seconds),
+            )
+        }
+        JobAction::Release {
+            id,
+            lease_id,
+            root,
+            format,
+        } => {
+            let Some(id) = id.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J003",
+                        message: "job id must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            let Some(lease_id) = lease_id.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J017",
+                        message: "lease id must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            (format, job::release(&PathBuf::from(root), id, lease_id))
+        }
+        JobAction::Recover { id, root, format } => {
+            let Some(id) = id.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J003",
+                        message: "job id must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            (format, job::recover_lost(&PathBuf::from(root), id))
         }
     };
     match result {

@@ -19,8 +19,28 @@ seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=hu
 seloryn job status <job-id> [--root=<directory>] [--format=human|json]
 seloryn job list [--root=<directory>] [--format=human|json]
 seloryn job transition <job-id> <status> [--root=<directory>] [--format=human|json]
+seloryn job claim <job-id> [--owner=<owner>] [--lease-id=<id>] [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]
+seloryn job heartbeat <job-id> --lease-id=<id> [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]
+seloryn job release <job-id> --lease-id=<id> [--root=<directory>] [--format=human|json]
+seloryn job recover <job-id> [--root=<directory>] [--format=human|json]
 seloryn lsp --stdio
 ```
+
+The local `job` contract canonicalizes a bounded JSON spec and stores an
+event-authoritative state snapshot under `.seloryn/jobs/<job-id>`. Public
+`transition` is administrative only: it can move `accepted` to `queued`, but
+cannot manufacture `running`, `committing`, `succeeded` or another
+executor-owned state. `claim` creates a single local reservation lease with a
+bearer `lease_id`, an owner, an attempt identity and a bounded expiry. The
+same lease ID can safely retry `claim`; `heartbeat` extends it, `release`
+returns the job to `queued`, and `recover` moves an expired reservation to
+terminal `lost` (repeating `recover` is idempotent). A lease ID coordinates
+local writers; it is not a cryptographic credential, process-liveness proof or
+worker fencing token. Seloryn does not yet spawn or supervise a job, verify a
+live process, retry a lost job, commit artifacts or execute remotely. Jobs
+with `lost` are terminal in this contract; create a new job for a new
+execution attempt. Errors `SEL-J013` through `SEL-J020` identify invalid
+operation/state, lease ownership, expiry, identity or TTL conditions.
 
 The preview version reports `0.12`, `package=0.12.0` and
 `build=local-development`; this is
@@ -121,7 +141,8 @@ overwrite an existing path. The default `minimal` template and the
 `job` exposes the first local lifecycle contract. `create` canonicalizes a
 bounded JSON specification and stores it with an initial `accepted` state;
 `status` and `list` validate the state snapshot against the append-only event
-log; `transition` accepts only the declared state-machine edges. The store is
+log; `transition` is limited to the administrative `accepted` to `queued`
+edge. The store is
 written under `<root>/.seloryn/jobs/<job-id>` using same-directory temporary
 files, flushes and atomic replacement. Repeating `create` with the same ID and
 specification is idempotent; a different specification is rejected. IDs are
@@ -129,9 +150,10 @@ ASCII path-safe and valid job operations use versioned JSON envelopes when
 `--format=json` is selected; malformed CLI syntax still uses the global usage
 diagnostic.
 
-This is a contract and persistence slice, not a worker or scheduler. It does
-not execute a spec, claim crash recovery of a running process, provide leases,
-retry, quotas, remote execution or a public registry. `run` remains the
+This is a contract, persistence and reservation-coordination slice, not a
+worker or scheduler. It does not execute a spec, claim crash recovery of a
+running process, provide process fencing, retry, quotas, remote execution or a
+public registry. `run` remains the
 backward-compatible direct execution command. These limits are intentional
 until a separate worker/supervisor gate proves them with process, concurrency
 and interruption tests.
