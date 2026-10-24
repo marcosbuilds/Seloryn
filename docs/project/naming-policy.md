@@ -121,6 +121,9 @@ Portanto, a regra desta versão é conservadora: não criar aliases tensor espec
 quando eles removem `tensor`, o dtype ou uma parte da operação. Aliases já
 existentes e inequívocos, como `sum` para `tensor_sum` e `matmul`/`reshape`,
 permanecem por compatibilidade; aliases novos devem passar por revisão própria.
+O contrato também é protegido por um teste negativo em
+`tests/tensor_cpu.rs`: `ten_get_f32`, `getf32` e `tensor_getr_f32` devem
+continuar sendo rejeitados como nomes indefinidos.
 
 | Nome atual observado | Decisão nesta versão | Motivo | Status |
 | --- | --- | --- | ---: |

@@ -255,6 +255,22 @@ fn runs_typed_tensor_indexing_and_rejects_invalid_coordinates() {
 }
 
 #[test]
+fn rejects_ambiguous_tensor_index_aliases() {
+    for alias in ["ten_get_f32", "getf32", "tensor_getr_f32"] {
+        let source = format!(
+            "fn main() -> F32:\n    let values: Tensor[F32] = tensor_f32([1.0], [1])\n    return {alias}(values, [0])\n"
+        );
+        let output = run_source(&format!("alias-{alias}"), &source);
+        assert_eq!(output.status.code(), Some(65), "alias {alias} was accepted");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("SEL-M002") && stderr.contains(&format!("`{alias}`")),
+            "alias {alias} did not fail as an undefined name: {stderr}"
+        );
+    }
+}
+
+#[test]
 fn runs_explicit_lossless_tensor_conversions() {
     let output = run_source(
         "dtype-conversion",
