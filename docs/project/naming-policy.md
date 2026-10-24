@@ -144,8 +144,9 @@ Regras adicionais para aliases:
 - se um futuro namespace `tensor.<op>` for implementado, ele poderá reduzir a
   repetição sem apagar a semântica. Até lá, `tensor_get_f32` é preferível a
   `ten_get_f32`;
-- a forma longa continua documentada como compatibilidade durante a linha
-  `0.x`; sua depreciação exige aviso, teste e nota de migração;
+- nomes explícitos já publicados, como `tensor_get_f32`, permanecem canônicos;
+  qualquer alias curto é apenas uma compatibilidade opt-in e sua criação ou
+  depreciação exige aviso, teste e nota de migração;
 - o nome curto não muda o contrato de tipo, device, layout, memória ou erro;
   nomes não podem esconder limites de GPU ou de execução automática.
 

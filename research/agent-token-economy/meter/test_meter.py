@@ -6,6 +6,7 @@ import json
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -73,16 +74,28 @@ class MeterTests(unittest.TestCase):
         self.assertIn("reasoning_or_hidden_content_not_counted", reasons)
         self.assertIn("reasoning_or_hidden_tokens_not_visible", reasons)
 
-    def test_unresolved_model_keeps_local_tokens_unknown(self) -> None:
-        result = measure({"model": "model-that-is-not-known-to-tiktoken", "prompt": "x", "response": "y"})
+    def test_unknown_model_keeps_local_tokens_unknown(self) -> None:
+        class UnknownModelTokenizer:
+            @staticmethod
+            def encoding_for_model(model: str) -> object:
+                raise KeyError(model)
+
+        with patch.dict(sys.modules, {"tiktoken": UnknownModelTokenizer()}):
+            result = measure(
+                {"model": "model-that-is-not-known-to-tiktoken", "prompt": "x", "response": "y"}
+            )
+
         self.assertIsNone(result["local_visible_usage"]["input"]["tokens"])
-        # tiktoken is intentionally optional.  The semantic contract is that
-        # an unresolved model never gets a fabricated token count; the reason
-        # must preserve whether the host lacked the dependency or the model
-        # was unknown to an installed tokenizer.
-        tokenizer_error = result["tokenizer"].get("error")
-        self.assertIn(tokenizer_error, {"dependency_missing", "unknown_model"})
-        self.assertIn(f"local_tokenizer_{tokenizer_error}", result["uncertainty"]["reasons"])
+        self.assertEqual(result["tokenizer"]["error"], "unknown_model")
+        self.assertIn("local_tokenizer_unknown_model", result["uncertainty"]["reasons"])
+
+    def test_missing_optional_tokenizer_keeps_local_tokens_unknown(self) -> None:
+        with patch.dict(sys.modules, {"tiktoken": None}):
+            result = measure({"model": "gpt-4o", "prompt": "x", "response": "y"})
+
+        self.assertIsNone(result["local_visible_usage"]["input"]["tokens"])
+        self.assertEqual(result["tokenizer"]["error"], "dependency_missing")
+        self.assertIn("local_tokenizer_dependency_missing", result["uncertainty"]["reasons"])
 
     def test_direct_input_text_part_is_counted_as_text(self) -> None:
         result = measure({"prompt": {"input_text": "hello"}, "response": {"output_text": "ok"}})
