@@ -96,7 +96,8 @@ jobs:
           && python research/agent-token-economy/paired/python_task_test.py
           && python research/agent-token-economy/paired/pair_runner_test.py
           && python research/agent-token-economy/paired/seloryn_task_test.py
-          && python -m py_compile research/agent-token-economy/token_count.py research/agent-token-economy/transcript.py research/agent-token-economy/transcript_token_count.py research/agent-token-economy/paired/python_task.py research/agent-token-economy/paired/run_pair.py research/agent-token-economy/paired/pair_runner_test.py research/agent-token-economy/paired/seloryn_task_test.py
+          && python research/agent-token-economy/meter/test_meter.py
+          && python -m py_compile research/agent-token-economy/token_count.py research/agent-token-economy/transcript.py research/agent-token-economy/transcript_token_count.py research/agent-token-economy/meter/meter.py research/agent-token-economy/meter/test_meter.py research/agent-token-economy/paired/python_task.py research/agent-token-economy/paired/run_pair.py research/agent-token-economy/paired/pair_runner_test.py research/agent-token-economy/paired/seloryn_task_test.py
           && python benchmarks/validate_json.py
           --schema research/agent-token-economy/schema/visible-transcript.schema.json
           research/agent-token-economy/fixtures/experiments/TOKEN-AGENT-01.json
@@ -258,6 +259,14 @@ jobs:
           --kind probe
           --
           python tests/job_preflight_probe.py
+      - name: Job worker execution proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name job-worker
+          --kind probe
+          --
+          python tests/job_worker_probe.py
       - name: Python/Seloryn language-model comparison
         run: >
           python scripts/ci/ci_evidence.py run
@@ -339,7 +348,7 @@ jobs:
           public-projects project-manifest local-import cpu-mlp-training
           training-stream self-hosted-mlp self-hosted-language-model
           auditable-local-inference performance operational-reliability
-          job-lifecycle job-lease job-recovery job-concurrency job-preflight
+          job-lifecycle job-lease job-recovery job-concurrency job-preflight job-worker
           language-model-comparison gpu-compute gpu-training
       - name: Upload sanitized CI evidence
         if: always()

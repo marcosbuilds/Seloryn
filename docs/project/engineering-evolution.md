@@ -70,8 +70,9 @@ not weaken correctness gates.
 3. Supply paired provider exports to the frozen AI suite for hypotheses A and
    B; until then its result remains inconclusive by design.
 4. Select the next technical gate only after its acceptance contract is
-   written; the current job-lifecycle boundary is local coordination only and
-   does not authorize a worker, retry system or remote execution feature.
+   written; the current job boundary authorizes only the verified direct
+   Seloryn worker slice and does not authorize descendant process groups,
+   retry/idempotency policy or remote execution.
 5. Build the final report from this ledger, the contract files and the linked
    executions. Do not mark an item complete from source presence alone.
 

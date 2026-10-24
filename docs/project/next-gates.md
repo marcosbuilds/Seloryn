@@ -99,8 +99,10 @@ promise that every design proposal already exists.
   root-confined `.sely` source and checks parser/semantic validity without
   mutating state. Atomic writes, event-authoritative repair, 100-way claim
   races, lease expiry and preflight rejection cases are covered by black-box
-  probes. This does not execute a job, prove process liveness, fence a worker
-  or retry a lost job.
+  probes. The direct-process worker now executes this validated source through
+  `seloryn job run`, fences executor transitions with the lease, bounds timeout
+  and output, and writes an atomic result receipt; process groups, retries and
+  remote execution remain outside the contract.
 
 ## Next gates
 
@@ -148,14 +150,13 @@ promise that every design proposal already exists.
    proof is real on a declared physical adapter. The next gate is a reusable
    device-resident Tensor/F32 abstraction, then GPU autodiff and MLP training;
    no fallback or distributed claim is implied.
-8. **Job coordination continuation — reservation and preflight slices
-   completed:** `seloryn job` now provides a durable local spec/state/event
-   boundary, a bounded reservation lease and read-only validation for an
-   isolated `seloryn-run.v1` source. The next gate must add a single-process worker
-   only after defining process identity, fencing, preflight/failure receipts,
-   process-group cancellation, artifact commit markers and idempotent recovery.
-   It must prove that an expired lease cannot abandon a live worker before any
-   queue, retry policy, remote worker or serving API is added.
+8. **Job execution continuation — direct-process slice completed:** `seloryn job`
+   now provides a durable local spec/state/event boundary, a bounded
+   reservation lease, read-only validation and a single-process worker for an
+   isolated `seloryn-run.v1` source. The next gate is process-group/job-object
+   cancellation when Seloryn gains subprocess effects, followed by explicit
+   retry/idempotency evidence. No queue, remote worker or serving API is
+   implied.
 
 ## Boundaries
 

@@ -15,6 +15,13 @@ use std::collections::HashMap;
 const MAX_TAPE_NODES: usize = 100_000;
 const MAX_CALL_DEPTH: usize = 32;
 
+/// Explicit compatibility spellings for the tensor operations implemented by
+/// this evaluator. New aliases are intentionally not invented here: a tensor
+/// builtin name carries domain and dtype information, and shortening it must
+/// not make a valid program harder to understand. `sum` remains registered
+/// for backwards compatibility with the existing language spelling.
+const TENSOR_ALIASES: &[(&str, &str)] = &[("sum", "tensor_sum")];
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Error {
     pub message: String,
@@ -594,8 +601,9 @@ impl<'a> Evaluator<'a> {
                     .iter()
                     .map(|argument| self.expression(argument, locals, depth))
                     .collect::<Result<Vec<_>, _>>()?;
-                if is_tensor_builtin(name) {
-                    self.builtin(name, values)
+                let canonical_name = canonical_tensor_name(name)?;
+                if is_tensor_builtin(canonical_name) {
+                    self.builtin(canonical_name, values)
                 } else {
                     self.call(name, values, depth)
                 }
@@ -973,24 +981,43 @@ pub fn differentiate_tensors(
 }
 
 fn is_tensor_builtin(name: &str) -> bool {
-    matches!(
-        name,
-        "tensor_sum"
-            | "sum"
-            | "tensor_mean"
-            | "matmul"
-            | "transpose"
-            | "tensor_relu"
-            | "tensor_exp"
-            | "tensor_log"
-            | "tensor_softmax"
-            | "tensor_logsumexp"
-            | "tensor_cross_entropy"
-            | "tensor_sum_to_shape"
-            | "reshape"
-            | "tensor_f32"
-            | "tensor_zeros_f32"
-    )
+    TENSOR_BUILTINS.contains(&name)
+}
+
+const TENSOR_BUILTINS: &[&str] = &[
+    "tensor_sum",
+    "tensor_mean",
+    "matmul",
+    "transpose",
+    "tensor_relu",
+    "tensor_exp",
+    "tensor_log",
+    "tensor_softmax",
+    "tensor_logsumexp",
+    "tensor_cross_entropy",
+    "tensor_sum_to_shape",
+    "reshape",
+    "tensor_f32",
+    "tensor_zeros_f32",
+];
+
+fn canonical_tensor_name(name: &str) -> Result<&str, Error> {
+    let mut target = None;
+    for (alias, canonical) in TENSOR_ALIASES {
+        if *alias != name {
+            continue;
+        }
+        if let Some(previous) = target {
+            if previous != *canonical {
+                return Err(Error::new(format!(
+                    "tensor alias `{name}` is ambiguous: `{previous}` or `{canonical}`"
+                )));
+            }
+        } else {
+            target = Some(*canonical);
+        }
+    }
+    Ok(target.unwrap_or(name))
 }
 
 fn tensor_error(error: TensorError) -> Error {
@@ -1116,7 +1143,10 @@ fn f32_list(value: Option<&TracedValue>) -> Result<Vec<f32>, Error> {
 
 #[cfg(test)]
 mod tests {
-    use super::{differentiate_tensor, differentiate_tensors};
+    use super::{
+        TENSOR_ALIASES, TENSOR_BUILTINS, canonical_tensor_name, differentiate_tensor,
+        differentiate_tensors,
+    };
     use crate::{ir, parser, tensor::Tensor};
 
     fn gradient(source: &str, values: Vec<f32>, shape: &[i64]) -> Tensor {
@@ -1125,6 +1155,30 @@ mod tests {
         let program = ir::lower(&parsed.program.expect("program"));
         let input = Tensor::from_f32(values, shape).expect("input tensor");
         differentiate_tensor(&program, "f", input).expect("tensor gradient")
+    }
+
+    #[test]
+    fn short_alias_registry_is_unique_and_targets_supported_builtins() {
+        for (index, (alias, canonical)) in TENSOR_ALIASES.iter().enumerate() {
+            assert!(
+                TENSOR_BUILTINS.contains(canonical),
+                "alias `{alias}` targets unknown builtin `{canonical}`"
+            );
+            assert!(
+                !TENSOR_BUILTINS.contains(alias),
+                "alias `{alias}` shadows canonical builtin"
+            );
+            assert_eq!(
+                canonical_tensor_name(alias).expect("alias resolution"),
+                *canonical
+            );
+            assert!(
+                TENSOR_ALIASES[index + 1..]
+                    .iter()
+                    .all(|(other, _)| other != alias),
+                "alias `{alias}` is registered more than once"
+            );
+        }
     }
 
     #[test]

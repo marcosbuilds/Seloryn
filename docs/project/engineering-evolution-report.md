@@ -206,7 +206,11 @@ Improved and verified:
 - Conformance and benchmark correctness are executable and independently
   reviewed.
 - Agent-facing project inspection now exposes bounded symbols, imports and
-  diagnostics without executing source.
+  diagnostics without executing source, plus a deterministic redacted
+  `seloryn.context.v1` package for valid inspections.
+- A bounded local `seloryn job run` worker now executes only validated
+  `seloryn-run.v1` sources through the Seloryn binary, with lease fencing,
+  timeout/cancel handling, bounded output hashes and an atomic result receipt.
 - Token measurement now has a real local instrument, schema, tests, a real
   subagent experiment and explicit non-billing limitations.
 - The Python/Seloryn paired harness now reproduces one shared-input experiment,
@@ -228,7 +232,8 @@ Not demonstrated:
   output reasoning accounting;
 - token economy, productivity or language/ecosystem advantage; the paired
   conditions are explicitly not functionally equivalent;
-- automatic execution of the local job contract.
+- general-purpose job orchestration, descendant process-group fencing, retries
+  or remote execution; the direct worker is intentionally narrower.
 
 The exact next research action is to obtain paired, consented,
 provider-exported baseline/candidate runs for the frozen AI suite. Until those

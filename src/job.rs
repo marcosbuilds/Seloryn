@@ -7,6 +7,9 @@ use std::thread;
 use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[path = "job_worker.rs"]
+pub(crate) mod job_worker;
+
 use crate::json::{self, JsonValue};
 
 const JOB_SCHEMA: &str = "seloryn.job.v1";
@@ -17,6 +20,8 @@ const COMMIT_DIRECTORY_PREFIX: &str = ".job-commit-tmp-";
 const MAX_JOB_ID_BYTES: usize = 64;
 const MAX_SPEC_BYTES: usize = 4 * 1024 * 1024;
 const MAX_PREFLIGHT_SOURCE_BYTES: usize = 16 * 1024 * 1024;
+#[allow(dead_code)]
+const MAX_RESULT_BYTES: usize = 1024 * 1024;
 const MAX_JSON_DEPTH: usize = 64;
 const LOCK_WAIT_ATTEMPTS: usize = 500;
 const LOCK_WAIT_STEP: Duration = Duration::from_millis(10);
@@ -310,62 +315,7 @@ pub(crate) fn preflight(root: &Path, job_id: &str) -> Result<JsonValue, JobError
         ));
     }
 
-    let spec_path = directory.join("spec.json");
-    reject_symlink(&spec_path)?;
-    let spec_bytes = fs::read(&spec_path)
-        .map_err(|error| JobError::io("SEL-J010", "failed to read job spec", error))?;
-    let spec = parse_preflight_spec(&spec_bytes, &record.state.spec_sha256)?;
-    let resolved_source = resolve_preflight_source(root, &spec.source)?;
-    let mut source_file = File::open(&resolved_source.path)
-        .map_err(|error| JobError::io("SEL-J010", "failed to open job source", error))?;
-    let source_metadata = source_file
-        .metadata()
-        .map_err(|error| JobError::io("SEL-J010", "failed to inspect job source", error))?;
-    if metadata_is_reparse(&source_metadata) || !source_metadata.is_file() {
-        return Err(preflight_error("source is not a regular file"));
-    }
-    if source_metadata.len() > MAX_PREFLIGHT_SOURCE_BYTES as u64 {
-        return Err(preflight_error(format!(
-            "source exceeds the {MAX_PREFLIGHT_SOURCE_BYTES} byte limit"
-        )));
-    }
-    let mut source_bytes = Vec::new();
-    std::io::Read::by_ref(&mut source_file)
-        .take(MAX_PREFLIGHT_SOURCE_BYTES as u64 + 1)
-        .read_to_end(&mut source_bytes)
-        .map_err(|error| JobError::io("SEL-J010", "failed to read job source", error))?;
-    if source_bytes.len() > MAX_PREFLIGHT_SOURCE_BYTES {
-        return Err(preflight_error(format!(
-            "source exceeds the {MAX_PREFLIGHT_SOURCE_BYTES} byte limit"
-        )));
-    }
-    let canonical_after_read = fs::canonicalize(&resolved_source.path)
-        .map_err(|error| JobError::io("SEL-J010", "failed to re-resolve the source path", error))?;
-    if canonical_after_read != resolved_source.canonical
-        || !canonical_after_read.starts_with(&resolved_source.canonical_root)
-    {
-        return Err(preflight_error(
-            "source path changed or resolves outside the selected root",
-        ));
-    }
-    let source = String::from_utf8(source_bytes.clone())
-        .map_err(|_| preflight_error("source must be valid UTF-8"))?;
-    let source_sha256 = crate::sha256_hex(&source_bytes);
-    if source_sha256 != spec.source_sha256 {
-        return Err(preflight_error(
-            "source_sha256 does not match source content",
-        ));
-    }
-    let parsed = crate::parser::parse(&source);
-    if let Some(diagnostic) = parsed.diagnostics.first() {
-        return Err(source_diagnostic_error(diagnostic));
-    }
-    let program = parsed
-        .program
-        .ok_or_else(|| preflight_error("source parser produced no program"))?;
-    if let Some(diagnostic) = crate::semantic::check(&program).first() {
-        return Err(source_diagnostic_error(diagnostic));
-    }
+    let input = read_preflight_input(root, &directory, &record.state.spec_sha256)?;
 
     Ok(JsonValue::Object(BTreeMap::from([
         (
@@ -381,14 +331,14 @@ pub(crate) fn preflight(root: &Path, job_id: &str) -> Result<JsonValue, JobError
             "schema".to_owned(),
             JsonValue::String(JOB_SCHEMA.to_owned()),
         ),
-        ("source".to_owned(), JsonValue::String(spec.source)),
+        ("source".to_owned(), JsonValue::String(input.spec.source)),
         (
             "source_bytes".to_owned(),
-            JsonValue::Number(source_bytes.len().to_string()),
+            JsonValue::Number(input.source_bytes.len().to_string()),
         ),
         (
             "source_sha256".to_owned(),
-            JsonValue::String(spec.source_sha256),
+            JsonValue::String(input.spec.source_sha256),
         ),
         (
             "spec_sha256".to_owned(),
@@ -397,7 +347,7 @@ pub(crate) fn preflight(root: &Path, job_id: &str) -> Result<JsonValue, JobError
         ("status".to_owned(), JsonValue::String("ready".to_owned())),
         (
             "timeout_ms".to_owned(),
-            JsonValue::Number(spec.timeout_ms.to_string()),
+            JsonValue::Number(input.spec.timeout_ms.to_string()),
         ),
     ])))
 }
@@ -471,6 +421,136 @@ struct ResolvedSource {
     path: PathBuf,
     canonical: PathBuf,
     canonical_root: PathBuf,
+}
+
+#[allow(dead_code)]
+#[derive(Debug)]
+pub(crate) struct WorkerInput {
+    pub(crate) source: PathBuf,
+    pub(crate) timeout: Duration,
+    pub(crate) spec_sha256: String,
+}
+
+fn read_preflight_input(
+    root: &Path,
+    directory: &Path,
+    expected_spec_sha256: &str,
+) -> Result<PreflightInput, JobError> {
+    let spec_path = directory.join("spec.json");
+    reject_symlink(&spec_path)?;
+    let spec_bytes = fs::read(&spec_path)
+        .map_err(|error| JobError::io("SEL-J010", "failed to read job spec", error))?;
+    let spec = parse_preflight_spec(&spec_bytes, expected_spec_sha256)?;
+    let resolved_source = resolve_preflight_source(root, &spec.source)?;
+    let mut source_file = File::open(&resolved_source.path)
+        .map_err(|error| JobError::io("SEL-J010", "failed to open job source", error))?;
+    let source_metadata = source_file
+        .metadata()
+        .map_err(|error| JobError::io("SEL-J010", "failed to inspect job source", error))?;
+    if metadata_is_reparse(&source_metadata) || !source_metadata.is_file() {
+        return Err(preflight_error("source is not a regular file"));
+    }
+    if source_metadata.len() > MAX_PREFLIGHT_SOURCE_BYTES as u64 {
+        return Err(preflight_error(format!(
+            "source exceeds the {MAX_PREFLIGHT_SOURCE_BYTES} byte limit"
+        )));
+    }
+    let mut source_bytes = Vec::new();
+    std::io::Read::by_ref(&mut source_file)
+        .take(MAX_PREFLIGHT_SOURCE_BYTES as u64 + 1)
+        .read_to_end(&mut source_bytes)
+        .map_err(|error| JobError::io("SEL-J010", "failed to read job source", error))?;
+    if source_bytes.len() > MAX_PREFLIGHT_SOURCE_BYTES {
+        return Err(preflight_error(format!(
+            "source exceeds the {MAX_PREFLIGHT_SOURCE_BYTES} byte limit"
+        )));
+    }
+    let canonical_after_read = fs::canonicalize(&resolved_source.path)
+        .map_err(|error| JobError::io("SEL-J010", "failed to re-resolve the source path", error))?;
+    if canonical_after_read != resolved_source.canonical
+        || !canonical_after_read.starts_with(&resolved_source.canonical_root)
+    {
+        return Err(preflight_error(
+            "source path changed or resolves outside the selected root",
+        ));
+    }
+    let source = String::from_utf8(source_bytes.clone())
+        .map_err(|_| preflight_error("source must be valid UTF-8"))?;
+    let source_sha256 = crate::sha256_hex(&source_bytes);
+    if source_sha256 != spec.source_sha256 {
+        return Err(preflight_error(
+            "source_sha256 does not match source content",
+        ));
+    }
+    let parsed = crate::parser::parse(&source);
+    if let Some(diagnostic) = parsed.diagnostics.first() {
+        return Err(source_diagnostic_error(diagnostic));
+    }
+    let program = parsed
+        .program
+        .ok_or_else(|| preflight_error("source parser produced no program"))?;
+    if let Some(diagnostic) = crate::semantic::check(&program).first() {
+        return Err(source_diagnostic_error(diagnostic));
+    }
+    Ok(PreflightInput {
+        spec,
+        resolved_source,
+        source_bytes,
+    })
+}
+
+#[allow(dead_code)]
+struct PreflightInput {
+    spec: PreflightSpec,
+    resolved_source: ResolvedSource,
+    source_bytes: Vec<u8>,
+}
+
+#[allow(dead_code)]
+pub(crate) fn worker_input(
+    root: &Path,
+    job_id: &str,
+    lease_id: &str,
+) -> Result<WorkerInput, JobError> {
+    validate_job_id(job_id)?;
+    validate_lease_id(lease_id)?;
+    let directory = job_directory(root, job_id);
+    ensure_store_contained(
+        root,
+        directory.parent().expect("job directory has a parent"),
+    )?;
+    ensure_job_contained(root, &directory)?;
+    let _lock = JobLock::acquire(&directory)?;
+    let record = load_record_unlocked_read_only_without_spec(&directory)?;
+    if record.state.status != Status::Starting {
+        return Err(JobError::new(
+            "SEL-J017",
+            "worker input requires a starting job",
+        ));
+    }
+    require_lease(&record.state, lease_id)?;
+    if !lease_active(&record.state, unix_seconds()) {
+        return Err(JobError::new("SEL-J016", "lease has expired"));
+    }
+    let input = read_preflight_input(root, &directory, &record.state.spec_sha256)?;
+    // Execute a job-owned snapshot rather than reopening the user-controlled
+    // source path after validation. This removes the relative-root ambiguity
+    // and closes the preflight-to-spawn replacement window for the v1 worker.
+    let snapshot = directory.join("source.sely");
+    reject_symlink(&snapshot)?;
+    atomic_write(&snapshot, &input.source_bytes)?;
+    let snapshot_metadata = fs::symlink_metadata(&snapshot)
+        .map_err(|error| JobError::io("SEL-J010", "failed to inspect source snapshot", error))?;
+    if metadata_is_reparse(&snapshot_metadata) || !snapshot_metadata.is_file() {
+        return Err(preflight_error("source snapshot is not a regular file"));
+    }
+    let snapshot = fs::canonicalize(&snapshot)
+        .map_err(|error| JobError::io("SEL-J010", "failed to resolve source snapshot", error))?;
+    Ok(WorkerInput {
+        source: snapshot,
+        timeout: Duration::from_millis(input.spec.timeout_ms),
+        spec_sha256: record.state.spec_sha256,
+    })
 }
 
 fn resolve_preflight_source(root: &Path, source: &str) -> Result<ResolvedSource, JobError> {
@@ -879,10 +959,13 @@ pub(crate) fn heartbeat(
     ensure_job_contained(root, &directory)?;
     let _lock = JobLock::acquire(&directory)?;
     let mut record = load_record_unlocked(&directory)?;
-    if record.state.status != Status::Starting {
+    if !matches!(
+        record.state.status,
+        Status::Starting | Status::Running | Status::Committing | Status::Cancelling
+    ) {
         return Err(JobError::new(
             "SEL-J017",
-            "heartbeat is only valid while the lease is starting",
+            "heartbeat is only valid while the executor lease is active",
         ));
     }
     require_lease(&record.state, lease_id)?;
@@ -893,13 +976,13 @@ pub(crate) fn heartbeat(
     let current_expiry = record
         .state
         .lease_expires_at
-        .ok_or_else(|| JobError::new("SEL-J019", "starting job has no lease expiry"))?;
+        .ok_or_else(|| JobError::new("SEL-J019", "executor job has no lease expiry"))?;
     let lease_expires_at = lease_deadline(ttl_seconds).max(current_expiry.saturating_add(1));
     let event = Event {
         sequence: record.state.sequence.saturating_add(1),
         job_id: job_id.to_owned(),
-        from: Some(Status::Starting),
-        to: Status::Starting,
+        from: Some(record.state.status),
+        to: record.state.status,
         at: now,
         spec_sha256: record.state.spec_sha256.clone(),
         attempt: Some(record.state.attempt),
@@ -915,7 +998,69 @@ pub(crate) fn heartbeat(
         Operation::Heartbeat,
         &record,
         None,
-        Some(Status::Starting),
+        Some(record.state.status),
+    ))
+}
+
+/// Commit an executor-owned transition. This is deliberately not wired to the
+/// public `transition` API: only a holder of the current lease can call it.
+#[allow(dead_code)]
+pub(crate) fn executor_transition(
+    root: &Path,
+    job_id: &str,
+    lease_id: &str,
+    next: Status,
+) -> Result<JsonValue, JobError> {
+    validate_job_id(job_id)?;
+    validate_lease_id(lease_id)?;
+    let directory = job_directory(root, job_id);
+    ensure_store_contained(
+        root,
+        directory.parent().expect("job directory has a parent"),
+    )?;
+    ensure_job_contained(root, &directory)?;
+    let _lock = JobLock::acquire(&directory)?;
+    let mut record = load_record_unlocked(&directory)?;
+    if !matches!(
+        record.state.status,
+        Status::Starting | Status::Running | Status::Committing | Status::Cancelling
+    ) {
+        return Err(JobError::new(
+            "SEL-J017",
+            "executor transition requires an active executor state",
+        ));
+    }
+    require_lease(&record.state, lease_id)?;
+    if !lease_active(&record.state, unix_seconds()) {
+        return Err(JobError::new("SEL-J016", "lease has expired"));
+    }
+    validate_transition(record.state.status, next)?;
+    let terminal = matches!(next, Status::Succeeded | Status::Cancelled | Status::Failed);
+    let event = Event {
+        sequence: record.state.sequence.saturating_add(1),
+        job_id: job_id.to_owned(),
+        from: Some(record.state.status),
+        to: next,
+        at: unix_seconds(),
+        spec_sha256: record.state.spec_sha256.clone(),
+        attempt: Some(record.state.attempt),
+        kind: "executor".to_owned(),
+        owner: (!terminal).then(|| record.state.owner.clone()).flatten(),
+        attempt_id: (!terminal)
+            .then(|| record.state.attempt_id.clone())
+            .flatten(),
+        claimed_at: (!terminal).then_some(record.state.claimed_at).flatten(),
+        lease_id: (!terminal).then(|| Some(lease_id.to_owned())).flatten(),
+        lease_expires_at: (!terminal)
+            .then_some(record.state.lease_expires_at)
+            .flatten(),
+    };
+    let record = commit_event(&directory, &mut record, event)?;
+    Ok(result_json(
+        Operation::Transition,
+        &record,
+        None,
+        Some(next),
     ))
 }
 
@@ -977,11 +1122,14 @@ pub(crate) fn recover_lost(root: &Path, job_id: &str) -> Result<JsonValue, JobEr
     if record.state.status == Status::Lost {
         return Ok(result_json(Operation::Recover, &record, Some(true), None));
     }
-    if record.state.status != Status::Starting {
+    if !matches!(
+        record.state.status,
+        Status::Starting | Status::Running | Status::Committing | Status::Cancelling
+    ) {
         return Err(JobError::new(
             "SEL-J015",
             format!(
-                "job {job_id} can only be recovered from starting, not {}",
+                "job {job_id} can only be recovered from an active executor state, not {}",
                 record.state.status.as_str()
             ),
         ));
@@ -990,7 +1138,7 @@ pub(crate) fn recover_lost(root: &Path, job_id: &str) -> Result<JsonValue, JobEr
     if record.state.lease_id.is_none() || record.state.lease_expires_at.is_none() {
         return Err(JobError::new(
             "SEL-J019",
-            "legacy starting job has no lease; automatic recovery is refused",
+            "legacy executor job has no lease; automatic recovery is refused",
         ));
     }
     if lease_active(&record.state, now) {
@@ -1572,8 +1720,10 @@ fn validate_event(state: &JobState, event: &Event) -> Result<(), JobError> {
             validate_transition(state.status, event.to)?;
         }
         "heartbeat" => {
-            if state.status != Status::Starting
-                || event.to != Status::Starting
+            if !matches!(
+                state.status,
+                Status::Starting | Status::Running | Status::Committing | Status::Cancelling
+            ) || event.to != state.status
                 || event.attempt != Some(state.attempt)
                 || event.owner != state.owner
                 || event.attempt_id != state.attempt_id
@@ -1587,6 +1737,43 @@ fn validate_event(state: &JobState, event: &Event) -> Result<(), JobError> {
                     "heartbeat event does not extend the active lease",
                 ));
             }
+        }
+        "executor" => {
+            let terminal = matches!(
+                event.to,
+                Status::Succeeded | Status::Cancelled | Status::Failed
+            );
+            if !matches!(
+                state.status,
+                Status::Starting | Status::Running | Status::Committing | Status::Cancelling
+            ) || event.attempt != Some(state.attempt)
+                || event.lease_id
+                    != if terminal {
+                        None
+                    } else {
+                        state.lease_id.clone()
+                    }
+                || event.lease_expires_at
+                    != if terminal {
+                        None
+                    } else {
+                        state.lease_expires_at
+                    }
+                || event.owner != if terminal { None } else { state.owner.clone() }
+                || event.attempt_id
+                    != if terminal {
+                        None
+                    } else {
+                        state.attempt_id.clone()
+                    }
+                || event.claimed_at != if terminal { None } else { state.claimed_at }
+            {
+                return Err(JobError::new(
+                    "SEL-J007",
+                    "executor event changed lease identity",
+                ));
+            }
+            validate_transition(state.status, event.to)?;
         }
         "release" => {
             if state.status != Status::Starting
@@ -1606,8 +1793,10 @@ fn validate_event(state: &JobState, event: &Event) -> Result<(), JobError> {
             validate_transition(state.status, event.to)?;
         }
         "recover" => {
-            if state.status != Status::Starting
-                || event.to != Status::Lost
+            if !matches!(
+                state.status,
+                Status::Starting | Status::Running | Status::Committing | Status::Cancelling
+            ) || event.to != Status::Lost
                 || event.attempt != Some(state.attempt)
                 || event.owner != state.owner
                 || event.attempt_id != state.attempt_id

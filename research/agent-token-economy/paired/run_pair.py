@@ -29,6 +29,7 @@ SELY_TASK = PAIR_DIR / "seloryn_task.sely"
 DEFAULT_MANIFEST = PAIR_DIR / "TOKEN-PAIR-01.manifest.json"
 TRANSCRIPT_MODULE_PATH = ROOT / "research" / "agent-token-economy" / "transcript.py"
 TOKEN_MODULE_PATH = ROOT / "research" / "agent-token-economy" / "token_count.py"
+METER_MODULE_PATH = ROOT / "research" / "agent-token-economy" / "meter" / "meter.py"
 MANIFEST_SCHEMA = "seloryn.token-pair-task.v1"
 TRANSCRIPT_SCHEMA = "seloryn.agent-visible-transcript.v1"
 REPORT_SCHEMA = "seloryn.token-pair-report.v1"
@@ -125,6 +126,7 @@ def run_pair(manifest_path: Path, binary: Path, *, model: str | None, encoding: 
     python_task = _load_module("seloryn_python_pair_task", PYTHON_TASK)
     sys.modules["token_count"] = _load_module("token_count", TOKEN_MODULE_PATH)
     transcript = _load_module("seloryn_pair_transcript", TRANSCRIPT_MODULE_PATH)
+    meter = _load_module("seloryn_agent_meter", METER_MODULE_PATH)
     python_document = python_task.run(manifest)
     if python_document["messages"][0]["text"] != visible_input(manifest):
         raise ValueError("Python condition diverged from the shared visible input")
@@ -135,6 +137,25 @@ def run_pair(manifest_path: Path, binary: Path, *, model: str | None, encoding: 
 
     python_count = transcript.measure(python_document, encoding=encoding, model=model)
     seloryn_count = transcript.measure(seloryn_document, encoding=encoding, model=model)
+    meter_input = {
+        "environment": manifest.get("environment", {}),
+        "model": model,
+        "encoding": encoding,
+    }
+    python_meter = meter.measure(
+        {
+            **meter_input,
+            "prompt": python_document["messages"][0]["text"],
+            "response": python_document["messages"][1]["text"],
+        }
+    )
+    seloryn_meter = meter.measure(
+        {
+            **meter_input,
+            "prompt": seloryn_document["messages"][0]["text"],
+            "response": seloryn_document["messages"][1]["text"],
+        }
+    )
     tokenizer = python_count["tokenizer"]
     return {
         "schema": REPORT_SCHEMA,
@@ -156,10 +177,12 @@ def run_pair(manifest_path: Path, binary: Path, *, model: str | None, encoding: 
             "python": {
                 "transcript": python_document,
                 "token_count": python_count,
+                "meter": python_meter,
             },
             "seloryn": {
                 "transcript": seloryn_document,
                 "token_count": seloryn_count,
+                "meter": seloryn_meter,
             },
         },
         "parity": {

@@ -26,11 +26,15 @@ The repository currently demonstrates, in bounded scope:
 - small CPU training and self-hosted `.sely` examples;
 - deterministic/replay-oriented receipts, hashes and HMAC contracts;
 - `seloryn inspect` that exposes bounded symbols, imports and diagnostics
-  without executing source;
-- job state, leases, recovery and preflight contracts, but not an automatic
-  worker that executes jobs;
+  without executing source, plus a redacted deterministic `seloryn.context.v1`
+  package for agent consumers;
+- job state, leases, recovery and preflight contracts, plus a bounded
+  `seloryn job run` worker for validated `seloryn-run.v1` sources. The worker
+  executes only the Seloryn binary, clears the child environment, fences
+  transitions with a lease, bounds output and writes a hashed result receipt;
 - a GPU probe and narrow numerical paths, not complete GPU support;
-- a local visible-transcript token instrument and `TOKEN-PAIR-01`.
+- a local visible-transcript token instrument, a provider-neutral redacted meter
+  and `TOKEN-PAIR-01` with the same prompt/manifest measured by both tools.
 
 The paired token experiment uses the same manifest, prompt, declared
 environment and local `gpt-4o`/`o200k_base` tokenizer. It measured 99 input /
@@ -45,7 +49,9 @@ The following claims remain outside the demonstrated boundary:
 
 - general LLM training or production model serving;
 - full GPU training and distributed execution;
-- automatic job execution;
+- general-purpose automatic orchestration, remote workers, descendant process
+  groups and arbitrary command execution. The current local worker is narrow
+  by design and only covers direct Seloryn execution;
 - a Python-comparable library/package ecosystem;
 - a stable ABI, registry or production runtime guarantee;
 - token savings, lower cost, higher productivity or provider billing parity.
@@ -113,32 +119,45 @@ policy.
 **Gate:** every public claim links to code, test and limitation; all supported
 CI platforms are green; no `unknown` becomes a success value.
 
-### Phase 1 — Deterministic context compiler
+### Phase 1 — Deterministic context compiler — narrow gate reached
 
 **Deliver:** versioned and hashable `inspect` context packages containing
 symbols, imports, diagnostics, contracts, capabilities, affected files and a
 bounded minimum context for one agent task; incremental cache by source hash.
 
+**Implemented now:** `analysis::build_context` provides stable ordering,
+explicit file/symbol/import limits, path normalization and credential-shaped
+label redaction. `inspect --format=json` keeps the v1 envelope and adds the
+agent package for valid source/project inspections.
+
 **Gate:** identical snapshot produces identical bytes; byte/symbol limits are
 enforced; source is never executed; reduced context preserves task acceptance
-against a full-context reference.
+against a full-context reference. Incremental source-hash caching and task-
+acceptance equivalence remain future work.
 
-### Phase 2 — Safe local worker
+### Phase 2 — Safe local worker — direct-process gate reached
 
-**Deliver:** worker identity; process-group ownership; lease fencing; timeout;
-cancel; crash recovery; success/failure/cancel states; idempotent effect
-commit; pre-run, run and post-run receipts.
+**Implemented now:** worker identity; lease fencing; preflight revalidation;
+job-owned source snapshots; timeout; CLI cooperative cancellation; recovery of
+active states; success/failure/cancelled states; bounded stdout/stderr hashes;
+committed result receipts; and the `job run` CLI. Process-group ownership,
+descendant cleanup and cross-process effects remain out of scope because the
+language has no subprocess effect in this version.
 
-**Gate:** an old worker cannot finalize after fencing; an expired lease cannot
-silently abandon a live process; retry cannot duplicate effects; crash,
-cancel, corruption and path escape have independent tests; artifacts have
-hashes and owners.
+**Gate for the next hardening slice:** an old worker cannot finalize after
+fencing; an expired lease cannot silently abandon a live process; retry cannot
+duplicate effects; crash, cancel, corruption and path escape have independent
+tests; artifacts have hashes and owners. The current direct worker proves the
+validated single-child path, but does not yet claim process-group/job-object
+ownership after a coordinator crash.
 
-### Phase 3 — Model ports, tokens and budgets
+### Phase 3 — Model ports, tokens and budgets — measurement substrate reached
 
-**Deliver:** provider-neutral model interface; deterministic mock; optional
-adapter; separated transcript/usage/cost records; local BPE marked as a
-reconstruction; per-agent/task budgets; redacted export.
+**Implemented now:** the paired harness and `meter.py` separate visible local
+text tokenization from provider-reported usage, preserve unknown fields,
+redact raw content and record Unicode/UTF-8/BPE observables. A provider-neutral
+request/response port, deterministic mock, cost model and per-agent budget
+enforcement are still future work.
 
 **Gate:** baseline and candidate share prompt, tools, environment, retry policy
 and quality grader; provider usage is present for every comparable run; retries
@@ -196,10 +215,11 @@ completion from a plan, a fixture, a local-only run or a green subtest.
 
 ## Immediate backlog order
 
-1. Freeze Phase 0 schemas and the capability matrix.
-2. Implement the deterministic context package on top of `seloryn inspect`.
-3. Implement a single-process worker with fencing and crash tests.
-4. Add provider-neutral model ports and separate usage/cost records.
+1. Keep Phase 0 schemas and the capability matrix aligned with every release.
+2. Add incremental source-hash caching and full-context acceptance equivalence.
+3. Extend worker evidence to process-group/job-object fencing when Seloryn
+   gains subprocess effects.
+4. Add provider-neutral model ports, a deterministic mock and budget gates.
 5. Extend the paired token harness to tool/file/retry scenarios only when
    provider exports are available.
 6. Add explicit device/layout contracts and CPU reference kernels.

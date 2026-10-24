@@ -35,6 +35,10 @@ def main() -> int:
     assert report["schema"] == "seloryn.analysis.v1"
     assert report["diagnostics"] == []
     assert report["context"]["kind"] == "project"
+    agent_context = report["context"]["agent"]
+    assert agent_context["schema"] == "seloryn.context.v1"
+    assert agent_context["truncated"] is False
+    assert agent_context["total_files"] == 2
     files = {entry["path"]: entry for entry in report["context"]["files"]}
     assert set(files) == {
         "src/inspection_contract.sely",
