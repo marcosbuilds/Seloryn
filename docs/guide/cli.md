@@ -185,11 +185,13 @@ receipt. The behavior is exercised by
 [`tests/job_worker_probe.py`](../../tests/job_worker_probe.py) and the Rust
 worker tests.
 
-This is a direct-process worker, not a general scheduler. It does not claim
-descendant process-group/job-object fencing, retries, quotas, remote
-execution, a public registry or recovery of a child that escaped the worker.
-Those are separate next gates. `run` remains the backward-compatible direct
-source execution command.
+This is a direct-process worker, not a general scheduler. Each child is
+attached to a POSIX process group or Windows Job Object, and timeout/cancel
+terminates that fence. The native descendant proof is
+[`tests/process_fence_probe.py`](../../tests/process_fence_probe.py). The
+worker still does not claim checkpoint resume, quotas, remote execution, a
+public registry or recovery after the supervisor itself escapes or crashes.
+`run` remains the backward-compatible direct source execution command.
 
 ## Future commands
 

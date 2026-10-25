@@ -5,11 +5,9 @@
 //! Seloryn binary by absolute path with the validated source as a single path
 //! argument. The lease is the fencing token: every executor-owned transition
 //! and heartbeat is authenticated by that token, while administrative
-//! transitions cannot manufacture executor states. The v1 boundary is one
-//! direct Seloryn child; it does not claim cleanup of descendants or a
-//! cross-platform process group, because the language currently has no
-//! subprocess effect. A future effect-capable worker must add an OS-level
-//! process-group/job-object fence before enabling descendants.
+//! transitions cannot manufacture executor states. Every child is also
+//! attached to an OS-level process-group/job-object fence so timeout and
+//! cancellation do not intentionally leave a child tree behind.
 
 #![allow(dead_code)]
 
@@ -61,6 +59,7 @@ struct RunOutcome {
     timed_out: bool,
     cancelled: bool,
     duration_ms: u128,
+    fence_kind: String,
     stdout: Capture,
     stderr: Capture,
 }
@@ -87,6 +86,181 @@ struct Capture {
     bytes: usize,
     sha256: String,
     truncated: bool,
+}
+
+struct ManagedChild {
+    child: Child,
+    fence: ProcessFence,
+}
+
+impl ManagedChild {
+    fn terminate(&mut self) -> Result<(), JobError> {
+        self.fence.terminate()
+    }
+
+    fn wait(&mut self) -> Result<ExitStatus, JobError> {
+        self.child
+            .wait()
+            .map_err(|error| JobError::io("SEL-J025", "failed to reap Seloryn job", error))
+    }
+}
+
+#[cfg(windows)]
+struct ProcessFence {
+    handle: windows_sys::Win32::Foundation::HANDLE,
+}
+
+#[cfg(unix)]
+struct ProcessFence {
+    pgid: i32,
+}
+
+#[cfg(not(any(unix, windows)))]
+struct ProcessFence;
+
+impl ProcessFence {
+    fn attach(child: &Child) -> Result<Self, JobError> {
+        #[cfg(windows)]
+        {
+            use std::mem::size_of;
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::System::JobObjects::{
+                AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+                JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectExtendedLimitInformation,
+                SetInformationJobObject,
+            };
+
+            let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
+            if handle.is_null() {
+                return Err(JobError::io(
+                    "SEL-J026",
+                    "failed to create Windows process fence",
+                    io::Error::last_os_error(),
+                ));
+            }
+            let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
+            limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            let configured = unsafe {
+                SetInformationJobObject(
+                    handle,
+                    JobObjectExtendedLimitInformation,
+                    (&limits as *const JOBOBJECT_EXTENDED_LIMIT_INFORMATION).cast(),
+                    size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+                )
+            };
+            if configured == 0 {
+                unsafe { windows_sys::Win32::Foundation::CloseHandle(handle) };
+                return Err(JobError::io(
+                    "SEL-J026",
+                    "failed to configure Windows process fence",
+                    io::Error::last_os_error(),
+                ));
+            }
+            let assigned = unsafe { AssignProcessToJobObject(handle, child.as_raw_handle()) };
+            if assigned == 0 {
+                unsafe { windows_sys::Win32::Foundation::CloseHandle(handle) };
+                return Err(JobError::io(
+                    "SEL-J026",
+                    "failed to attach child to Windows process fence",
+                    io::Error::last_os_error(),
+                ));
+            }
+            Ok(Self { handle })
+        }
+
+        #[cfg(unix)]
+        {
+            Ok(Self {
+                pgid: child.id() as i32,
+            })
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            let _ = child;
+            Err(JobError::new(
+                "SEL-J026",
+                "Seloryn job process fencing is unsupported on this platform",
+            ))
+        }
+    }
+
+    fn terminate(&self) -> Result<(), JobError> {
+        #[cfg(windows)]
+        {
+            let result = unsafe {
+                windows_sys::Win32::System::JobObjects::TerminateJobObject(self.handle, 1)
+            };
+            if result == 0 {
+                return Err(JobError::io(
+                    "SEL-J025",
+                    "failed to terminate Windows process fence",
+                    io::Error::last_os_error(),
+                ));
+            }
+            Ok(())
+        }
+
+        #[cfg(unix)]
+        {
+            const SIGKILL: i32 = 9;
+            let result = unsafe { kill(-self.pgid, SIGKILL) };
+            if result != 0 {
+                let error = io::Error::last_os_error();
+                if error.kind() != io::ErrorKind::NotFound {
+                    return Err(JobError::io(
+                        "SEL-J025",
+                        "failed to terminate Seloryn process group",
+                        error,
+                    ));
+                }
+            }
+            Ok(())
+        }
+
+        #[cfg(not(any(unix, windows)))]
+        {
+            Err(JobError::new(
+                "SEL-J025",
+                "Seloryn job process fencing is unsupported on this platform",
+            ))
+        }
+    }
+
+    fn kind(&self) -> &'static str {
+        #[cfg(windows)]
+        {
+            "windows-job-object"
+        }
+        #[cfg(unix)]
+        {
+            "posix-process-group"
+        }
+        #[cfg(not(any(unix, windows)))]
+        {
+            "unsupported"
+        }
+    }
+}
+
+impl Drop for ProcessFence {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        unsafe {
+            let _ = self.terminate();
+            windows_sys::Win32::Foundation::CloseHandle(self.handle);
+        }
+
+        #[cfg(unix)]
+        {
+            let _ = self.terminate();
+        }
+    }
+}
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn kill(pid: i32, signal: i32) -> i32;
 }
 
 /// Execute one local job to completion.
@@ -136,6 +310,7 @@ pub(crate) fn run(root: &Path, job_id: &str, config: WorkerConfig) -> Result<Jso
                 timed_out: false,
                 cancelled: false,
                 duration_ms: 0,
+                fence_kind: "not-started".to_owned(),
                 stdout: Capture::empty(),
                 stderr: Capture::from_error(&error),
             };
@@ -192,8 +367,15 @@ fn lease_seconds(timeout_ms: u64) -> Result<u64, JobError> {
     Ok(requested.min(3600))
 }
 
-fn spawn_seloryn(binary: &Path, root: &Path, input: &WorkerInput) -> Result<Child, JobError> {
-    Command::new(binary)
+fn spawn_seloryn(
+    binary: &Path,
+    root: &Path,
+    input: &WorkerInput,
+) -> Result<ManagedChild, JobError> {
+    let mut command = Command::new(binary);
+    #[cfg(unix)]
+    std::os::unix::process::CommandExt::process_group(&mut command, 0);
+    let child = command
         .arg("run")
         .arg(&input.source)
         .arg("--format=json")
@@ -203,7 +385,17 @@ fn spawn_seloryn(binary: &Path, root: &Path, input: &WorkerInput) -> Result<Chil
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|error| JobError::io("SEL-J024", "failed to start Seloryn job", error))
+        .map_err(|error| JobError::io("SEL-J024", "failed to start Seloryn job", error))?;
+    let fence = match ProcessFence::attach(&child) {
+        Ok(fence) => fence,
+        Err(error) => {
+            let mut child = child;
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(error);
+        }
+    };
+    Ok(ManagedChild { child, fence })
 }
 
 fn execute_child(
@@ -211,34 +403,36 @@ fn execute_child(
     job_id: &str,
     lease_id: &str,
     input: &WorkerInput,
-    mut child: Child,
+    mut child: ManagedChild,
     config: &WorkerConfig,
 ) -> Result<JsonValue, JobError> {
     if let Err(error) = executor_transition(root, job_id, lease_id, Status::Running) {
-        let _ = child.kill();
+        let _ = child.terminate();
         let _ = child.wait();
         return Err(error);
     }
     let stdout = child
+        .child
         .stdout
         .take()
         .ok_or_else(|| JobError::new("SEL-J024", "Seloryn stdout pipe was not created"));
     let stdout = match stdout {
         Ok(stdout) => stdout,
         Err(error) => {
-            let _ = child.kill();
+            let _ = child.terminate();
             let _ = child.wait();
             return Err(error);
         }
     };
     let stderr = child
+        .child
         .stderr
         .take()
         .ok_or_else(|| JobError::new("SEL-J024", "Seloryn stderr pipe was not created"));
     let stderr = match stderr {
         Ok(stderr) => stderr,
         Err(error) => {
-            let _ = child.kill();
+            let _ = child.terminate();
             let _ = child.wait();
             return Err(error);
         }
@@ -251,37 +445,37 @@ fn execute_child(
     let mut termination = None;
     let mut timed_out = false;
     let mut cancelled = false;
-    let status_result: Result<ExitStatus, JobError> = (|| {
-        loop {
-            if let Some(status) = child
-                .try_wait()
-                .map_err(|error| JobError::io("SEL-J024", "failed to poll Seloryn job", error))?
-            {
-                break Ok(status);
+    let status_result: Result<ExitStatus, JobError> =
+        (|| {
+            loop {
+                if let Some(status) = child.child.try_wait().map_err(|error| {
+                    JobError::io("SEL-J024", "failed to poll Seloryn job", error)
+                })? {
+                    break Ok(status);
+                }
+                if config.cancel.load(Ordering::Acquire) || crate::cancellation_requested() {
+                    termination = Some(WorkerStatus::Cancelled);
+                    cancelled = true;
+                    break terminate_child(root, job_id, lease_id, &mut child);
+                }
+                if started.elapsed() >= input.timeout {
+                    termination = Some(WorkerStatus::Cancelled);
+                    timed_out = true;
+                    break terminate_child(root, job_id, lease_id, &mut child);
+                }
+                if Instant::now() >= next_heartbeat {
+                    heartbeat(root, job_id, lease_id, lease_seconds_for(input.timeout))?;
+                    next_heartbeat = Instant::now() + heartbeat_every;
+                }
+                thread::sleep(POLL_STEP);
             }
-            if config.cancel.load(Ordering::Acquire) || crate::cancellation_requested() {
-                termination = Some(WorkerStatus::Cancelled);
-                cancelled = true;
-                break terminate_child(root, job_id, lease_id, &mut child);
-            }
-            if started.elapsed() >= input.timeout {
-                termination = Some(WorkerStatus::Cancelled);
-                timed_out = true;
-                break terminate_child(root, job_id, lease_id, &mut child);
-            }
-            if Instant::now() >= next_heartbeat {
-                heartbeat(root, job_id, lease_id, lease_seconds_for(input.timeout))?;
-                next_heartbeat = Instant::now() + heartbeat_every;
-            }
-            thread::sleep(POLL_STEP);
-        }
-    })();
+        })();
     let status = match status_result {
         Ok(status) => status,
         Err(error) => {
             // Polling, heartbeat and cancellation failures must not abandon
             // the direct child. Reap it before returning the lease error.
-            let _ = child.kill();
+            let _ = child.terminate();
             let _ = child.wait();
             let _ = stdout_thread.join();
             let _ = stderr_thread.join();
@@ -302,6 +496,7 @@ fn execute_child(
         timed_out,
         cancelled,
         duration_ms: started.elapsed().as_millis(),
+        fence_kind: child.fence.kind().to_owned(),
         stdout,
         stderr,
     };
@@ -331,15 +526,11 @@ fn terminate_child(
     root: &Path,
     job_id: &str,
     lease_id: &str,
-    child: &mut Child,
+    child: &mut ManagedChild,
 ) -> Result<ExitStatus, JobError> {
     executor_transition(root, job_id, lease_id, Status::Cancelling)?;
-    child
-        .kill()
-        .map_err(|error| JobError::io("SEL-J025", "failed to cancel Seloryn job", error))?;
-    let status = child
-        .wait()
-        .map_err(|error| JobError::io("SEL-J025", "failed to reap cancelled Seloryn job", error))?;
+    child.terminate()?;
+    let status = child.wait()?;
     Ok(status)
 }
 
@@ -404,6 +595,10 @@ fn write_result(
                 .exit_code
                 .map(|code| JsonValue::Number(code.to_string()))
                 .unwrap_or(JsonValue::Null),
+        ),
+        (
+            "fence_kind".to_owned(),
+            JsonValue::String(outcome.fence_kind.clone()),
         ),
         ("job_id".to_owned(), JsonValue::String(job_id.to_owned())),
         (

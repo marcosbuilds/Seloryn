@@ -104,8 +104,11 @@ promise that every design proposal already exists.
   and output, writes an atomic result receipt, and persists a redacted receipt
   for preflight failure without acquiring a lease. `seloryn job retry` now
   archives the previous attempt, clears the active receipt, requeues the same
-  canonical spec and increments the attempt on the next claim; process groups,
-  remote execution and checkpoint resume remain outside the contract.
+  canonical spec and increments the attempt on the next claim. The worker now
+  fences the child with a POSIX process group or Windows Job Object, and the
+  descendant probe verifies timeout cleanup after attachment; checkpoint
+  resume, remote execution and supervisor-crash recovery remain outside the
+  contract.
 - A dependency-free Python bridge now consumes the existing JSON/stdio result
   envelope from an external process, with typed diagnostics, UTF-8 round-trip,
   input/output bounds, timeout handling and copied-project evidence. It is a
@@ -160,14 +163,16 @@ promise that every design proposal already exists.
    proof is real on a declared physical adapter. The next gate is a reusable
    device-resident Tensor/F32 abstraction, then GPU autodiff and MLP training;
    no fallback or distributed claim is implied.
-8. **Job execution continuation — local retry slice completed:** `seloryn job`
+8. **Job execution continuation — local retry and process-fence slices
+   completed:** `seloryn job`
    provides a durable local spec/state/event boundary, a bounded reservation
    lease, read-only validation, preflight failure receipts and a single-process
    worker for an isolated `seloryn-run.v1` source. Terminal attempts can be
    explicitly retried with append-only event history, archived result receipts,
-   the same canonical spec and a new attempt number. Process groups/job
-   objects, checkpoint resume, remote workers and serving APIs remain outside
-   the contract.
+   the same canonical spec and a new attempt number. Checkpoint resume, remote
+   workers and serving APIs remain outside the contract. The fence proof covers
+   a descendant created after attachment;
+   it does not claim supervisor-crash recovery.
 
 ## Boundaries
 

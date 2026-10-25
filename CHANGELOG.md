@@ -15,6 +15,10 @@ not a promise that GitHub publication already happened.
 - **Candidate:** JSON strings now decode raw UTF-8 code points instead of
   treating each non-ASCII byte as a separate character; the Python bridge
   proof covers Portuguese Unicode input end to end.
+- **Candidate:** the local job worker now attaches each child to a POSIX
+  process group or Windows Job Object with kill-on-close semantics. A native
+  descendant probe proves timeout cleanup of the tree after fence installation;
+  checkpoint resume and supervisor-crash recovery remain outside the claim.
 - **Candidate:** `seloryn run --log=json2` now emits a bounded
   `run.start` → `preflight.error` → `run.end` receipt for source-loading,
   manifest-loading and static-check failures. The receipt preserves the
@@ -41,9 +45,9 @@ not a promise that GitHub publication already happened.
   fences a lease, applies timeout/cancellation cleanup, bounds stdout/stderr
   evidence and commits an atomic result receipt. `job retry` archives the
   previous attempt, clears the active result, requeues the same canonical spec
-  and increments the next claimed attempt. The slice does not supervise
-  descendant processes, provide process-group/job-object fencing, resume a
-  model checkpoint or distribute work remotely.
+  and increments the next claimed attempt. The worker now fences descendants
+  through a POSIX process group or Windows Job Object; checkpoint resume,
+  supervisor-crash recovery and remote execution remain outside the slice.
 
 ## [0.9.4] — local runtime patch, 2026-10-16
 

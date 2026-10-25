@@ -244,6 +244,15 @@
       "notes": "Bounded direct-process worker, lease fencing, cancellation/timeout cleanup, preflight receipt and archived terminal retry."
     },
     {
+      "id": "job-process-fence",
+      "path": "tests/process_fence_probe.py",
+      "command": ["python", "tests/process_fence_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "Rust compiler", "local process"],
+      "notes": "Timeout fence kills a native descendant created after the OS fence is installed."
+    },
+    {
       "id": "python-bridge",
       "path": "tests/python_bridge_probe.py",
       "command": ["python", "tests/python_bridge_probe.py"],
@@ -573,7 +582,20 @@
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary", "local filesystem"],
       "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
-      "limits": ["The worker is direct-process and bounded; retry is explicit local requeue of the same canonical spec with archived receipts; no descendant process-group/job-object fencing, checkpoint resume, remote execution or escaped-child recovery is claimed."]
+      "limits": ["The worker is direct-process and bounded; retry is explicit local requeue of the same canonical spec with archived receipts; checkpoint resume, remote execution or escaped-child recovery after supervisor death are not claimed."]
+    },
+    {
+      "id": "job-process-fencing",
+      "area": "operations",
+      "claim": "A local worker timeout fences a Seloryn child tree with an OS process group on POSIX or a Windows Job Object.",
+      "status": "verified-preview",
+      "implementation": ["src/job_worker.rs", "tests/process_fence_helper.rs"],
+      "positive_probes": ["job-process-fence"],
+      "negative_probes": ["job-process-fence"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "Rust compiler", "local process"],
+      "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
+      "limits": ["The proof covers a descendant created after fence installation; atomic process birth before attachment, supervisor crash recovery, remote execution and checkpoint resume remain outside the contract."]
     },
     {
       "id": "operational-reliability",

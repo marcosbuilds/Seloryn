@@ -65,6 +65,10 @@ def main() -> int:
         assert executed["cancelled"] is False, executed
         assert executed["committed"] is True, executed
         assert executed["stdout_bytes"] > 0, executed
+        expected_fence = (
+            "windows-job-object" if sys.platform == "win32" else "posix-process-group"
+        )
+        assert executed["fence_kind"] == expected_fence, executed
 
         status = ok(run(root, "status", "worker"))
         assert status["status"] == "succeeded", status
@@ -72,6 +76,39 @@ def main() -> int:
         receipt = json.loads(result_path.read_text(encoding="utf-8"))
         assert receipt["status"] == "succeeded"
         assert receipt["committed"] is True
+        assert receipt["fence_kind"] == expected_fence
+
+        timeout_source = (
+            "from data import range\n\n"
+            "fn main() -> I64:\n"
+            "    var total: I64 = 0\n"
+            "    for index in range(1000000):\n"
+            "        total = total + index\n"
+            "    return total\n"
+        )
+        timeout_bytes = timeout_source.encode("utf-8")
+        (root / "timeout.sely").write_bytes(timeout_bytes)
+        timeout_spec = root / "timeout-spec.json"
+        timeout_spec.write_text(
+            json.dumps(
+                {
+                    "kind": "seloryn-run.v1",
+                    "source": "timeout.sely",
+                    "source_sha256": hashlib.sha256(timeout_bytes).hexdigest(),
+                    "timeout_ms": 20,
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        ok(run(root, "create", str(timeout_spec), "--id=timeout"))
+        timed_out = ok(run(root, "run", "timeout", "--owner=probe"))
+        assert timed_out["status"] == "cancelled", timed_out
+        assert timed_out["timed_out"] is True, timed_out
+        assert timed_out["cancelled"] is False, timed_out
+        assert timed_out["fence_kind"] == expected_fence, timed_out
+        assert ok(run(root, "status", "timeout"))["status"] == "cancelled"
 
         invalid_source = "fn main() -> I64:\n  return 7\n"
         invalid_bytes = invalid_source.encode("utf-8")
