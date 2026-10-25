@@ -106,6 +106,11 @@ promise that every design proposal already exists.
   archives the previous attempt, clears the active receipt, requeues the same
   canonical spec and increments the attempt on the next claim; process groups,
   remote execution and checkpoint resume remain outside the contract.
+- A dependency-free Python bridge now consumes the existing JSON/stdio result
+  envelope from an external process, with typed diagnostics, UTF-8 round-trip,
+  input/output bounds, timeout handling and copied-project evidence. It is a
+  process-per-request integration slice, not an HTTP server, retry layer,
+  registry client or stable ABI.
 
 ## Next gates
 

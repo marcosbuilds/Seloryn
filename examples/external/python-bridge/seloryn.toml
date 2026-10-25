@@ -1,0 +1,9 @@
+[package]
+name = "python-bridge-consumer"
+language = "0.12"
+source_root = "src"
+entry = "main.sely"
+
+[limits]
+json_max_bytes = 65536
+json_max_depth = 16

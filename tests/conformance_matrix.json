@@ -244,6 +244,15 @@
       "notes": "Bounded direct-process worker, lease fencing, cancellation/timeout cleanup, preflight receipt and archived terminal retry."
     },
     {
+      "id": "python-bridge",
+      "path": "tests/python_bridge_probe.py",
+      "command": ["python", "tests/python_bridge_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "local process"],
+      "notes": "External process-per-request JSON/stdio bridge with typed failures, Unicode and bounded transport."
+    },
+    {
       "id": "language-model-comparison",
       "path": "tests/compare_language_model.py",
       "command": ["python", "tests/compare_language_model.py"],
@@ -578,6 +587,19 @@
       "requirements": ["four concurrent processes", "Python 3.12", "release binary"],
       "documentation": ["docs/benchmarks/operational-reliability.md", "docs/project/status.md"],
       "limits": ["Forced termination is classified separately and does not become a graceful-cancellation claim."]
+    },
+    {
+      "id": "external-python-bridge",
+      "area": "integration",
+      "claim": "A dependency-free Python application can consume a local Seloryn project through the bridge wrapper and existing JSON/stdio CLI result contract.",
+      "status": "verified-preview",
+      "implementation": ["sdk/python", "src/main.rs", "src/json.rs", "examples/external/python-bridge"],
+      "positive_probes": ["python-bridge"],
+      "negative_probes": ["python-bridge"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "local process"],
+      "documentation": ["docs/systems/python-bridge.md", "docs/guide/cli.md", "docs/project/status.md"],
+      "limits": ["Process-per-request only; no HTTP provider, retry policy, descendant fencing, registry or stable ABI is claimed."]
     },
     {
       "id": "workspace-tools",

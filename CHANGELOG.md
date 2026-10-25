@@ -7,6 +7,14 @@ not a promise that GitHub publication already happened.
 
 ## [Unreleased]
 
+- **Candidate:** the dependency-free Python bridge invokes an installed
+  Seloryn binary through the existing JSON/stdio `{stdout,value}` contract,
+  with typed diagnostic errors, timeout/input/output bounds and a copied
+  external-project proof. The bridge is process-per-request and does not claim
+  HTTP serving, retries, descendant fencing or a stable ABI.
+- **Candidate:** JSON strings now decode raw UTF-8 code points instead of
+  treating each non-ASCII byte as a separate character; the Python bridge
+  proof covers Portuguese Unicode input end to end.
 - **Candidate:** `seloryn run --log=json2` now emits a bounded
   `run.start` → `preflight.error` → `run.end` receipt for source-loading,
   manifest-loading and static-check failures. The receipt preserves the

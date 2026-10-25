@@ -106,6 +106,16 @@ behavior is covered by the CLI tests in
 references in [`tests/n2_probe.py`](../../tests/n2_probe.py). Public project
 examples are grouped under [`examples/projects`](../../examples/projects/README.md).
 
+### Python bridge
+
+An external Python application can invoke the same JSON/stdio contract through
+the dependency-free SDK in [`sdk/python`](../../sdk/python). It starts one
+binary process per request, never invokes a shell, and exposes typed
+`BridgeError` values for non-zero Seloryn exits. The bridge is bounded by
+input/output limits and a timeout; it is not a server, queue, retry layer or
+OS sandbox. The complete external-consumer proof is documented in
+[`systems/python-bridge.md`](../systems/python-bridge.md).
+
 `lsp --stdio` speaks a bounded JSON-RPC Language Server Protocol surface. It
 supports full-text `didOpen`/`didChange`/`didSave`, parser-backed diagnostics,
 completion, definition and document symbols. It advertises open/close

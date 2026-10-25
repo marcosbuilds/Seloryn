@@ -59,6 +59,7 @@ examples/
   projects/checkpoint-validation      bounded checkpoint schema validation
   projects/evaluation-pipeline        local modules, JSON validation and tensor metrics
   projects/linear-training            narrow fixture-driven linear-training contract
+  external/python-bridge              external Python consumer of the JSON/stdio contract
 ```
 
 The map distinguishes evidence slices; it is not a feature roadmap. In

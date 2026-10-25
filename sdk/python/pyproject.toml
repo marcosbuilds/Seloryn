@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68", "wheel>=0.41"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "seloryn-bridge"
+version = "0.1.0"
+description = "Dependency-free Python bridge for the Seloryn JSON/stdio CLI contract"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+
+[tool.setuptools]
+packages = ["seloryn_bridge"]
