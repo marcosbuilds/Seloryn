@@ -121,9 +121,8 @@ pub(crate) fn run(root: &Path, job_id: &str, config: WorkerConfig) -> Result<Jso
         Err(error) => {
             if let Ok(spec_sha256) = field_string(&claimed, "spec_sha256") {
                 let _ = write_failure_receipt(root, job_id, spec_sha256, &error, false);
-                if fail_starting(root, job_id, &lease_id, &error.message).is_ok() {
-                    let _ = write_failure_receipt(root, job_id, spec_sha256, &error, true);
-                }
+                let _ = write_failure_receipt(root, job_id, spec_sha256, &error, true);
+                let _ = fail_starting(root, job_id, &lease_id, &error.message);
             }
             return Err(error);
         }
@@ -263,12 +262,12 @@ fn execute_child(
             if config.cancel.load(Ordering::Acquire) || crate::cancellation_requested() {
                 termination = Some(WorkerStatus::Cancelled);
                 cancelled = true;
-                break terminate_child(root, job_id, lease_id, &mut child, Status::Cancelled);
+                break terminate_child(root, job_id, lease_id, &mut child);
             }
             if started.elapsed() >= input.timeout {
                 termination = Some(WorkerStatus::Cancelled);
                 timed_out = true;
-                break terminate_child(root, job_id, lease_id, &mut child, Status::Cancelled);
+                break terminate_child(root, job_id, lease_id, &mut child);
             }
             if Instant::now() >= next_heartbeat {
                 heartbeat(root, job_id, lease_id, lease_seconds_for(input.timeout))?;
@@ -307,17 +306,19 @@ fn execute_child(
         stderr,
     };
     if outcome.status == WorkerStatus::Cancelled {
-        write_result(root, job_id, input, &outcome, true)
+        let result = write_result(root, job_id, input, &outcome, true)?;
+        executor_transition(root, job_id, lease_id, Status::Cancelled)?;
+        Ok(result)
     } else {
         executor_transition(root, job_id, lease_id, Status::Committing)?;
         let _pending = write_result(root, job_id, input, &outcome, false)?;
+        let result = write_result(root, job_id, input, &outcome, true)?;
         let final_status = if outcome.status == WorkerStatus::Succeeded {
             Status::Succeeded
         } else {
             Status::Failed
         };
         executor_transition(root, job_id, lease_id, final_status)?;
-        let result = write_result(root, job_id, input, &outcome, true)?;
         Ok(result)
     }
 }
@@ -331,7 +332,6 @@ fn terminate_child(
     job_id: &str,
     lease_id: &str,
     child: &mut Child,
-    final_status: Status,
 ) -> Result<ExitStatus, JobError> {
     executor_transition(root, job_id, lease_id, Status::Cancelling)?;
     child
@@ -340,7 +340,6 @@ fn terminate_child(
     let status = child
         .wait()
         .map_err(|error| JobError::io("SEL-J025", "failed to reap cancelled Seloryn job", error))?;
-    executor_transition(root, job_id, lease_id, final_status)?;
     Ok(status)
 }
 
@@ -459,8 +458,8 @@ fn finish_failure(
     _message: &str,
 ) -> Result<(), JobError> {
     let _ = write_result(root, job_id, input, outcome, false)?;
-    executor_transition(root, job_id, lease_id, Status::Failed)?;
     let _ = write_result(root, job_id, input, outcome, true)?;
+    executor_transition(root, job_id, lease_id, Status::Failed)?;
     Ok(())
 }
 

@@ -808,7 +808,12 @@ pub(crate) fn retry(root: &Path, job_id: &str) -> Result<JsonValue, JobError> {
             ),
         ));
     }
-    archive_result(&directory, record.state.attempt)?;
+    archive_result(
+        &directory,
+        record.state.attempt,
+        &record.state.spec_sha256,
+        matches!(record.state.status, Status::Failed | Status::Cancelled),
+    )?;
     let result_path = directory.join("result.json");
     match fs::remove_file(&result_path) {
         Ok(()) => sync_directory(&directory),
@@ -1700,10 +1705,9 @@ fn validate_transition(from: Status, to: Status) -> Result<(), JobError> {
         }
         Status::Committing => matches!(to, Status::Succeeded | Status::Failed | Status::Lost),
         Status::Cancelling => matches!(to, Status::Cancelled | Status::Failed),
-        Status::Lost => matches!(to, Status::RetryWait | Status::Failed | Status::Queued),
+        Status::Lost => matches!(to, Status::RetryWait | Status::Failed),
         Status::RetryWait => matches!(to, Status::Queued | Status::Failed),
-        Status::Succeeded => false,
-        Status::Cancelled | Status::Failed => matches!(to, Status::Queued),
+        Status::Succeeded | Status::Cancelled | Status::Failed => false,
     };
     if allowed {
         Ok(())
@@ -1784,7 +1788,6 @@ fn validate_event(state: &JobState, event: &Event) -> Result<(), JobError> {
                 "attempt id",
             )?;
             validate_lease_id(event.lease_id.as_deref().unwrap_or_default())?;
-            validate_transition(state.status, event.to)?;
         }
         "heartbeat" => {
             if !matches!(
@@ -1859,7 +1862,6 @@ fn validate_event(state: &JobState, event: &Event) -> Result<(), JobError> {
                     "retry event did not clear the terminal attempt identity",
                 ));
             }
-            validate_transition(state.status, event.to)?;
         }
         "release" => {
             if state.status != Status::Starting
@@ -2647,12 +2649,25 @@ fn job_summary(record: &Record) -> JsonValue {
     JsonValue::Object(summary)
 }
 
-fn archive_result(directory: &Path, attempt: u64) -> Result<(), JobError> {
+fn archive_result(
+    directory: &Path,
+    attempt: u64,
+    spec_sha256: &str,
+    require_committed: bool,
+) -> Result<(), JobError> {
     let source = directory.join("result.json");
     reject_symlink(&source)?;
     let bytes = match fs::read(&source) {
         Ok(bytes) => bytes,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            if require_committed {
+                return Err(JobError::new(
+                    "SEL-J019",
+                    "terminal job has no committed result receipt",
+                ));
+            }
+            return Ok(());
+        }
         Err(error) => {
             return Err(JobError::io(
                 "SEL-J010",
@@ -2661,10 +2676,51 @@ fn archive_result(directory: &Path, attempt: u64) -> Result<(), JobError> {
             ));
         }
     };
+    if bytes.len() > MAX_RESULT_BYTES {
+        return Err(JobError::new(
+            "SEL-J002",
+            "job result receipt exceeds the byte limit",
+        ));
+    }
+    let source_text = String::from_utf8(bytes.clone())
+        .map_err(|_| JobError::new("SEL-J007", "job result receipt must be UTF-8 JSON"))?;
+    let value = json::parse(&source_text, MAX_RESULT_BYTES, MAX_JSON_DEPTH).map_err(|error| {
+        JobError::new("SEL-J007", format!("invalid job result: {}", error.message))
+    })?;
+    let object = object(value, "job result")?;
+    if object_string_from(&object, "schema")? != "seloryn.job-result.v1"
+        || object_string_from(&object, "spec_sha256")? != spec_sha256
+        || object_u64(&object, "attempt")? != attempt
+    {
+        return Err(JobError::new(
+            "SEL-J019",
+            "job result receipt does not match the terminal attempt",
+        ));
+    }
+    let committed = matches!(object.get("committed"), Some(JsonValue::Bool(true)));
+    if require_committed && !committed {
+        return Err(JobError::new(
+            "SEL-J019",
+            "terminal job result receipt is not committed",
+        ));
+    }
     let attempts = directory.join("attempts");
     ensure_directory(&attempts, "job attempt archive")?;
     let destination = attempts.join(format!("attempt-{attempt}.json"));
-    atomic_write(&destination, &bytes)
+    reject_symlink(&destination)?;
+    match fs::read(&destination) {
+        Ok(existing) if existing == bytes => Ok(()),
+        Ok(_) => Err(JobError::new(
+            "SEL-J019",
+            "job attempt archive already contains different receipt bytes",
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => atomic_write(&destination, &bytes),
+        Err(error) => Err(JobError::io(
+            "SEL-J010",
+            "failed to inspect the previous job attempt archive",
+            error,
+        )),
+    }
 }
 
 fn result_json(

@@ -158,6 +158,24 @@ def main() -> int:
         second_receipt = (
             root / ".seloryn" / "jobs" / "retryable" / "result.json"
         ).read_bytes()
+        active_result = root / ".seloryn" / "jobs" / "retryable" / "result.json"
+        active_result.unlink()
+        missing_receipt = run(root, "retry", "retryable")
+        assert missing_receipt.returncode == 65, missing_receipt
+        assert json.loads(missing_receipt.stderr)["code"] == "SEL-J019"
+        assert ok(run(root, "status", "retryable"))["status"] == "failed"
+        active_result.write_bytes(second_receipt)
+
+        archived_second = (
+            root / ".seloryn" / "jobs" / "retryable" / "attempts" / "attempt-2.json"
+        )
+        archived_second.write_bytes(b"tampered archive")
+        clobber_retry = run(root, "retry", "retryable")
+        assert clobber_retry.returncode == 65, clobber_retry
+        assert json.loads(clobber_retry.stderr)["code"] == "SEL-J019"
+        assert archived_second.read_bytes() == b"tampered archive"
+        archived_second.unlink()
+
         repeated_retry = ok(run(root, "retry", "retryable"))
         assert repeated_retry["status"] == "queued", repeated_retry
         assert repeated_retry["attempt"] == 2, repeated_retry
