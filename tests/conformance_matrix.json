@@ -589,7 +589,7 @@
       "area": "operations",
       "claim": "A local worker timeout fences a Seloryn child tree with an OS process group on POSIX or a Windows Job Object.",
       "status": "verified-preview",
-      "implementation": ["src/job_worker.rs", "tests/process_fence_helper.rs"],
+      "implementation": ["src/job_worker.rs", "tests/fixtures/process_fence_helper.rs"],
       "positive_probes": ["job-process-fence"],
       "negative_probes": ["job-process-fence"],
       "platforms": ["linux", "macos", "windows"],

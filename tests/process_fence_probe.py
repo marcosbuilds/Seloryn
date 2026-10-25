@@ -14,7 +14,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / "target" / "release" / ("seloryn.exe" if sys.platform == "win32" else "seloryn")
-HELPER_SOURCE = ROOT / "tests" / "process_fence_helper.rs"
+HELPER_SOURCE = ROOT / "tests" / "fixtures" / "process_fence_helper.rs"
 
 
 def run(root: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
