@@ -116,7 +116,60 @@ def main() -> int:
         assert "message" not in failure_receipt, failure_receipt
         assert str(root) not in failure_receipt_path.read_text(encoding="utf-8")
 
-    print("Seloryn job worker verification: success and preflight failure receipts, lease fencing, bounded execution and terminal state passed")
+        retry_source = "fn main() -> I64:\n    return 1 / 0\n"
+        retry_bytes = retry_source.encode("utf-8")
+        (root / "retryable.sely").write_bytes(retry_bytes)
+        retry_spec = root / "retry-spec.json"
+        retry_spec.write_text(
+            json.dumps(
+                {
+                    "kind": "seloryn-run.v1",
+                    "source": "retryable.sely",
+                    "source_sha256": hashlib.sha256(retry_bytes).hexdigest(),
+                    "timeout_ms": 2_000,
+                },
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        ok(run(root, "create", str(retry_spec), "--id=retryable"))
+        first_failure = ok(run(root, "run", "retryable", "--owner=probe"))
+        assert first_failure["status"] == "failed", first_failure
+        assert first_failure["attempt"] == 1, first_failure
+        first_receipt = (
+            root / ".seloryn" / "jobs" / "retryable" / "result.json"
+        ).read_bytes()
+        retried = ok(run(root, "retry", "retryable"))
+        assert retried["operation"] == "retry", retried
+        assert retried["status"] == "queued", retried
+        assert retried["attempt"] == 1, retried
+        assert not (
+            root / ".seloryn" / "jobs" / "retryable" / "result.json"
+        ).exists()
+        archived = (
+            root / ".seloryn" / "jobs" / "retryable" / "attempts" / "attempt-1.json"
+        )
+        assert archived.read_bytes() == first_receipt
+
+        second_failure = ok(run(root, "run", "retryable", "--owner=probe"))
+        assert second_failure["status"] == "failed", second_failure
+        assert second_failure["attempt"] == 2, second_failure
+        second_receipt = (
+            root / ".seloryn" / "jobs" / "retryable" / "result.json"
+        ).read_bytes()
+        repeated_retry = ok(run(root, "retry", "retryable"))
+        assert repeated_retry["status"] == "queued", repeated_retry
+        assert repeated_retry["attempt"] == 2, repeated_retry
+        assert (
+            root / ".seloryn" / "jobs" / "retryable" / "attempts" / "attempt-2.json"
+        ).read_bytes() == second_receipt
+
+        rejected_retry = run(root, "retry", "worker")
+        assert rejected_retry.returncode == 65, rejected_retry
+        assert json.loads(rejected_retry.stderr)["code"] == "SEL-J015"
+
+    print("Seloryn job worker verification: preflight receipts, terminal retry, archived attempts, lease fencing, bounded execution and terminal state passed")
     return 0
 
 

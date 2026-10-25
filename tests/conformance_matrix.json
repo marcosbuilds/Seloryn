@@ -241,7 +241,7 @@
       "suites": ["core"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary", "local process"],
-      "notes": "Bounded direct-process worker, lease fencing, cancellation/timeout cleanup and committed result receipt."
+      "notes": "Bounded direct-process worker, lease fencing, cancellation/timeout cleanup, preflight receipt and archived terminal retry."
     },
     {
       "id": "language-model-comparison",
@@ -564,7 +564,7 @@
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary", "local filesystem"],
       "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
-      "limits": ["The worker is direct-process and bounded; no descendant process-group/job-object fencing, retry, remote execution or escaped-child recovery is claimed."]
+      "limits": ["The worker is direct-process and bounded; retry is explicit local requeue of the same canonical spec with archived receipts; no descendant process-group/job-object fencing, checkpoint resume, remote execution or escaped-child recovery is claimed."]
     },
     {
       "id": "operational-reliability",

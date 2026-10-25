@@ -389,6 +389,10 @@ fn write_result(
     let directory = job_directory(root, job_id);
     ensure_job_contained(root, &directory)?;
     let result = JsonValue::Object(BTreeMap::from([
+        (
+            "attempt".to_owned(),
+            JsonValue::Number(input.attempt.to_string()),
+        ),
         ("cancelled".to_owned(), JsonValue::Bool(outcome.cancelled)),
         ("committed".to_owned(), JsonValue::Bool(committed)),
         (

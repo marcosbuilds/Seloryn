@@ -31,9 +31,11 @@ not a promise that GitHub publication already happened.
 - **Candidate:** `seloryn job` now includes a bounded local worker for validated
   `seloryn-run.v1` sources. It snapshots the validated source, claims and
   fences a lease, applies timeout/cancellation cleanup, bounds stdout/stderr
-  evidence and commits an atomic result receipt. The slice does not supervise
-  descendant processes, provide process-group/job-object fencing, retry lost
-  jobs or distribute work remotely.
+  evidence and commits an atomic result receipt. `job retry` archives the
+  previous attempt, clears the active result, requeues the same canonical spec
+  and increments the next claimed attempt. The slice does not supervise
+  descendant processes, provide process-group/job-object fencing, resume a
+  model checkpoint or distribute work remotely.
 
 ## [0.9.4] — local runtime patch, 2026-10-16
 

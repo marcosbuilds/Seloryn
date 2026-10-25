@@ -101,8 +101,11 @@ promise that every design proposal already exists.
   races, lease expiry and preflight rejection cases are covered by black-box
   probes. The direct-process worker now executes this validated source through
   `seloryn job run`, fences executor transitions with the lease, bounds timeout
-  and output, and writes an atomic result receipt; process groups, retries and
-  remote execution remain outside the contract.
+  and output, writes an atomic result receipt, and persists a redacted receipt
+  for preflight failure without acquiring a lease. `seloryn job retry` now
+  archives the previous attempt, clears the active receipt, requeues the same
+  canonical spec and increments the attempt on the next claim; process groups,
+  remote execution and checkpoint resume remain outside the contract.
 
 ## Next gates
 
@@ -152,13 +155,14 @@ promise that every design proposal already exists.
    proof is real on a declared physical adapter. The next gate is a reusable
    device-resident Tensor/F32 abstraction, then GPU autodiff and MLP training;
    no fallback or distributed claim is implied.
-8. **Job execution continuation — direct-process slice completed:** `seloryn job`
-   now provides a durable local spec/state/event boundary, a bounded
-   reservation lease, read-only validation and a single-process worker for an
-   isolated `seloryn-run.v1` source. The next gate is process-group/job-object
-   cancellation when Seloryn gains subprocess effects, followed by explicit
-   retry/idempotency evidence. No queue, remote worker or serving API is
-   implied.
+8. **Job execution continuation — local retry slice completed:** `seloryn job`
+   provides a durable local spec/state/event boundary, a bounded reservation
+   lease, read-only validation, preflight failure receipts and a single-process
+   worker for an isolated `seloryn-run.v1` source. Terminal attempts can be
+   explicitly retried with append-only event history, archived result receipts,
+   the same canonical spec and a new attempt number. Process groups/job
+   objects, checkpoint resume, remote workers and serving APIs remain outside
+   the contract.
 
 ## Boundaries
 

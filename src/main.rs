@@ -132,7 +132,7 @@ pub(crate) const EXIT_IO: u8 = 74;
 
 const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn doctor [project] [--format=human|json]\n  seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn inspect <file.sely|project> [--format=human|json]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`doctor` performs read-only project validation and reports production blockers; it never executes project code.\n`init` creates a validated project skeleton without overwriting an existing path.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`inspect` emits compact project/source symbols, imports and diagnostics in the compatible `seloryn.analysis.v1` envelope; `--format=json` is intended for tools and agents.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `from training import gpu` (the compatible `train_linear_gpu` name remains accepted) in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
 
-const JOB_HELP_TEXT: &str = "Jobs:\n  seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]\n  seloryn job status <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job list [--root=<directory>] [--format=human|json]\n  seloryn job transition <job-id> <status> [--root=<directory>] [--format=human|json]\n  seloryn job claim <job-id> [--owner=<owner>] [--lease-id=<id>] [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job heartbeat <job-id> --lease-id=<id> [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job release <job-id> --lease-id=<id> [--root=<directory>] [--format=human|json]\n  seloryn job recover <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job preflight <job-id> [--root=<directory>] [--format=human|json]\n";
+const JOB_HELP_TEXT: &str = "Jobs:\n  seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]\n  seloryn job status <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job list [--root=<directory>] [--format=human|json]\n  seloryn job transition <job-id> <status> [--root=<directory>] [--format=human|json]\n  seloryn job retry <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job claim <job-id> [--owner=<owner>] [--lease-id=<id>] [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job heartbeat <job-id> --lease-id=<id> [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job release <job-id> --lease-id=<id> [--root=<directory>] [--format=human|json]\n  seloryn job recover <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job preflight <job-id> [--root=<directory>] [--format=human|json]\n";
 
 const WORKER_HELP_TEXT: &str = "  seloryn job run <job-id> [--owner=<owner>] [--binary=<seloryn>] [--root=<directory>] [--format=human|json]\n  job run performs bounded local execution only after preflight and lease claim; it never invokes a shell or an arbitrary executable.\n";
 
@@ -241,6 +241,11 @@ enum JobAction {
     Transition {
         id: OsString,
         status: OsString,
+        root: OsString,
+        format: OutputFormat,
+    },
+    Retry {
+        id: OsString,
         root: OsString,
         format: OutputFormat,
     },
@@ -500,6 +505,19 @@ fn parse_job(args: &[OsString]) -> Action {
             Action::Job(JobAction::Transition {
                 id: positionals.remove(0),
                 status: positionals.remove(0),
+                root,
+                format,
+            })
+        }
+        "retry"
+            if positionals.len() == 1
+                && id.is_none()
+                && owner.is_none()
+                && lease_id.is_none()
+                && ttl_seconds.is_none() =>
+        {
+            Action::Job(JobAction::Retry {
+                id: positionals.remove(0),
                 root,
                 format,
             })
@@ -3235,6 +3253,18 @@ fn run_job(action: JobAction) -> u8 {
                 );
             };
             (format, job::transition(&PathBuf::from(root), id, status))
+        }
+        JobAction::Retry { id, root, format } => {
+            let Some(id) = id.to_str() else {
+                return write_job_error(
+                    job::JobError {
+                        code: "SEL-J003",
+                        message: "job id must be valid UTF-8".to_owned(),
+                    },
+                    format,
+                );
+            };
+            (format, job::retry(&PathBuf::from(root), id))
         }
         JobAction::Claim {
             id,
