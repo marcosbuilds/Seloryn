@@ -5,7 +5,7 @@ Review date: 2026-10-26
 ## Evidence identity
 
 The artifact was built from the working tree based on
-`cf3d9779c1229a8b412649b9619e057b7552be44` on branch
+`3d7e55f1777f171b57b5254fa0404abb94ae2f99` on branch
 `feature/job-continuity-bridge`. This is a local preview candidate; it is not a
 tagged release and it is not code-signed.
 
@@ -15,10 +15,10 @@ tagged release and it is not code-signed.
 | Runtime package | `0.12.0` |
 | Installer package | `0.12.0` |
 | Platform | `windows-x64` |
-| Installer | `dist/installer-v4/SelorynSetup-0.12.0-windows-x64.exe` |
-| Installer SHA-256 | `122471ae8c05407d1b4b8ff7ff8107497b2035be5b33535310afd4d159b150ae` |
-| Embedded runtime SHA-256 | `9ac9090e65bace0c13a5a8447cfab58e57993fd984128ef3b79577a73bd4e03c` |
-| Embedded launcher SHA-256 | `03e29b9fd4e57adcc81c9b2576531bbaf5aaefb987623abb67d8403cf9530586` |
+| Installer | `dist/installer-v5/SelorynSetup-0.12.0-windows-x64.exe` |
+| Installer SHA-256 | `5f6c725f6878dd6e6176cad31653189a85b0add4469535ebe94b9471e99e93e2` |
+| Embedded runtime SHA-256 | `5ead800b5aed76e258b387a0d70f79d123c85d5d3ce45d17bec7b354cc070654` |
+| Embedded launcher SHA-256 | `e3192c24200560d1c4fbba533b4c574921197904becf35fb2e2a1a89cffaee2a` |
 
 ## Implemented behavior
 
@@ -29,8 +29,13 @@ tagged release and it is not code-signed.
   launcher payloads, the app-only Seloryn Strand display face and the visual
   panel, then installs to a per-user directory by default.
 - The GUI is a fixed-size four-stage wizard: welcome, location, installation
-  and completion. Installation work runs on a worker thread and posts real
-  stage events into a read-only log without blocking the window message loop.
+  and completion fallback. Installation work runs on a worker thread and posts
+  real stage events into a read-only log without blocking the window message
+  loop. The successful path closes the setup and opens a verification terminal
+  with `seloryn --version` on the freshly installed `bin` directory.
+- The location stage offers an explicit cleanup choice. When selected, only
+  previously registered runtime versions are removed; user projects are not
+  traversed or deleted. When skipped, side-by-side versions are preserved.
 - Runtime files live under `versions/<M.m.p>/bin/seloryn.exe` and are described
   by a hash-bound manifest. The root `bin` directory receives the default
   launcher and an exact versioned launcher such as `seloryn0.12.0.exe`.
@@ -48,7 +53,7 @@ tagged release and it is not code-signed.
 |---|---|
 | Rust regression | `cargo test --locked --all-targets -- --test-threads=1`: 101 core + 8 launcher + 8 setup + 37 CLI + 15 tensor tests passed |
 | Lint gate | `cargo clippy --locked --all-targets -- -D warnings`: passed |
-| Installer build gate | `scripts/release/build-installer.ps1 -OutputDirectory dist/installer-v4`: exit 0; embedded setup exit 0 |
+| Installer build gate | `scripts/release/build-installer.ps1 -OutputDirectory dist/installer-v5`: exit 0; embedded setup exit 0 |
 | Installed versioned launcher | `seloryn0.12.0 --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Installed default launcher | `seloryn --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Registry listing | `seloryn versions`: exit 0; listed `* 0.12.0` with the runtime hash |
