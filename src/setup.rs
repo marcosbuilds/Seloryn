@@ -67,9 +67,9 @@ mod windows_setup {
     const SETUP_VERSION: &str = env!("CARGO_PKG_VERSION");
     const RUNTIME_VERSION: &str = "0.12.0";
     const LANGUAGE_VERSION: &str = "0.12";
-    const CLIENT_WIDTH: i32 = 920;
-    const CLIENT_HEIGHT: i32 = 620;
-    const PANEL_WIDTH: i32 = 300;
+    const CLIENT_WIDTH: i32 = 880;
+    const CLIENT_HEIGHT: i32 = 560;
+    const PANEL_WIDTH: i32 = 280;
     const WM_INSTALL_EVENT: u32 = WM_APP + 41;
 
     const ID_PATH: usize = 100;
@@ -90,16 +90,19 @@ mod windows_setup {
     const ID_STATUS: usize = 115;
     const ID_RUNTIME_CARD: usize = 116;
     const ID_CLEANUP: usize = 117;
+    const ID_BRAND: usize = 118;
+    const ID_PATH_LABEL: usize = 119;
+    const SS_BITMAP_STYLE: u32 = 0x000E;
     const HOVER_TIMER: usize = 1;
 
-    const BG: COLORREF = rgb(6, 17, 14);
-    const SURFACE: COLORREF = rgb(14, 37, 32);
-    const SURFACE_RAISED: COLORREF = rgb(18, 52, 44);
-    const MINT: COLORREF = rgb(52, 204, 167);
-    const MINT_SOFT: COLORREF = rgb(117, 228, 200);
-    const TEAL: COLORREF = rgb(20, 136, 116);
-    const TEXT_PRIMARY: COLORREF = rgb(241, 247, 244);
-    const TEXT_SECONDARY: COLORREF = rgb(177, 201, 193);
+    const BG: COLORREF = rgb(11, 26, 23);
+    const SURFACE: COLORREF = rgb(16, 40, 32);
+    const SURFACE_RAISED: COLORREF = rgb(23, 58, 48);
+    const MINT: COLORREF = rgb(49, 208, 170);
+    const MINT_SOFT: COLORREF = rgb(107, 231, 198);
+    const TEAL: COLORREF = rgb(35, 88, 74);
+    const TEXT_PRIMARY: COLORREF = rgb(243, 248, 245);
+    const TEXT_SECONDARY: COLORREF = rgb(185, 205, 198);
     const ERROR: COLORREF = rgb(239, 133, 133);
 
     const fn rgb(red: u32, green: u32, blue: u32) -> COLORREF {
@@ -138,6 +141,7 @@ mod windows_setup {
         font_resource: HANDLE,
         display_font: HFONT,
         body_font: HFONT,
+        body_bold_font: HFONT,
         mono_font: HFONT,
         phase: u8,
         installing: bool,
@@ -186,6 +190,21 @@ mod windows_setup {
         value.encode_utf16().chain(std::iter::once(0)).collect()
     }
 
+    fn window_style() -> u32 {
+        WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN
+    }
+
+    unsafe fn window_outer_size(style: u32) -> (i32, i32) {
+        let mut frame = RECT {
+            left: 0,
+            top: 0,
+            right: CLIENT_WIDTH,
+            bottom: CLIENT_HEIGHT,
+        };
+        AdjustWindowRectEx(&mut frame, style, 0, 0);
+        (frame.right - frame.left, frame.bottom - frame.top)
+    }
+
     fn run_window() -> Result<(), String> {
         unsafe {
             InitCommonControls();
@@ -210,14 +229,8 @@ mod windows_setup {
             if RegisterClassW(&class) == 0 {
                 return Err("could not register the setup window".to_owned());
             }
-            let style = WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_CLIPCHILDREN;
-            let mut frame = RECT {
-                left: 0,
-                top: 0,
-                right: CLIENT_WIDTH,
-                bottom: CLIENT_HEIGHT,
-            };
-            AdjustWindowRectEx(&mut frame, style, 0, 0);
+            let style = window_style();
+            let (window_width, window_height) = window_outer_size(style);
             let window = CreateWindowExW(
                 0,
                 class_name.as_ptr(),
@@ -225,8 +238,8 @@ mod windows_setup {
                 style,
                 CW_USEDEFAULT,
                 CW_USEDEFAULT,
-                frame.right - frame.left,
-                frame.bottom - frame.top,
+                window_width,
+                window_height,
                 null_mut(),
                 null_mut(),
                 instance,
@@ -259,10 +272,11 @@ mod windows_setup {
             WM_GETMINMAXINFO => {
                 let info =
                     &mut *(lparam as *mut windows_sys::Win32::UI::WindowsAndMessaging::MINMAXINFO);
-                info.ptMinTrackSize.x = CLIENT_WIDTH;
-                info.ptMinTrackSize.y = CLIENT_HEIGHT;
-                info.ptMaxTrackSize.x = CLIENT_WIDTH;
-                info.ptMaxTrackSize.y = CLIENT_HEIGHT;
+                let (window_width, window_height) = window_outer_size(window_style());
+                info.ptMinTrackSize.x = window_width;
+                info.ptMinTrackSize.y = window_height;
+                info.ptMaxTrackSize.x = window_width;
+                info.ptMaxTrackSize.y = window_height;
                 0
             }
             WM_COMMAND => handle_command(hwnd, wparam),
@@ -309,14 +323,15 @@ mod windows_setup {
         let surface_brush = CreateSolidBrush(SURFACE_RAISED);
         let (font_resource, display_face) = load_private_font();
         let display_font = create_font(-30, FW_SEMIBOLD, display_face);
-        let body_font = create_font(-16, FW_NORMAL, "Segoe UI");
-        let mono_font = create_font(-15, FW_NORMAL, "Cascadia Mono");
+        let body_font = create_font(-15, FW_NORMAL, "Segoe UI");
+        let body_bold_font = create_font(-15, FW_SEMIBOLD, "Segoe UI");
+        let mono_font = create_font(-14, FW_NORMAL, "Cascadia Mono");
 
         let panel = CreateWindowExW(
             0,
             wide("STATIC").as_ptr(),
             null(),
-            WS_CHILD | WS_VISIBLE | 14,
+            WS_CHILD | WS_VISIBLE | SS_BITMAP_STYLE,
             CLIENT_WIDTH - PANEL_WIDTH,
             0,
             PANEL_WIDTH,
@@ -329,73 +344,81 @@ mod windows_setup {
         let bitmap = load_panel_bitmap(panel);
         let brand = label(
             hwnd,
-            &format!("SETUP  /  {SETUP_VERSION}"),
+            &format!("SELORYN  /  SETUP  /  {SETUP_VERSION}"),
             32,
-            26,
-            540,
+            24,
+            536,
             30,
-            ID_STEP_ONE,
+            ID_BRAND,
         );
-        let step_one = label(hwnd, "01  WELCOME", 32, 84, 135, 26, ID_STEP_ONE);
-        let step_two = label(hwnd, "02  LOCATION", 178, 84, 150, 26, ID_STEP_TWO);
-        let step_three = label(hwnd, "03  INSTALL", 338, 84, 135, 26, ID_STEP_THREE);
-        let step_four = label(hwnd, "04  DONE", 483, 84, 110, 26, ID_STEP_FOUR);
-        let page_title = label(hwnd, "Install Seloryn", 32, 150, 560, 42, ID_PAGE_TITLE);
+        let step_one = label(hwnd, "01  WELCOME", 32, 70, 124, 24, ID_STEP_ONE);
+        let step_two = label(hwnd, "02  LOCATION", 168, 70, 136, 24, ID_STEP_TWO);
+        let step_three = label(hwnd, "03  INSTALL", 316, 70, 124, 24, ID_STEP_THREE);
+        let step_four = label(hwnd, "04  DONE", 452, 70, 116, 24, ID_STEP_FOUR);
+        let page_title = label(hwnd, "INSTALL SELORYN", 32, 124, 536, 38, ID_PAGE_TITLE);
         let page_body = label(
             hwnd,
             "A native per-user setup for the verified 0.12.0 runtime.",
             34,
-            200,
-            570,
-            34,
+            170,
+            536,
+            36,
             ID_PAGE_BODY,
         );
         let runtime_card = label(
             hwnd,
-            "NATIVE RUNTIME  /  WINDOWS X64  /  VERIFIED PAYLOAD",
+            "INSTALL RUNTIME  0.12.0\r\nCREATE SELORYN LAUNCHER\r\nVERIFY  seloryn --version",
             34,
-            260,
-            570,
-            54,
+            226,
+            536,
+            112,
             ID_RUNTIME_CARD,
         );
-        let path_label = label(hwnd, "INSTALLATION DIRECTORY", 34, 252, 570, 24, ID_STATUS);
+        let path_label = label(
+            hwnd,
+            "INSTALLATION DIRECTORY",
+            34,
+            230,
+            536,
+            22,
+            ID_PATH_LABEL,
+        );
         let path = edit(
             hwnd,
             &default_root().to_string_lossy(),
             34,
-            280,
-            454,
-            36,
+            258,
+            430,
+            34,
             ID_PATH,
         );
-        let browse = button(hwnd, "Browse", 500, 280, 94, 36, ID_BROWSE);
+        let browse = button(hwnd, "Browse", 476, 258, 92, 34, ID_BROWSE);
         let add_path = checkbox(
             hwnd,
             "Add Seloryn to the current user's PATH",
             34,
-            350,
+            308,
             ID_ADD_PATH,
         );
-        let make_default = checkbox(hwnd, "Make 0.12.0 the default version", 34, 385, ID_DEFAULT);
+        let make_default = checkbox(hwnd, "Make 0.12.0 the default version", 34, 342, ID_DEFAULT);
         let clean_previous = checkbox(
             hwnd,
             "Remove previous Seloryn installations",
             34,
-            420,
+            376,
             ID_CLEANUP,
         );
         SendMessageW(add_path, BM_SETCHECK, BST_CHECKED as _, 0);
         SendMessageW(make_default, BM_SETCHECK, BST_CHECKED as _, 0);
-        let log = log_edit(hwnd, 34, 246, 560, 240, ID_LOG);
+        let log = log_edit(hwnd, 32, 218, 536, 208, ID_LOG);
         let progress = CreateWindowExW(
             0,
             wide("msctls_progress32").as_ptr(),
             null(),
             WS_CHILD | PBS_SMOOTH,
-            34,
-            505,
-            560,
+            32,
+            438,
+            536,
             10,
             hwnd,
             ID_PROGRESS as _,
@@ -403,20 +426,20 @@ mod windows_setup {
             null(),
         );
         SendMessageW(progress, PBM_SETRANGE32, 0, 100);
-        let status = label(hwnd, "Ready to begin.", 34, 528, 560, 24, ID_STATUS);
-        let back = button(hwnd, "Back", 350, 564, 94, 36, ID_BACK);
-        let action = button(hwnd, "Continue", 452, 564, 142, 36, ID_ACTION);
-        let cancel = button(hwnd, "Cancel", 34, 564, 94, 36, ID_CANCEL);
+        let status = label(hwnd, "Ready to begin.", 32, 462, 536, 22, ID_STATUS);
+        let back = button(hwnd, "Back", 332, 508, 96, 36, ID_BACK);
+        let action = button(hwnd, "Continue", 436, 508, 132, 36, ID_ACTION);
+        let cancel = button(hwnd, "Cancel", 32, 508, 96, 36, ID_CANCEL);
 
         for (control, font) in [
             (brand, display_font),
-            (step_one, display_font),
-            (step_two, display_font),
-            (step_three, display_font),
-            (step_four, display_font),
+            (step_one, body_bold_font),
+            (step_two, body_bold_font),
+            (step_three, body_bold_font),
+            (step_four, body_bold_font),
             (page_title, display_font),
             (page_body, body_font),
-            (runtime_card, mono_font),
+            (runtime_card, body_font),
             (path_label, body_font),
             (path, body_font),
             (browse, body_font),
@@ -458,6 +481,7 @@ mod windows_setup {
             font_resource,
             display_font,
             body_font,
+            body_bold_font,
             mono_font,
             phase: 1,
             installing: false,
@@ -865,8 +889,14 @@ mod windows_setup {
         } else {
             None
         };
-        let color = if control == (*pointer).page_title || control == (*pointer).runtime_card {
-            MINT_SOFT
+        let color = if control == (*pointer).page_title {
+            TEXT_PRIMARY
+        } else if control == (*pointer).runtime_card
+            || control == (*pointer).page_body
+            || control == (*pointer).path_label
+            || control == (*pointer).status
+        {
+            TEXT_SECONDARY
         } else if step.is_some_and(|value| value == (*pointer).phase) {
             MINT
         } else if step.is_some_and(|value| value < (*pointer).phase) {
@@ -875,7 +905,10 @@ mod windows_setup {
             TEXT_PRIMARY
         };
         SetTextColor(hdc, color);
-        if control == (*pointer).path || control == (*pointer).log {
+        if control == (*pointer).path
+            || control == (*pointer).log
+            || control == (*pointer).runtime_card
+        {
             (*pointer).surface_brush as LRESULT
         } else {
             (*pointer).background_brush as LRESULT
@@ -929,8 +962,12 @@ mod windows_setup {
         let pointer = controls(hwnd);
         let hovered = !pointer.is_null() && item.hwndItem == (*pointer).hovered_button;
         let selected = item.itemState & 1 != 0;
+        let disabled = item.itemState & 0x0004 != 0;
+        let focused = item.itemState & 0x0010 != 0;
         let primary = item.CtlID == ID_ACTION as u32;
-        let fill = if primary {
+        let fill = if disabled {
+            SURFACE
+        } else if primary {
             if selected {
                 TEAL
             } else if hovered {
@@ -945,13 +982,19 @@ mod windows_setup {
         } else {
             SURFACE_RAISED
         };
-        let brush = CreateSolidBrush(fill);
-        FillRect(item.hDC, &item.rcItem, brush);
-        DeleteObject(brush as _);
+        let fill_brush = CreateSolidBrush(fill);
+        let old_brush = SelectObject(item.hDC, fill_brush as _);
+        FillRect(item.hDC, &item.rcItem, fill_brush);
         let border = CreatePen(
             PS_SOLID,
-            1,
-            if selected || hovered { MINT_SOFT } else { TEAL },
+            if focused { 2 } else { 1 },
+            if disabled {
+                TEAL
+            } else if selected || hovered || focused {
+                MINT_SOFT
+            } else {
+                TEAL
+            },
         );
         let old = SelectObject(item.hDC, border as _);
         RoundRect(
@@ -965,8 +1008,19 @@ mod windows_setup {
         );
         SelectObject(item.hDC, old);
         DeleteObject(border as _);
+        SelectObject(item.hDC, old_brush);
+        DeleteObject(fill_brush as _);
         SetBkMode(item.hDC, 1);
-        SetTextColor(item.hDC, if primary { BG } else { TEXT_PRIMARY });
+        SetTextColor(
+            item.hDC,
+            if disabled {
+                TEXT_SECONDARY
+            } else if primary {
+                BG
+            } else {
+                TEXT_PRIMARY
+            },
+        );
         if item.CtlID as usize == ID_BROWSE {
             draw_folder_icon(item.hDC, item.rcItem.left + 10, item.rcItem.top + 9);
         }
@@ -993,20 +1047,36 @@ mod windows_setup {
         let brush = CreateSolidBrush(BG);
         FillRect(hdc, &client, brush);
         DeleteObject(brush as _);
+        let panel_left = client.right - PANEL_WIDTH;
+        let pointer = controls(hwnd);
+        if !pointer.is_null() && (*pointer).phase == 1 {
+            draw_surface_card(hdc, 28, 220, panel_left - 28, 348);
+        }
         let divider = CreatePen(PS_SOLID, 1, SURFACE_RAISED);
         let old = SelectObject(hdc, divider as _);
-        MoveToEx(hdc, CLIENT_WIDTH - PANEL_WIDTH, 0, null_mut());
-        LineTo(hdc, CLIENT_WIDTH - PANEL_WIDTH, CLIENT_HEIGHT);
+        MoveToEx(hdc, panel_left, 0, null_mut());
+        LineTo(hdc, panel_left, client.bottom);
         MoveToEx(hdc, 40, 116, null_mut());
-        LineTo(hdc, CLIENT_WIDTH - PANEL_WIDTH - 26, 116);
+        LineTo(hdc, panel_left - 26, 116);
         SelectObject(hdc, old);
         DeleteObject(divider as _);
-        let pointer = controls(hwnd);
         if !pointer.is_null() && (*pointer).bitmap.is_null() {
-            draw_fallback_panel(hdc);
+            draw_fallback_panel(hdc, &client);
         }
         EndPaint(hwnd, &paint);
         0
+    }
+
+    unsafe fn draw_surface_card(hdc: HDC, left: i32, top: i32, right: i32, bottom: i32) {
+        let brush = CreateSolidBrush(SURFACE);
+        let pen = CreatePen(PS_SOLID, 1, TEAL);
+        let old_brush = SelectObject(hdc, brush as _);
+        let old_pen = SelectObject(hdc, pen as _);
+        RoundRect(hdc, left, top, right, bottom, 12, 12);
+        SelectObject(hdc, old_pen);
+        SelectObject(hdc, old_brush);
+        DeleteObject(pen as _);
+        DeleteObject(brush as _);
     }
 
     unsafe fn draw_folder_icon(hdc: HDC, x: i32, y: i32) {
@@ -1023,14 +1093,15 @@ mod windows_setup {
         DeleteObject(pen as _);
     }
 
-    unsafe fn draw_fallback_panel(hdc: HDC) {
+    unsafe fn draw_fallback_panel(hdc: HDC, client: &RECT) {
         let panel_brush = CreateSolidBrush(SURFACE);
         let old = SelectObject(hdc, panel_brush as _);
+        let panel_left = client.right - PANEL_WIDTH;
         let rect = RECT {
-            left: CLIENT_WIDTH - PANEL_WIDTH,
+            left: panel_left,
             top: 0,
-            right: CLIENT_WIDTH,
-            bottom: CLIENT_HEIGHT,
+            right: client.right,
+            bottom: client.bottom,
         };
         FillRect(hdc, &rect, panel_brush);
         SelectObject(hdc, old);
@@ -1038,14 +1109,26 @@ mod windows_setup {
         let pen = CreatePen(PS_SOLID, 1, TEAL);
         let old_pen = SelectObject(hdc, pen as _);
         for offset in [44, 146, 256] {
-            MoveToEx(hdc, CLIENT_WIDTH - PANEL_WIDTH + offset, 0, null_mut());
-            LineTo(hdc, CLIENT_WIDTH - 24, CLIENT_HEIGHT);
+            MoveToEx(hdc, panel_left + offset, 0, null_mut());
+            LineTo(hdc, client.right - 24, client.bottom);
         }
         let points = [
-            windows_sys::Win32::Foundation::POINT { x: 690, y: 390 },
-            windows_sys::Win32::Foundation::POINT { x: 780, y: 340 },
-            windows_sys::Win32::Foundation::POINT { x: 890, y: 390 },
-            windows_sys::Win32::Foundation::POINT { x: 780, y: 440 },
+            windows_sys::Win32::Foundation::POINT {
+                x: panel_left + 70,
+                y: client.bottom - 170,
+            },
+            windows_sys::Win32::Foundation::POINT {
+                x: panel_left + 160,
+                y: client.bottom - 220,
+            },
+            windows_sys::Win32::Foundation::POINT {
+                x: client.right - 20,
+                y: client.bottom - 170,
+            },
+            windows_sys::Win32::Foundation::POINT {
+                x: panel_left + 160,
+                y: client.bottom - 120,
+            },
         ];
         Polygon(hdc, points.as_ptr(), points.len() as i32);
         SelectObject(hdc, old_pen);
@@ -1095,6 +1178,7 @@ mod windows_setup {
         for font in [
             controls.display_font,
             controls.body_font,
+            controls.body_bold_font,
             controls.mono_font,
         ] {
             if !font.is_null() {

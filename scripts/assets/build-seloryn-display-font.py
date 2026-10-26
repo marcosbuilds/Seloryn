@@ -1,9 +1,8 @@
-"""Build the first private Seloryn display face used by the native setup UI.
+"""Build the private Seloryn display face used by the native setup UI.
 
-The face is intentionally small and scoped to the app. It is a geometric,
-grid-derived display face rather than a replacement for the language's future
-text typography. The generated TTF is committed so the installer build does
-not need Python or font tooling.
+The readable alphabet comes from the OFL-licensed Sora family. The output is
+renamed and kept app-only; its uppercase S is replaced by a continuous ribbon
+silhouette derived from the Seloryn mark. Body copy remains a system UI font.
 """
 
 from __future__ import annotations
@@ -11,158 +10,81 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from fontTools.fontBuilder import FontBuilder
+from fontTools.pens.cu2quPen import Cu2QuPen
 from fontTools.pens.ttGlyphPen import TTGlyphPen
+from fontTools.ttLib import TTFont
+from fontTools.varLib.instancer import instantiateVariableFont
 
 
-PATTERNS: dict[str, tuple[str, ...]] = {
-    "A": ("01110", "10001", "10001", "11111", "10001", "10001", "10001"),
-    "B": ("11110", "10001", "10001", "11110", "10001", "10001", "11110"),
-    "C": ("01111", "10000", "10000", "10000", "10000", "10000", "01111"),
-    "D": ("11110", "10001", "10001", "10001", "10001", "10001", "11110"),
-    "E": ("11111", "10000", "10000", "11110", "10000", "10000", "11111"),
-    "F": ("11111", "10000", "10000", "11110", "10000", "10000", "10000"),
-    "G": ("01111", "10000", "10000", "10111", "10001", "10001", "01111"),
-    "H": ("10001", "10001", "10001", "11111", "10001", "10001", "10001"),
-    "I": ("11111", "00100", "00100", "00100", "00100", "00100", "11111"),
-    "J": ("00111", "00010", "00010", "00010", "10010", "10010", "01100"),
-    "K": ("10001", "10010", "10100", "11000", "10100", "10010", "10001"),
-    "L": ("10000", "10000", "10000", "10000", "10000", "10000", "11111"),
-    "M": ("10001", "11011", "10101", "10101", "10001", "10001", "10001"),
-    "N": ("10001", "11001", "11001", "10101", "10011", "10011", "10001"),
-    "O": ("01110", "10001", "10001", "10001", "10001", "10001", "01110"),
-    "P": ("11110", "10001", "10001", "11110", "10000", "10000", "10000"),
-    "Q": ("01110", "10001", "10001", "10001", "10101", "10010", "01101"),
-    "R": ("11110", "10001", "10001", "11110", "10100", "10010", "10001"),
-    "S": ("01111", "10000", "10000", "01110", "00001", "00001", "11110"),
-    "T": ("11111", "00100", "00100", "00100", "00100", "00100", "00100"),
-    "U": ("10001", "10001", "10001", "10001", "10001", "10001", "01110"),
-    "V": ("10001", "10001", "10001", "10001", "10001", "01010", "00100"),
-    "W": ("10001", "10001", "10001", "10101", "10101", "11011", "10001"),
-    "X": ("10001", "10001", "01010", "00100", "01010", "10001", "10001"),
-    "Y": ("10001", "10001", "01010", "00100", "00100", "00100", "00100"),
-    "Z": ("11111", "00001", "00010", "00100", "01000", "10000", "11111"),
-    "0": ("01110", "10011", "10101", "10101", "10101", "11001", "01110"),
-    "1": ("00100", "01100", "00100", "00100", "00100", "00100", "01110"),
-    "2": ("01110", "10001", "00001", "00010", "00100", "01000", "11111"),
-    "3": ("11110", "00001", "00001", "01110", "00001", "00001", "11110"),
-    "4": ("00010", "00110", "01010", "10010", "11111", "00010", "00010"),
-    "5": ("11111", "10000", "10000", "11110", "00001", "00001", "11110"),
-    "6": ("01110", "10000", "10000", "11110", "10001", "10001", "01110"),
-    "7": ("11111", "00001", "00010", "00100", "01000", "01000", "01000"),
-    "8": ("01110", "10001", "10001", "01110", "10001", "10001", "01110"),
-    "9": ("01110", "10001", "10001", "01111", "00001", "00001", "01110"),
-    "?": ("01110", "10001", "00001", "00010", "00100", "00100", "00100"),
-}
-
-CELL = 110
-ADVANCE = 690
-SIDE = 42
+def ribbon_s(font: TTFont):
+    pen = TTGlyphPen(font.getGlyphSet())
+    quad = Cu2QuPen(pen, max_err=1.0, reverse_direction=False)
+    quad.moveTo((790, 735))
+    quad.curveTo((790, 775), (755, 800), (700, 800))
+    quad.lineTo((260, 800))
+    quad.curveTo((150, 800), (80, 735), (80, 640))
+    quad.curveTo((80, 540), (160, 485), (265, 485))
+    quad.lineTo((620, 485))
+    quad.curveTo((675, 485), (710, 455), (710, 415))
+    quad.curveTo((710, 375), (675, 345), (620, 345))
+    quad.lineTo((240, 345))
+    quad.curveTo((140, 345), (80, 290), (80, 205))
+    quad.curveTo((80, 120), (145, 70), (250, 70))
+    quad.lineTo((700, 70))
+    quad.curveTo((755, 70), (790, 100), (790, 140))
+    quad.curveTo((790, 180), (755, 210), (700, 210))
+    quad.lineTo((255, 210))
+    quad.curveTo((220, 210), (195, 225), (195, 250))
+    quad.curveTo((195, 280), (220, 295), (265, 295))
+    quad.lineTo((620, 295))
+    quad.curveTo((740, 295), (820, 355), (820, 430))
+    quad.curveTo((820, 510), (745, 575), (630, 575))
+    quad.lineTo((275, 575))
+    quad.curveTo((225, 575), (195, 600), (195, 635))
+    quad.curveTo((195, 675), (225, 695), (270, 695))
+    quad.lineTo((700, 695))
+    quad.curveTo((755, 695), (790, 710), (790, 735))
+    quad.closePath()
+    return pen.glyph()
 
 
-def rounded_rectangle(
-    pen: TTGlyphPen, x: int, y: int, width: int, height: int, radius: int
-) -> None:
-    radius = min(radius, width // 2, height // 2)
-    pen.moveTo((x + radius, y))
-    pen.lineTo((x + width - radius, y))
-    pen.qCurveTo((x + width, y), (x + width, y + radius))
-    pen.lineTo((x + width, y + height - radius))
-    pen.qCurveTo((x + width, y + height), (x + width - radius, y + height))
-    pen.lineTo((x + radius, y + height))
-    pen.qCurveTo((x, y + height), (x, y + height - radius))
-    pen.lineTo((x, y + radius))
-    pen.qCurveTo((x, y), (x + radius, y))
-    pen.closePath()
+def set_name(font: TTFont, name_id: int, value: str) -> None:
+    font["name"].setName(value, name_id, 3, 1, 0x409)
+    font["name"].setName(value, name_id, 1, 0, 0)
 
 
-def ribbon_s(pen: TTGlyphPen) -> None:
-    """Draw the first Seloryn S as a rounded, interlocking strand."""
-    rounded_rectangle(pen, 86, 700, 500, 126, 63)
-    rounded_rectangle(pen, 66, 492, 126, 270, 63)
-    rounded_rectangle(pen, 118, 425, 456, 126, 63)
-    rounded_rectangle(pen, 504, 184, 126, 270, 63)
-    rounded_rectangle(pen, 86, 118, 500, 126, 63)
-
-
-def glyph_for(character: str):
-    pen = TTGlyphPen(None)
-    if character == " ":
-        return pen.glyph(), 360
-    if character.upper() == "S":
-        ribbon_s(pen)
-        return pen.glyph(), ADVANCE
-    pattern = PATTERNS.get(character.upper(), PATTERNS["?"])
-    for row, line in enumerate(pattern):
-        y = (len(pattern) - row - 1) * CELL + 80
-        for column, active in enumerate(line):
-            if active == "1":
-                rounded_rectangle(
-                    pen,
-                    SIDE + column * CELL,
-                    y,
-                    CELL - 14,
-                    CELL - 14,
-                    18,
-                )
-    if character in ".,:;":
-        pen = TTGlyphPen(None)
-        rounded_rectangle(pen, 260, 80, 130, 130, 40)
-        if character in ":;":
-            rounded_rectangle(pen, 260, 560, 130, 130, 40)
-    return pen.glyph(), ADVANCE
-
-
-def build(output: Path) -> None:
-    glyph_order = [".notdef", "space"]
-    glyph_order.extend(f"uni{codepoint:04X}" for codepoint in range(33, 127))
-    glyphs = {}
-    metrics = {}
-    glyphs[".notdef"], width = glyph_for("?")
-    metrics[".notdef"] = (width, 0)
-    glyphs["space"], width = glyph_for(" ")
-    metrics["space"] = (width, 0)
-    cmap = {}
-    for codepoint in range(33, 127):
-        glyph_name = f"uni{codepoint:04X}"
-        glyphs[glyph_name], width = glyph_for(chr(codepoint))
-        metrics[glyph_name] = (width, 0)
-        cmap[codepoint] = glyph_name
-
-    builder = FontBuilder(1000, isTTF=True)
-    builder.setupGlyphOrder(glyph_order)
-    builder.setupCharacterMap(cmap)
-    builder.setupGlyf(glyphs)
-    builder.setupHorizontalMetrics(metrics)
-    builder.setupHorizontalHeader(ascent=900, descent=-180)
-    builder.setupOS2(
-        usWeightClass=600,
-        usWidthClass=5,
-        sTypoAscender=900,
-        sTypoDescender=-180,
-        usWinAscent=900,
-        usWinDescent=180,
-    )
-    builder.setupNameTable(
-        {
-            "familyName": "Seloryn Strand",
-            "styleName": "Display",
-            "uniqueFontIdentifier": "Seloryn Strand Display 0.1",
-            "fullName": "Seloryn Strand Display",
-            "psName": "Seloryn-StrandDisplay",
-            "version": "Version 0.1",
-        }
-    )
-    builder.setupPost(keepGlyphNames=False)
+def build(source: Path, output: Path) -> None:
+    font = TTFont(source)
+    if "fvar" in font:
+        font = instantiateVariableFont(font, {"wght": 600}, inplace=False)
+    cmap = font.getBestCmap()
+    s_name = cmap[ord("S")]
+    font["glyf"][s_name] = ribbon_s(font)
+    advance, _ = font["hmtx"].metrics[s_name]
+    font["hmtx"].metrics[s_name] = (max(advance, 900), 20)
+    set_name(font, 1, "Seloryn Strand")
+    set_name(font, 2, "Display")
+    set_name(font, 4, "Seloryn Strand Display")
+    set_name(font, 6, "Seloryn-StrandDisplay")
+    set_name(font, 16, "Seloryn Strand")
+    set_name(font, 17, "Display")
+    set_name(font, 3, "Seloryn Strand Display 0.3")
+    if "OS/2" in font:
+        font["OS/2"].usWeightClass = 600
     output.parent.mkdir(parents=True, exist_ok=True)
-    builder.save(output)
+    font.save(output)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("output", type=Path)
+    parser.add_argument(
+        "--source",
+        type=Path,
+        default=Path(__file__).resolve().parents[2] / "assets" / "Sora-wght.ttf",
+    )
     args = parser.parse_args()
-    build(args.output)
+    build(args.source, args.output)
 
 
 if __name__ == "__main__":
