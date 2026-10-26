@@ -28,18 +28,37 @@ def main() -> None:
         raise SystemExit(f"missing glyphs: {''.join(missing)}")
 
     glyph_set = font.getGlyphSet()
+
+    def bounds(character: str):
+        pen = BoundsPen(glyph_set)
+        glyph_set[cmap[ord(character)]].draw(pen)
+        if pen.bounds is None:
+            raise SystemExit(f"{character} has no outline")
+        return pen.bounds
+
+    for character in REQUIRED.replace(" ", ""):
+        bounds(character)
+
     s_name = cmap[ord("S")]
-    s_pen = BoundsPen(glyph_set)
-    glyph_set[s_name].draw(s_pen)
-    if s_pen.bounds is None:
-        raise SystemExit("S has no outline")
-    left, bottom, right, top = s_pen.bounds
+    left, bottom, right, top = bounds("S")
     width = right - left
     height = top - bottom
+    a_bounds = bounds("A")
+    o_bounds = bounds("O")
+    cap_height = ((a_bounds[3] - a_bounds[1]) + (o_bounds[3] - o_bounds[1])) / 2
     if width < 600 or height < 600:
-        raise SystemExit(f"S bounds are too small: {s_pen.bounds}")
+        raise SystemExit(f"S bounds are too small: {(left, bottom, right, top)}")
+    if not 0.96 <= height / cap_height <= 1.04:
+        raise SystemExit(f"S cap-height mismatch: S={height:.0f}, caps={cap_height:.0f}")
+    if not 0.75 <= width / font["hmtx"].metrics[s_name][0] <= 0.9:
+        raise SystemExit("S sidebearings are not optically balanced")
     if font["hmtx"].metrics[s_name][0] < width:
         raise SystemExit("S advance width is narrower than its outline")
+
+    lower_s_bounds = bounds("s")
+    lower_s_height = lower_s_bounds[3] - lower_s_bounds[1]
+    if not 0.62 <= lower_s_height / cap_height <= 0.76:
+        raise SystemExit(f"lowercase s x-height mismatch: s={lower_s_height:.0f}, caps={cap_height:.0f}")
 
     glyph = font["glyf"][s_name]
     if glyph.numberOfContours != 2:

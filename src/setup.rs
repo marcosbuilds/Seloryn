@@ -836,10 +836,10 @@ mod windows_setup {
         SetWindowTextW(
             (*pointer).page_title,
             wide(match phase {
-                1 => "Welcome to Seloryn",
-                2 => "Choose your installation location",
-                3 => "Installing the verified preview",
-                4 => "Seloryn is ready",
+                1 => "WELCOME TO SELORYN",
+                2 => "INSTALLATION LOCATION",
+                3 => "INSTALLING SELORYN",
+                4 => "SELORYN IS READY",
                 _ => "Seloryn Setup",
             })
             .as_ptr(),
