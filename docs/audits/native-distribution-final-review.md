@@ -15,10 +15,10 @@ tagged release and it is not code-signed.
 | Runtime package | `0.12.0` |
 | Installer package | `0.12.0` |
 | Platform | `windows-x64` |
-| Installer | `dist/installer/SelorynSetup-0.12.0-windows-x64.exe` |
-| Installer SHA-256 | `3ea51bf40e741b72301bb587cd3e0b115eecc4d2303b5463d92c9747ee132a3e` |
-| Embedded runtime SHA-256 | `ef083b52d6e4d4eff0d5b52070ccc93071a56d7da75d219bbed463b1373114c2` |
-| Embedded launcher SHA-256 | `77bc547aa63671ef940830263577d7c5ade354fd189db3d533dafa958b2caba4` |
+| Installer | `dist/installer-v4/SelorynSetup-0.12.0-windows-x64.exe` |
+| Installer SHA-256 | `122471ae8c05407d1b4b8ff7ff8107497b2035be5b33535310afd4d159b150ae` |
+| Embedded runtime SHA-256 | `9ac9090e65bace0c13a5a8447cfab58e57993fd984128ef3b79577a73bd4e03c` |
+| Embedded launcher SHA-256 | `03e29b9fd4e57adcc81c9b2576531bbaf5aaefb987623abb67d8403cf9530586` |
 
 ## Implemented behavior
 
@@ -26,7 +26,11 @@ tagged release and it is not code-signed.
   paths and `std::process::Command`; it does not invoke a shell or contain a
   second Seloryn runtime.
 - `seloryn-setup` is a native Win32 GUI executable. It embeds the runtime and
-  launcher payloads and installs to a per-user directory by default.
+  launcher payloads, the app-only Seloryn Strand display face and the visual
+  panel, then installs to a per-user directory by default.
+- The GUI is a fixed-size four-stage wizard: welcome, location, installation
+  and completion. Installation work runs on a worker thread and posts real
+  stage events into a read-only log without blocking the window message loop.
 - Runtime files live under `versions/<M.m.p>/bin/seloryn.exe` and are described
   by a hash-bound manifest. The root `bin` directory receives the default
   launcher and an exact versioned launcher such as `seloryn0.12.0.exe`.
@@ -44,7 +48,7 @@ tagged release and it is not code-signed.
 |---|---|
 | Rust regression | `cargo test --locked --all-targets -- --test-threads=1`: 101 core + 8 launcher + 8 setup + 37 CLI + 15 tensor tests passed |
 | Lint gate | `cargo clippy --locked --all-targets -- -D warnings`: passed |
-| Installer build gate | `scripts/release/build-installer.ps1`: exit 0; embedded setup exit 0 |
+| Installer build gate | `scripts/release/build-installer.ps1 -OutputDirectory dist/installer-v4`: exit 0; embedded setup exit 0 |
 | Installed versioned launcher | `seloryn0.12.0 --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Installed default launcher | `seloryn --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Registry listing | `seloryn versions`: exit 0; listed `* 0.12.0` with the runtime hash |
@@ -67,9 +71,11 @@ reproduction and the full embedded runtime both pass after the correction.
 
 **Approved with explicit limits for the one-version Windows preview gate.**
 
-The real native installer artifact and one installed runtime are proven. The
-following are intentionally not claimed by this review: two distinct public
+The real native installer artifact, its four-stage GUI implementation and one
+installed runtime are proven at build/headless level. The following are
+intentionally not claimed by this review: two distinct public
 runtime artifacts coexisting, clean-machine validation, fresh CMD/PowerShell/
 Windows Terminal/VS Code PATH sessions, code signing, public release, a REPL,
-or the separate native terminal application. Those remain later gates and are
-not hidden by this installer result.
+or the separate native terminal application. A screenshot-driven GUI run at
+multiple Windows DPI scales remains a manual validation gate and is not hidden
+by this installer result.

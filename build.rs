@@ -18,11 +18,15 @@ fn embedded_bytes(var: &str, symbol: &str) -> String {
 fn main() {
     println!("cargo:rerun-if-env-changed=SELORYN_RUNTIME_PAYLOAD");
     println!("cargo:rerun-if-env-changed=SELORYN_LAUNCHER_PAYLOAD");
+    println!("cargo:rerun-if-env-changed=SELORYN_FONT_PAYLOAD");
+    println!("cargo:rerun-if-env-changed=SELORYN_PANEL_PAYLOAD");
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"));
     let payload = format!(
-        "{}{}",
+        "{}{}{}{}",
         embedded_bytes("SELORYN_RUNTIME_PAYLOAD", "RUNTIME_PAYLOAD"),
-        embedded_bytes("SELORYN_LAUNCHER_PAYLOAD", "LAUNCHER_PAYLOAD")
+        embedded_bytes("SELORYN_LAUNCHER_PAYLOAD", "LAUNCHER_PAYLOAD"),
+        embedded_bytes("SELORYN_FONT_PAYLOAD", "DISPLAY_FONT_PAYLOAD"),
+        embedded_bytes("SELORYN_PANEL_PAYLOAD", "PANEL_PAYLOAD")
     );
     fs::write(out_dir.join("installer_payload.rs"), payload)
         .expect("write generated installer payload module");

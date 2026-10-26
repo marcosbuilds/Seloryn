@@ -18,6 +18,8 @@ try {
 
     $env:SELORYN_RUNTIME_PAYLOAD = Join-Path $root 'target\release\seloryn.exe'
     $env:SELORYN_LAUNCHER_PAYLOAD = Join-Path $root 'target\release\seloryn-launcher.exe'
+    $env:SELORYN_FONT_PAYLOAD = Join-Path $root 'assets\seloryn-display.ttf'
+    $env:SELORYN_PANEL_PAYLOAD = Join-Path $root 'assets\seloryn-installer-panel.bmp'
     cargo build --release --locked --bin seloryn-setup
     if ($LASTEXITCODE -ne 0) { throw 'setup build failed' }
 
@@ -61,6 +63,8 @@ try {
 finally {
     Remove-Item Env:SELORYN_RUNTIME_PAYLOAD -ErrorAction SilentlyContinue
     Remove-Item Env:SELORYN_LAUNCHER_PAYLOAD -ErrorAction SilentlyContinue
+    Remove-Item Env:SELORYN_FONT_PAYLOAD -ErrorAction SilentlyContinue
+    Remove-Item Env:SELORYN_PANEL_PAYLOAD -ErrorAction SilentlyContinue
     Remove-Item Env:SELORYN_HOME -ErrorAction SilentlyContinue
     Pop-Location
 }

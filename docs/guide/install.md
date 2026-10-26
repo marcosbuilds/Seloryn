@@ -20,7 +20,9 @@ The native setup UI defaults to the per-user install directory, adds the
 per-user `PATH` only when selected, and makes `0.12.0` the default only when
 selected. Existing version directories are never overwritten by a different
 payload. The native launcher validates the manifest and runtime hash before
-starting the selected executable.
+starting the selected executable. The UI is a fixed-size four-stage wizard:
+welcome, location, installation and completion. Installation runs off the UI
+thread and streams real stage messages into its log.
 
 The older PowerShell lifecycle script remains useful for development-only
 installation of an already-built binary. It is not the native setup artifact
