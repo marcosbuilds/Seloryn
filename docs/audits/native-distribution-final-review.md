@@ -5,7 +5,7 @@ Review date: 2026-10-26
 ## Evidence identity
 
 The artifact was built from the working tree based on
-`3d7e55f1777f171b57b5254fa0404abb94ae2f99` on branch
+`2f28013f078d98b4d3e09ccc00a67e4d9f1246a3` on branch
 `feature/job-continuity-bridge`. This is a local preview candidate; it is not a
 tagged release and it is not code-signed.
 
@@ -15,9 +15,9 @@ tagged release and it is not code-signed.
 | Runtime package | `0.12.0` |
 | Installer package | `0.12.0` |
 | Platform | `windows-x64` |
-| Installer | `dist/installer-v5/SelorynSetup-0.12.0-windows-x64.exe` |
-| Installer SHA-256 | `5f6c725f6878dd6e6176cad31653189a85b0add4469535ebe94b9471e99e93e2` |
-| Embedded runtime SHA-256 | `5ead800b5aed76e258b387a0d70f79d123c85d5d3ce45d17bec7b354cc070654` |
+| Installer | `dist/installer-v7/SelorynSetup-0.12.0-windows-x64.exe` |
+| Installer SHA-256 | `f28de273b184f7556876091cf5fb150082f6d58488a98654bc64d2252cc9e950` |
+| Embedded runtime SHA-256 | `6a0c55816b20b4561da3f85b05ee835981b44100f75507a818c5a4895086ad2d` |
 | Embedded launcher SHA-256 | `e3192c24200560d1c4fbba533b4c574921197904becf35fb2e2a1a89cffaee2a` |
 
 ## Implemented behavior
@@ -27,7 +27,10 @@ tagged release and it is not code-signed.
   second Seloryn runtime.
 - `seloryn-setup` is a native Win32 GUI executable. It embeds the runtime and
   launcher payloads, the app-only Seloryn Strand display face and the visual
-  panel, then installs to a per-user directory by default.
+  panel, then installs to a per-user directory by default. The fixed client
+  area is `880×560`, with the visual panel at `280px`; the outer window size is
+  calculated from the Win32 frame rather than treating client dimensions as
+  window dimensions.
 - The GUI is a fixed-size four-stage wizard: welcome, location, installation
   and completion fallback. Installation work runs on a worker thread and posts
   real stage events into a read-only log without blocking the window message
@@ -53,7 +56,7 @@ tagged release and it is not code-signed.
 |---|---|
 | Rust regression | `cargo test --locked --all-targets -- --test-threads=1`: 101 core + 8 launcher + 8 setup + 37 CLI + 15 tensor tests passed |
 | Lint gate | `cargo clippy --locked --all-targets -- -D warnings`: passed |
-| Installer build gate | `scripts/release/build-installer.ps1 -OutputDirectory dist/installer-v5`: exit 0; embedded setup exit 0 |
+| Installer build gate | `scripts/release/build-installer.ps1 -OutputDirectory dist/installer-v7`: exit 0; embedded setup exit 0 |
 | Installed versioned launcher | `seloryn0.12.0 --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Installed default launcher | `seloryn --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Registry listing | `seloryn versions`: exit 0; listed `* 0.12.0` with the runtime hash |
