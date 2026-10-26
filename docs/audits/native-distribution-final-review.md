@@ -18,7 +18,7 @@ tagged release and it is not code-signed.
 | Installer | `dist/installer-v7/SelorynSetup-0.12.0-windows-x64.exe` |
 | Installer SHA-256 | `f28de273b184f7556876091cf5fb150082f6d58488a98654bc64d2252cc9e950` |
 | Embedded runtime SHA-256 | `6a0c55816b20b4561da3f85b05ee835981b44100f75507a818c5a4895086ad2d` |
-| Embedded launcher SHA-256 | `e3192c24200560d1c4fbba533b4c574921197904becf35fb2e2a1a89cffaee2a` |
+| Embedded launcher SHA-256 | `6f3f8519c1e0b06c2b573138f83111b18241ebbc274aa4ea97a8b63f4da4b12c` |
 
 ## Implemented behavior
 
