@@ -1,12 +1,14 @@
 # Executable language-model proof
 
-Seloryn now has one complete, bounded next-token workflow authored in `.sely`.
-The baseline fixture is a 14-token bigram softmax model trained on an owned
-dataset. The path is real: source modules load `vocab.json` and token datasets,
-derive tensor dimensions, compute fused cross-entropy, request reverse-mode
-gradients, update named parameters with reusable SGD, evaluate held-out pairs,
-persist a JSON checkpoint with SHA-256 metadata, reload it and answer a second
-CLI request. The same source also passes a five-token vocabulary variant.
+Seloryn now has one complete, bounded contextual next-token workflow authored in
+`.sely`. The fixture uses a runtime-selected context window (the proof uses four
+tokens), a one-hot linear softmax model and an owned dataset. The path is real:
+source modules load `vocab.json` and token datasets, derive tensor dimensions,
+compute fused cross-entropy, request reverse-mode gradients, update named
+parameters with reusable SGD, evaluate held-out loss/perplexity, persist a JSON
+checkpoint with SHA-256 metadata for both weights and vocabulary, reload it and
+answer token-list or free-text CLI requests. The same source also passes a
+five-token vocabulary variant.
 
 ## Project tree
 
@@ -49,8 +51,9 @@ flowchart LR
 
 There is no call to a predefined `train_mlp`, `train_linear` or prediction
 function in the project source. The runtime provides tensor primitives, fused
-cross-entropy and the `gradients` primitive; the architecture, objective, loop,
-evaluation, serialization and inference orchestration are `.sely` code.
+cross-entropy, reverse-mode gradients and bounded whitespace splitting; the
+architecture, context-window construction, objective, loop, evaluation,
+serialization and inference orchestration are `.sely` code.
 
 ## Reproduction
 
@@ -62,9 +65,10 @@ python tests/self_hosted_language_model_probe.py
 python tests/compare_language_model.py
 ```
 
-The proof also executes negative paths for an unknown token, malformed dataset
-and mismatched prompt count. It then copies the project, changes the vocabulary
-to five tokens and trains that variant without source changes. Training emits 21
+The proof also executes negative paths for an unknown token, malformed dataset,
+short prompts, duplicate vocabulary entries and a reordered vocabulary with the
+same size. It then copies the project, changes the vocabulary to five tokens and
+trains that variant without source changes. Training emits 21
 sampled `training.progress` events plus source-owned contract/completion records
 inside a 25-event hash-chained JSON2 receipt, and the receipt is replayed in an
 isolated copy. The final checkpoint is loaded by a fresh inference process, not
@@ -72,25 +76,25 @@ read from the training object in memory.
 
 ## Measured comparison
 
-The reference loads the same vocabulary and datasets, then uses the same 14x14
-full-batch bigram and 160 updates in Python's standard library. This is a
-correctness comparison. After fused cross-entropy and sampled loss evaluation,
-the latest independent probe measured `0.0331 s` for Python and `0.3712 s` for
-Seloryn on this Windows host for one cold process. Process and filesystem noise
-is material at this size; the measurement is evidence of current overhead, not
-a speed claim.
+The reference loads the same vocabulary and datasets, then uses the same
+four-token one-hot window, full-batch linear model and 160 updates in Python's
+standard library. This is a correctness comparison. Process and filesystem
+noise is material at this size; the measurement is evidence of current
+overhead, not a speed claim.
 
-| implementation | initial loss | final loss | held-out loss | accuracy | generation | wall time |
-|---|---:|---:|---:|---:|---|---:|
-| Python stdlib | 2.639057330 | 0.829485686 | 1.532877856 | 0.533333 | `the park <eos>` | `0.0331 s` latest run |
-| Seloryn `.sely` | 2.639057398 | 0.829485774 | 1.532877922 | 0.533333 | `the park <eos>` | `0.3712 s` latest run |
+| implementation | initial loss | final loss | held-out loss | perplexity | accuracy | generation | wall time |
+|---|---:|---:|---:|---:|---:|---|---:|
+| Python stdlib | 2.639057330 | 0.181598135 | 1.088078311 | 2.96856393 | 0.666667 | `in in park <eos>` | `0.3610 s` latest probe |
+| Seloryn `.sely` | 2.639057398 | 0.181598127 | 1.088078260 | 2.96856380 | 0.666667 | `in in park <eos>` | `1.0625 s` latest probe |
 
 The exact wall time varies by machine. The acceptance invariant is numerical:
 final-loss and held-out-loss differences are below `1e-5`, and accuracy is
-equal. The model's one-token context is a deliberate boundary; vocabulary and
-tensor dimensions are no longer fixed in source. The checkpoint does not
-revalidate dataset files during inference. This is not a transformer, Unicode tokenizer,
-GPU trainer, HTTP server or stable production runtime.
+equal. The model's context window, vocabulary and tensor dimensions are derived
+from the request and dataset rather than fixed in source. `infer_text` splits
+Unicode whitespace and still requires every resulting token in the vocabulary.
+The checkpoint binds the exact vocabulary hash, so reordering tokens with the
+same size is rejected. This is not an embedding model, transformer, subword
+tokenizer, GPU trainer, HTTP server or stable production runtime.
 
 The complete hashes, exit codes, replay result and receipt details are recorded beside the
 project in [`evidence.md`](../../examples/projects/self-hosted-language-model/evidence.md).

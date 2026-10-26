@@ -1734,6 +1734,13 @@ impl<'a> Checker<'a> {
                 }
                 Type::List(Box::new(Type::I64))
             }
+            "split_whitespace" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(value, &Type::Text, "split_whitespace text");
+                }
+                Type::List(Box::new(Type::Text))
+            }
             "train_linear" | "train_linear_gpu" | "gpu" => {
                 self.check_standard_arity(name, arguments, 4, span);
                 Type::Json
@@ -2176,7 +2183,7 @@ fn is_supported_standard_directive(text: &str) -> bool {
         ]
         .as_slice(),
         "autograd" => ["backward", "gradcheck", "gradients"].as_slice(),
-        "data" => ["range", "len", "to_f64"].as_slice(),
+        "data" => ["range", "len", "to_f64", "split_whitespace"].as_slice(),
         "training" => [
             "train_linear",
             "train_linear_gpu",
@@ -2358,6 +2365,14 @@ mod tests {
             invalid_index.contains(&"SEL-T002".to_owned()),
             "{invalid_index:?}"
         );
+        assert!(diagnostics(
+            "from data import split_whitespace\nfn main() -> List[Text]:\n    return split_whitespace(\"ola  mundo\")\n"
+        )
+        .is_empty());
+        assert!(diagnostics(
+            "from data import split_whitespace\nfn main() -> List[Text]:\n    return split_whitespace(1)\n"
+        )
+        .contains(&"SEL-T002".to_owned()));
     }
 
     #[test]

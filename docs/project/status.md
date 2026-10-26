@@ -21,7 +21,7 @@ purpose ML platform.
 | Human/JSON/JSON2 terminal streaming with flush, identity and stdout/stderr separation | **Verified preview for bounded CPU/GPU-linear and source-owned CPU training; JSON2 chain and replay independently verified** | [`src/main.rs`](../../src/main.rs), [`tests/streaming_v2_probe.py`](../../tests/streaming_v2_probe.py), [`tests/auditable_local_inference_probe.py`](../../tests/auditable_local_inference_probe.py), [`replay-receipt.py`](../../scripts/streaming/replay-receipt.py) |
 | Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop | **Verified preview** | [`examples/projects/self-hosted-linear`](../../examples/projects/self-hosted-linear), [`tests/self_hosted_probe.py`](../../tests/self_hosted_probe.py) |
 | Custom `.sely` ReLU MLP with own dataset, training, holdout evaluation, atomic checkpoint, reload and inference | **Verified preview** | [`examples/projects/self-hosted-mlp`](../../examples/projects/self-hosted-mlp), [`tests/self_hosted_mlp_probe.py`](../../tests/self_hosted_mlp_probe.py); `train_mlp` is not used |
-| Complete source-owned `.sely` bigram language model with runtime-loaded vocabulary/datasets, reusable parameters/SGD, training, held-out evaluation, hash-validated checkpoint reload and separate inference | **Verified preview** | [`examples/projects/self-hosted-language-model`](../../examples/projects/self-hosted-language-model), [`tests/self_hosted_language_model_probe.py`](../../tests/self_hosted_language_model_probe.py), [`docs/compute/language-model.md`](../compute/language-model.md); CPU-only and one-token context |
+| Complete source-owned `.sely` contextual next-token model with whitespace tokenization, runtime-loaded vocabulary/datasets, configurable context windows, reusable parameters/SGD, held-out loss/perplexity, hash-bound checkpoint reload and text inference | **Verified preview** | [`examples/projects/self-hosted-language-model`](../../examples/projects/self-hosted-language-model), [`tests/self_hosted_language_model_probe.py`](../../tests/self_hosted_language_model_probe.py), [`docs/compute/language-model.md`](../compute/language-model.md); CPU-only and linear one-hot architecture |
 | Source-owned auditable local-inference workflow with explicit dataset/model/run contracts, hash-bound checkpoint persistence, separate inference and structured audit event | **Verified preview** | [`examples/projects/auditable-local-inference`](../../examples/projects/auditable-local-inference), [`tests/auditable_local_inference_probe.py`](../../tests/auditable_local_inference_probe.py), [`docs/benchmarks/auditable-local-inference.md`](../benchmarks/auditable-local-inference.md); bounded CPU fixture |
 | Physical hardware adapter inventory and bounded WGSL compute/readback probe | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`tests/gpu_probe.py`](../../tests/gpu_probe.py) |
 | Explicit `train_linear_gpu` scalar F32 profile with device-resident parameters and one final readback | **Verified preview on the declared host; capability-aware elsewhere** | [`src/gpu.rs`](../../src/gpu.rs), [`examples/projects/gpu-linear-training`](../../examples/projects/gpu-linear-training), [`tests/gpu_training_probe.py`](../../tests/gpu_training_probe.py) |
@@ -52,7 +52,7 @@ purpose ML platform.
 |---|---|---|
 | Public package-wide `Module`/`Dataset` APIs and optimizer families | Not implemented | Two projects now share a verified source-level `Parameter`/`Sgd` contract; a registry-wide API and optimizer state families are still not exposed |
 | GPU tensor/autodiff training, GPU MLP, distributed execution, mixed precision and memory sharding | Not implemented | `train_linear_gpu` is a closed scalar F32 profile; it does not make `Tensor` or MLP device-resident |
-| Transformer/LLM-scale training, Unicode/subword tokenizers and HTTP serving | Not implemented | the current language-model proof is a CPU bigram with one-token context and JSON CLI integration |
+| Transformer/LLM-scale training, embeddings, Unicode/subword tokenizers and HTTP serving | Not implemented | the current language-model proof is a CPU contextual linear model with one-hot windows and JSON/text CLI integration |
 | Local runtime installer | Experimental implemented | the Windows installer can verify and install a local binary with optional user PATH integration; no public download or supported release target is claimed |
 | Registry, broad package ecosystem and stable ABI | Not implemented | local modules and deterministic bundles exist, but package resolution, registry governance and a stable ABI are not exposed |
 | Indexed/incremental editor analysis and interactive VS Code training panel | Not implemented | the extension now uses the bounded full-document LSP by default, retains the saved-file CLI fallback, and training still runs through CLI/terminal |
@@ -118,8 +118,10 @@ claim a transformer, subword tokenizer, GPU training, HTTP serving or stable ABI
 The `0.12` gain generalizes that workflow to runtime-sized vocabularies and
 datasets, reusable source-level parameters and SGD, fused cross-entropy with
 finite-difference coverage, and a repeated benchmark plus installed-terminal
-proof. It still does not claim a transformer, context larger than one token,
-GPU tensor training, HTTP serving or stable ABI.
+proof. The current proof adds a bounded contextual window, whitespace text
+inference, perplexity and exact vocabulary binding in checkpoints. It still
+does not claim a transformer, embeddings, subword tokenization, GPU tensor
+training, HTTP serving or stable ABI.
 The first auditable local-inference proof adds a separate source-owned ReLU MLP
 workflow with explicit dataset/model/run contracts, hash-bound checkpoint
 metadata, a second-process inference request, structured audit events inside

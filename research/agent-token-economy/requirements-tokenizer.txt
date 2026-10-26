@@ -1,3 +1,0 @@
-# Optional local adapter for OpenAI-compatible BPE token counts.
-# This is intentionally not installed by the product/runtime CI.
-tiktoken==0.14.0

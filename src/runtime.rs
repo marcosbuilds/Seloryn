@@ -1848,6 +1848,29 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 }
                 Ok(Value::List((0..*stop).map(Value::I64).collect()))
             }
+            "split_whitespace" => {
+                let Some(Value::Text(text)) = values.first() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "split_whitespace requires Text",
+                        span,
+                    )));
+                };
+                let tokens = text
+                    .split_whitespace()
+                    .map(|token| Value::Text(token.to_owned()))
+                    .collect::<Vec<_>>();
+                if tokens.len() > MAX_LIST_ELEMENTS {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        format!(
+                            "split_whitespace exceeds the list element limit {MAX_LIST_ELEMENTS}"
+                        ),
+                        span,
+                    )));
+                }
+                Ok(Value::List(tokens))
+            }
             "train_linear" => {
                 let (Some(Value::Text(train)), Some(Value::Text(test))) =
                     (values.first(), values.get(1))
@@ -4968,6 +4991,13 @@ mod tests {
         )
         .expect("list iteration should execute");
         assert_eq!(total, Value::I64(6));
+
+        let tokens = run(r#"from data import split_whitespace
+fn main() -> List[Text]:
+    return split_whitespace("  Seloryn   entende   texto  ")
+"#)
+        .expect("whitespace tokenization should execute");
+        assert_eq!(tokens.render(), "[\"Seloryn\", \"entende\", \"texto\"]");
     }
 
     #[test]

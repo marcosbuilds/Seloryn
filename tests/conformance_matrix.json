@@ -133,7 +133,7 @@
       "suites": ["core"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary"],
-      "notes": "Runtime-sized source-owned CPU bigram training and inference."
+      "notes": "Runtime-sized source-owned CPU contextual training and inference with configurable one-hot windows."
     },
     {
       "id": "auditable-local-inference",
@@ -496,13 +496,13 @@
     {
       "id": "source-owned-language-model",
       "area": "language-model",
-      "claim": "A source-owned CPU bigram workflow with runtime-sized vocabulary/data, training, evaluation, checkpoint reload and inference.",
+      "claim": "A source-owned CPU contextual next-token workflow with runtime-sized vocabulary/data, configurable windows, training, evaluation, checkpoint reload and inference.",
       "status": "verified-preview",
       "implementation": ["examples/projects/self-hosted-language-model", "src/tensor_autograd.rs"],
       "positive_probes": ["self-hosted-language-model", "language-model-comparison"],
       "negative_probes": ["self-hosted-language-model"],
       "platforms": ["linux", "macos", "windows"],
-      "requirements": ["CPU", "single token context", "Python 3.12", "stdlib numerical reference"],
+      "requirements": ["CPU", "bounded context window", "Python 3.12", "stdlib numerical reference"],
       "documentation": ["docs/project/status.md", "docs/compute/language-model.md", "docs/compute/llms.md"],
       "limits": ["This is not transformer training, subword tokenization, HTTP serving or GPU training."]
     },
@@ -581,7 +581,7 @@
       "negative_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight", "job-worker"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary", "local filesystem"],
-      "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
+      "documentation": ["docs/project/status.md", "docs/project/conformance.md"],
       "limits": ["The worker is direct-process and bounded; retry is explicit local requeue of the same canonical spec with archived receipts; checkpoint resume, remote execution or escaped-child recovery after supervisor death are not claimed."]
     },
     {
@@ -594,7 +594,7 @@
       "negative_probes": ["job-process-fence"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary", "Rust compiler", "local process"],
-      "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
+      "documentation": ["docs/project/status.md", "docs/project/conformance.md"],
       "limits": ["The proof covers a descendant created after fence installation; atomic process birth before attachment, supervisor crash recovery, remote execution and checkpoint resume remain outside the contract."]
     },
     {
@@ -725,7 +725,7 @@
       "platforms": ["not-applicable"],
       "requirements": ["public boundary record"],
       "documentation": ["docs/project/status.md", "docs/compute/llms.md", "docs/systems/http.md"],
-      "limits": ["The verified language-model row is a one-token CPU bigram proof only."]
+      "limits": ["The verified language-model row is a bounded CPU one-hot linear proof; embeddings, subwords, transformer layers and HTTP serving remain unsupported."]
     },
     {
       "id": "distributed-boundary",
@@ -737,7 +737,7 @@
       "negative_probes": ["boundary-distributed"],
       "platforms": ["not-applicable"],
       "requirements": ["public boundary record"],
-      "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
+      "documentation": ["docs/project/status.md", "docs/project/conformance.md"],
       "limits": ["Local reservation leases do not prove live worker fencing or distributed recovery."]
     },
     {

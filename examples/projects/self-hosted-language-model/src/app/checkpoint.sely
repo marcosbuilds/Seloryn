@@ -2,27 +2,34 @@ module app.checkpoint
 
 from app.model import LanguageModel
 from app.tokenizer import Vocabulary
+from data import len
 from json import as_f64_list, as_i64, as_text, from_f64_list, from_i64, from_text, get, object, read_file, sha256, write_file
 from tensor import values
 
-pub fn save_checkpoint(path: Text, model: LanguageModel, steps: I64, train_hash: Text, test_hash: Text) -> Result[Text, JsonIoError]:
+pub fn save_checkpoint(path: Text, model: LanguageModel, steps: I64, vocabulary_hash: Text, train_hash: Text, test_hash: Text) -> Result[Text, JsonIoError]:
     let weights: Json = from_f64_list(values(model.weights))
     let weights_hash: Text = sha256(weights)
-    let fields: List[Json] = [from_text("seloryn.sely.language-model.v1"), from_text("bigram_softmax"), from_i64(model.vocabulary_size), from_i64(steps), from_text(train_hash), from_text(test_hash), weights, from_text(weights_hash)]
-    let checkpoint: Json = object(["schema", "architecture", "vocabulary_size", "steps", "train_hash", "test_hash", "weights", "weights_sha256"], fields)?
+    let fields: List[Json] = [from_text("seloryn.sely.language-model.v2"), from_text("contextual_linear_softmax"), from_i64(model.vocabulary_size), from_i64(model.context_size), from_text(vocabulary_hash), from_i64(steps), from_text(train_hash), from_text(test_hash), weights, from_text(weights_hash)]
+    let checkpoint: Json = object(["schema", "architecture", "vocabulary_size", "context_size", "vocabulary_sha256", "steps", "train_hash", "test_hash", "weights", "weights_sha256"], fields)?
     write_file(path, checkpoint)?
     return Ok(sha256(checkpoint))
 
 pub fn restore_checkpoint(path: Text, vocabulary: Vocabulary) -> Result[LanguageModel, JsonIoError]:
     let checkpoint: Json = read_file(path)?
     let schema: Text = as_text(get(checkpoint, ["schema"])?)?
-    require schema == "seloryn.sely.language-model.v1" else JsonIoError("unsupported language model checkpoint")
+    require schema == "seloryn.sely.language-model.v2" else JsonIoError("unsupported language model checkpoint")
     let architecture: Text = as_text(get(checkpoint, ["architecture"])?)?
-    require architecture == "bigram_softmax" else JsonIoError("unsupported language model architecture")
+    require architecture == "contextual_linear_softmax" else JsonIoError("unsupported language model architecture")
     let vocabulary_size: I64 = as_i64(get(checkpoint, ["vocabulary_size"])?)?
     require vocabulary_size == vocabulary.size else JsonIoError("checkpoint vocabulary does not match tokenizer")
+    let context_size: I64 = as_i64(get(checkpoint, ["context_size"])?)?
+    require context_size > 0 else JsonIoError("checkpoint context_size must be positive")
+    let expected_vocabulary_hash: Text = as_text(get(checkpoint, ["vocabulary_sha256"])?)?
+    require expected_vocabulary_hash == vocabulary.source_hash else JsonIoError("checkpoint vocabulary hash does not match tokenizer")
     let weights: Json = get(checkpoint, ["weights"])?
     let expected_hash: Text = as_text(get(checkpoint, ["weights_sha256"])?)?
     require expected_hash == sha256(weights) else JsonIoError("language model weights hash does not match payload")
     let packed: List[F64] = as_f64_list(weights)?
-    return Ok(LanguageModel(tensor_f32(packed, [vocabulary_size, vocabulary_size]), vocabulary_size))
+    let expected_weights: I64 = context_size * vocabulary_size * vocabulary_size
+    require len(packed) == expected_weights else JsonIoError("checkpoint weight count does not match model shape")
+    return Ok(LanguageModel(tensor_f32(packed, [context_size * vocabulary_size, vocabulary_size]), vocabulary_size, context_size))

@@ -17,6 +17,7 @@ Evidence:
 - [`tests/installer_probe.ps1`](../../tests/installer_probe.ps1)
 - [`docs/compute/language-model.md`](../compute/language-model.md)
 
-The runtime remains `verified-preview` with an unstable ABI. This is still a
-CPU bigram with one-token context, not a transformer, Unicode/subword
-tokenizer, GPU tensor trainer, HTTP server or stable production runtime.
+The runtime remains `verified-preview` with an unstable ABI. This is a bounded
+CPU contextual linear model with one-hot windows and whitespace tokenization,
+not an embedding model, transformer, subword tokenizer, GPU tensor trainer,
+HTTP server or stable production runtime.

@@ -10,16 +10,18 @@ from app.tokenizer import Vocabulary, load_vocabulary, token_id
 from autograd import gradients
 from audit import emit
 from data import range
-from json import from_text, object
+from json import as_i64, from_i64, from_text, get, object
 from training import progress
 
 pub record LanguageReport:
     architecture: Text
     vocabulary_size: I64
+    context_size: I64
     steps: I64
     initial_loss: F32
     final_loss: F32
     test_loss: F32
+    test_perplexity: F32
     reloaded_loss: F32
     test_accuracy: F64
     generated: Text
@@ -27,10 +29,10 @@ pub record LanguageReport:
     test_hash: Text
     checkpoint_hash: Text
 
-fn train(train_data: Dataset, test_data: Dataset, vocabulary: Vocabulary, eos: I64, steps: I64) -> Result[LanguageReport, JsonIoError]:
+fn train(train_data: Dataset, test_data: Dataset, vocabulary: Vocabulary, eos: I64, bos: I64, context_size: I64, steps: I64) -> Result[LanguageReport, JsonIoError]:
     let rate: Tensor[F32] = tensor_f32([0.5], [])
     let optimizer: Sgd = sgd(rate)
-    var weights: Parameter = parameter("language-model.weights", tensor_zeros_f32([vocabulary.size, vocabulary.size]))
+    var weights: Parameter = parameter("language-model.weights", tensor_zeros_f32([context_size * vocabulary.size, vocabulary.size]))
     let initial_loss: F32 = tensor_item_f32(objective(train_data.inputs, weights.value, train_data.targets))
     for step_index in range(steps):
         let derivatives: List[Tensor[F32]] = gradients(objective, train_data.inputs, weights.value, train_data.targets)
@@ -38,25 +40,32 @@ fn train(train_data: Dataset, test_data: Dataset, vocabulary: Vocabulary, eos: I
         let current_step: I64 = step_index + 1
         if current_step == 1 or current_step % 8 == 0 or current_step == steps:
             let live_loss: F32 = tensor_item_f32(objective(train_data.inputs, weights.value, train_data.targets))
-            progress("bigram_language_model", current_step, steps, live_loss)
-    let model: LanguageModel = LanguageModel(weights.value, vocabulary.size)
+            progress("contextual_language_model", current_step, steps, live_loss)
+    let model: LanguageModel = LanguageModel(weights.value, vocabulary.size, context_size)
     let final_loss: F32 = tensor_item_f32(objective(train_data.inputs, model.weights, train_data.targets))
     let test_loss: F32 = tensor_item_f32(objective(test_data.inputs, model.weights, test_data.targets))
+    let test_perplexity: F32 = tensor_item_f32(tensor_exp(objective(test_data.inputs, model.weights, test_data.targets)))
     let test_accuracy: F64 = accuracy(test_data.inputs, test_data.targets, model, test_data.rows, vocabulary.size)
-    let checkpoint_hash: Text = save_checkpoint("checkpoints/language-model.json", model, steps, train_data.source_hash, test_data.source_hash)?
+    let checkpoint_hash: Text = save_checkpoint("checkpoints/language-model.json", model, steps, vocabulary.source_hash, train_data.source_hash, test_data.source_hash)?
     let completion_event: Json = object(["checkpoint_sha256"], [from_text(checkpoint_hash)])?
     emit("training.complete", completion_event)
     let reloaded: LanguageModel = restore_checkpoint("checkpoints/language-model.json", vocabulary)?
     let reloaded_loss: F32 = tensor_item_f32(objective(test_data.inputs, reloaded.weights, test_data.targets))
-    let generated: Text = generate(reloaded, vocabulary, eos, 8)
-    return Ok(LanguageReport("bigram_softmax", vocabulary.size, steps, initial_loss, final_loss, test_loss, reloaded_loss, test_accuracy, generated, train_data.source_hash, test_data.source_hash, checkpoint_hash))
+    let generated: Text = generate(reloaded, vocabulary, eos, bos, 8)
+    return Ok(LanguageReport("contextual_linear_softmax", vocabulary.size, context_size, steps, initial_loss, final_loss, test_loss, test_perplexity, reloaded_loss, test_accuracy, generated, train_data.source_hash, test_data.source_hash, checkpoint_hash))
 
-pub fn run() -> Result[LanguageReport, JsonIoError]:
+pub fn run(request: Json) -> Result[LanguageReport, JsonIoError]:
+    let context_size: I64 = as_i64(get(request, ["context_size"])?)?
+    let steps: I64 = as_i64(get(request, ["steps"])?)?
+    require context_size > 0 else JsonIoError("context_size must be positive")
+    require context_size <= 16 else JsonIoError("context_size must be at most 16")
+    require steps > 0 else JsonIoError("steps must be positive")
+    require steps <= 1000 else JsonIoError("steps must be at most 1000")
     let vocabulary: Vocabulary = load_vocabulary("data/vocab.json")?
-    let train_data: Dataset = load_dataset("data/train.json", vocabulary)?
-    let test_data: Dataset = load_dataset("data/test.json", vocabulary)?
-    let request: Json = object(["mode"], [from_text("train")])?
-    let contract_event: Json = object(["operation", "request", "train_sha256", "test_sha256"], [from_text("source_owned_training"), request, from_text(train_data.source_hash), from_text(test_data.source_hash)])?
+    let train_data: Dataset = load_dataset("data/train.json", vocabulary, context_size)?
+    let test_data: Dataset = load_dataset("data/test.json", vocabulary, context_size)?
+    let contract_event: Json = object(["operation", "request", "context_size", "steps", "train_sha256", "test_sha256"], [from_text("source_owned_training"), request, from_i64(context_size), from_i64(steps), from_text(train_data.source_hash), from_text(test_data.source_hash)])?
     emit("training.contract", contract_event)
     let eos: I64 = token_id(vocabulary, "<eos>")?
-    return train(train_data, test_data, vocabulary, eos, 160)
+    let bos: I64 = token_id(vocabulary, "<bos>")?
+    return train(train_data, test_data, vocabulary, eos, bos, context_size, steps)

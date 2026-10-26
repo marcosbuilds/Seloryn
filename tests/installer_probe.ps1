@@ -51,12 +51,12 @@ try {
     $streamStdout = Join-Path $installRoot 'stream.stdout'
     $streamStderr = Join-Path $installRoot 'stream.stderr'
     $utf8 = New-Object System.Text.UTF8Encoding($false)
-    [IO.File]::WriteAllText($streamInput, '{"mode":"train"}', $utf8)
+    [IO.File]::WriteAllText($streamInput, '{"mode":"train","context_size":4,"steps":160}', $utf8)
     $command = 'type "' + $streamInput + '" | ""' + $installedBinary + '"" run ""' + $project + '"" --format=json --log=json2 > "' + $streamStdout + '" 2> "' + $streamStderr + '"'
     & cmd.exe /d /c $command
     $streamExit = $LASTEXITCODE
     $streamOutput = Get-Content -LiteralPath $streamStdout -Raw
-    if ($streamExit -ne 0 -or $streamOutput -notmatch 'bigram_softmax') {
+    if ($streamExit -ne 0 -or $streamOutput -notmatch 'contextual_linear_softmax') {
         throw 'installed binary did not execute the language-model training project'
     }
     $verified = & python (Join-Path $root 'scripts\streaming\verify-event-chain.py') $streamStderr | Out-String

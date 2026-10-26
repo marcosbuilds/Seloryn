@@ -1377,6 +1377,38 @@ fn v2_hash(value: &json::JsonValue) -> String {
     format!("sha256:{:x}", hasher.finalize())
 }
 
+fn redact_sensitive_json(value: &mut json::JsonValue) {
+    match value {
+        json::JsonValue::Object(object) => {
+            for (key, value) in object.iter_mut() {
+                let normalized = key.to_ascii_lowercase();
+                if normalized == "token"
+                    || normalized.ends_with("_token")
+                    || normalized.contains("password")
+                    || normalized.contains("secret")
+                    || normalized.contains("api_key")
+                    || normalized.contains("authorization")
+                    || normalized.contains("credential")
+                    || normalized.contains("private_key")
+                {
+                    *value = json::JsonValue::String("<redacted>".to_owned());
+                } else {
+                    redact_sensitive_json(value);
+                }
+            }
+        }
+        json::JsonValue::Array(values) => {
+            for value in values {
+                redact_sensitive_json(value);
+            }
+        }
+        json::JsonValue::Null
+        | json::JsonValue::Bool(_)
+        | json::JsonValue::Number(_)
+        | json::JsonValue::String(_) => {}
+    }
+}
+
 fn redact_v2_paths(object: &mut BTreeMap<String, json::JsonValue>) {
     for key in ["train_path", "test_path", "checkpoint_path", "input_path"] {
         let Some(json::JsonValue::String(path)) = object.get(key).cloned() else {
@@ -1667,11 +1699,15 @@ fn render_runtime_event_human(event: &runtime::RuntimeEvent) -> String {
             "seloryn training.progress schema=1 operation={} step={}/{} metric={metric:.8}",
             operation, step, total
         ),
-        runtime::RuntimeEvent::Audit { kind, payload } => format!(
-            "seloryn audit.record schema=1 kind={} payload={}",
-            kind,
-            json::encode(payload)
-        ),
+        runtime::RuntimeEvent::Audit { kind, payload } => {
+            let mut safe_payload = payload.clone();
+            redact_sensitive_json(&mut safe_payload);
+            format!(
+                "seloryn audit.record schema=1 kind={} payload={}",
+                kind,
+                json::encode(&safe_payload)
+            )
+        }
     }
 }
 
@@ -2450,7 +2486,9 @@ fn render_runtime_event_json(event: &runtime::RuntimeEvent) -> String {
                 "audit_kind".to_owned(),
                 json::JsonValue::String(kind.clone()),
             );
-            object.insert("payload".to_owned(), payload.clone());
+            let mut safe_payload = payload.clone();
+            redact_sensitive_json(&mut safe_payload);
+            object.insert("payload".to_owned(), safe_payload);
         }
     }
     json::encode(&json::JsonValue::Object(object))
@@ -4200,12 +4238,49 @@ fn write_io_error(stream: &str, error: io::Error) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, classify, display_argument};
+    use super::{Action, classify, display_argument, redact_sensitive_json};
+    use crate::json::JsonValue;
+    use std::collections::BTreeMap;
     use std::ffi::OsString;
 
     #[test]
     fn no_arguments_open_help() {
         assert!(matches!(classify(&[]), Action::Help));
+    }
+
+    #[test]
+    fn audit_payload_redacts_sensitive_fields_recursively() {
+        let mut payload = JsonValue::Object(BTreeMap::from([
+            (
+                "token".to_owned(),
+                JsonValue::String("do-not-persist".to_owned()),
+            ),
+            (
+                "nested".to_owned(),
+                JsonValue::Array(vec![JsonValue::Object(BTreeMap::from([
+                    (
+                        "api_key".to_owned(),
+                        JsonValue::String("also-secret".to_owned()),
+                    ),
+                    ("safe".to_owned(), JsonValue::String("visible".to_owned())),
+                ]))]),
+            ),
+        ]));
+        redact_sensitive_json(&mut payload);
+        let JsonValue::Object(object) = payload else {
+            panic!("expected object")
+        };
+        assert_eq!(object["token"], JsonValue::String("<redacted>".to_owned()));
+        assert_eq!(
+            object["nested"],
+            JsonValue::Array(vec![JsonValue::Object(BTreeMap::from([
+                (
+                    "api_key".to_owned(),
+                    JsonValue::String("<redacted>".to_owned()),
+                ),
+                ("safe".to_owned(), JsonValue::String("visible".to_owned()),),
+            ]))])
+        );
     }
 
     #[test]

@@ -87,7 +87,8 @@ failures, the same flag keeps one JSON diagnostic document on stderr, with
 source byte spans, Unicode-aware locations, help and runtime stack.
 `from autograd import gradients` returns one gradient tensor for each of
 multiple Tensor[F32] inputs, while `from data import range` creates a bounded
-I64 sequence for Seloryn `for` loops. `--quiet` suppresses the successful `check`
+I64 sequence for Seloryn `for` loops and `from data import split_whitespace`
+returns bounded Unicode whitespace tokens. `--quiet` suppresses the successful `check`
 line. `--log=human`, `--log=json`, `--log=json2` or `--log=json2-signed` is opt-in and streams the
 active training lifecycle to stderr; it never changes program stdout. Human
 logs are concise, `json` is schema-v1 compatibility output, and `json2` is a

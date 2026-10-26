@@ -309,6 +309,7 @@ fn completion_result(source: &str) -> JsonValue {
         "train_linear",
         "train_mlp",
         "range",
+        "split_whitespace",
     ] {
         items.push(object([
             ("label", JsonValue::String(builtin.to_owned())),

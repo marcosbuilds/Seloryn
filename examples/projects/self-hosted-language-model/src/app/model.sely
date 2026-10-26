@@ -3,6 +3,7 @@ module app.model
 pub record LanguageModel:
     weights: Tensor[F32]
     vocabulary_size: I64
+    context_size: I64
 
 pub fn objective(inputs: Tensor[F32], weights: Tensor[F32], targets: Tensor[F32]) -> Tensor[F32]:
     let logits: Tensor[F32] = matmul(inputs, weights)

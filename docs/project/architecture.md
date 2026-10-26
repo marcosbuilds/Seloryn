@@ -46,4 +46,4 @@ Legend: **✓ implemented** means the checker/interpreter has source and tests; 
 
 ### Capability sequencing
 
-The public syntactic API of a future feature is only *accepted* once the underlying behavior is implemented, tested and versioned. Language syntax cannot be considered an alternative for working matrix multiplication, reverse-mode autodiff or performant kernels. The current training profile is intentionally concrete; the next numerical dependencies after it are reusable optimizer/data APIs, a device-neutral tensor contract and then [LLMs](../compute/llms.md).
+The public syntactic API of a feature is only *accepted* once the underlying behavior is implemented, tested and versioned. Language syntax cannot be considered an alternative for working matrix multiplication, reverse-mode autodiff or performant kernels. The current training profile is intentionally concrete; the language-model capability boundary is recorded in [LLMs](../compute/llms.md).

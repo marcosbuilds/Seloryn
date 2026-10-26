@@ -20,6 +20,8 @@ TEST = PROJECT / "data" / "test.json"
 CHECKPOINT = PROJECT / "checkpoints" / "language-model.json"
 VOCAB = json.loads((PROJECT / "data" / "vocab.json").read_text(encoding="utf-8"))["tokens"]
 TOKEN_ID = {token: index for index, token in enumerate(VOCAB)}
+CONTEXT_SIZE = 4
+STEPS = 160
 
 
 def run_seloryn(*arguments: str, stdin: str = "") -> subprocess.CompletedProcess[str]:
@@ -47,8 +49,12 @@ def load_tokens(path: Path) -> list[str]:
     return json.loads(path.read_text(encoding="utf-8"))["tokens"]
 
 
-def pairs(tokens: list[str]) -> list[tuple[int, int]]:
-    return [(TOKEN_ID[tokens[index]], TOKEN_ID[tokens[index + 1]]) for index in range(len(tokens) - 1)]
+def windows(tokens: list[str], context_size: int = CONTEXT_SIZE) -> list[tuple[list[int], int]]:
+    encoded = [TOKEN_ID[token] for token in tokens]
+    return [
+        (encoded[index : index + context_size], encoded[index + context_size])
+        for index in range(len(encoded) - context_size)
+    ]
 
 
 def softmax(row: list[float]) -> list[float]:
@@ -83,35 +89,60 @@ def replay_receipt(receipt: str, project: Path) -> subprocess.CompletedProcess[s
         receipt_path.unlink(missing_ok=True)
 
 
-def reference_train(train_pairs: list[tuple[int, int]], test_pairs: list[tuple[int, int]], steps: int = 160) -> dict:
+def reference_train(
+    train_windows: list[tuple[list[int], int]],
+    test_windows: list[tuple[list[int], int]],
+    context_size: int = CONTEXT_SIZE,
+    steps: int = STEPS,
+) -> dict:
     vocabulary_size = len(VOCAB)
-    weights = [[0.0 for _ in range(vocabulary_size)] for _ in range(vocabulary_size)]
-    scale = float(len(train_pairs))
+    input_width = context_size * vocabulary_size
+    weights = [[0.0 for _ in range(vocabulary_size)] for _ in range(input_width)]
+    scale = float(len(train_windows))
 
-    def loss(data: list[tuple[int, int]]) -> float:
-        return sum(-math.log(softmax(weights[input_id])[target_id]) for input_id, target_id in data) / len(data)
+    def features(window: list[int]) -> list[int]:
+        active = []
+        for token in window:
+            active.extend([token])
+        return [position * vocabulary_size + token for position, token in enumerate(active)]
 
-    initial_loss = loss(train_pairs)
+    def loss(data: list[tuple[list[int], int]]) -> float:
+        total = 0.0
+        for window, target_id in data:
+            logits = [sum(weights[input_id][output_id] for input_id in features(window)) for output_id in range(vocabulary_size)]
+            total += -math.log(softmax(logits)[target_id])
+        return total / len(data)
+
+    initial_loss = loss(train_windows)
     for _ in range(steps):
-        gradients = [[0.0 for _ in range(vocabulary_size)] for _ in range(vocabulary_size)]
-        for input_id, target_id in train_pairs:
-            probabilities = softmax(weights[input_id])
+        gradients = [[0.0 for _ in range(vocabulary_size)] for _ in range(input_width)]
+        for window, target_id in train_windows:
+            input_ids = features(window)
+            logits = [sum(weights[input_id][output_id] for input_id in input_ids) for output_id in range(vocabulary_size)]
+            probabilities = softmax(logits)
             for output_id, probability in enumerate(probabilities):
-                gradients[input_id][output_id] += probability / scale
-            gradients[input_id][target_id] -= 1.0 / scale
-        for input_id in range(vocabulary_size):
+                for input_id in input_ids:
+                    gradients[input_id][output_id] += probability / scale
+            for input_id in input_ids:
+                gradients[input_id][target_id] -= 1.0 / scale
+        for input_id in range(input_width):
             for output_id in range(vocabulary_size):
                 weights[input_id][output_id] -= 0.5 * gradients[input_id][output_id]
 
     return {
         "initial_loss": initial_loss,
-        "final_loss": loss(train_pairs),
-        "test_loss": loss(test_pairs),
+        "final_loss": loss(train_windows),
+        "test_loss": loss(test_windows),
+        "perplexity": math.exp(loss(test_windows)),
         "accuracy": sum(
-            max(range(vocabulary_size), key=lambda output_id: weights[input_id][output_id]) == target_id
-            for input_id, target_id in test_pairs
+            max(
+                range(vocabulary_size),
+                key=lambda output_id: sum(weights[input_id][output_id] for input_id in features(window)),
+            )
+            == target_id
+            for window, target_id in test_windows
         )
-        / len(test_pairs),
+        / len(test_windows),
     }
 
 
@@ -133,15 +164,17 @@ def main() -> None:
         str(PROJECT),
         "--format=json",
         "--log=json2",
-        stdin='{"mode":"train"}',
+        stdin=f'{{"mode":"train","context_size":{CONTEXT_SIZE},"steps":{STEPS}}}',
     )
     seloryn_seconds = time.perf_counter() - train_start
     assert trained.returncode == 0, (trained.returncode, trained.stdout, trained.stderr)
     report = response_record(trained.stdout)
-    assert report["architecture"] == "bigram_softmax", report
-    assert report["steps"] == 160, report
+    assert report["architecture"] == "contextual_linear_softmax", report
+    assert report["context_size"] == CONTEXT_SIZE, report
+    assert report["steps"] == STEPS, report
     assert report["initial_loss"] > report["final_loss"] > 0.0, report
-    assert report["test_loss"] < 1.60, report
+    assert report["test_loss"] < 1.20, report
+    assert report["test_perplexity"] < 3.5, report
     assert abs(report["test_loss"] - report["reloaded_loss"]) < 1e-6, report
     assert report["test_accuracy"] >= 0.5, report
     assert report["generated"], report
@@ -156,7 +189,7 @@ def main() -> None:
     progress = [event for event in receipt_lines if event["kind"] == "training.progress"]
     assert len(progress) == 21, len(progress)
     assert progress[0]["data"]["step"] == 1, progress[0]
-    assert progress[-1]["data"]["step"] == 160, progress[-1]
+    assert progress[-1]["data"]["step"] == STEPS, progress[-1]
     assert progress[0]["data"]["metric"] > progress[-1]["data"]["metric"], (progress[0], progress[-1])
 
     with tempfile.NamedTemporaryFile("w", suffix=".json2", encoding="utf-8", delete=False) as receipt:
@@ -178,11 +211,13 @@ def main() -> None:
     assert "program, datasets, result and checkpoint identity match" in replayed.stdout
 
     checkpoint = json.loads(CHECKPOINT.read_text(encoding="utf-8"))
-    assert checkpoint["schema"] == "seloryn.sely.language-model.v1", checkpoint
-    assert checkpoint["architecture"] == "bigram_softmax", checkpoint
+    assert checkpoint["schema"] == "seloryn.sely.language-model.v2", checkpoint
+    assert checkpoint["architecture"] == "contextual_linear_softmax", checkpoint
     assert checkpoint["vocabulary_size"] == 14, checkpoint
-    assert len(checkpoint["weights"]) == 196, len(checkpoint["weights"])
+    assert checkpoint["context_size"] == CONTEXT_SIZE, checkpoint
+    assert len(checkpoint["weights"]) == CONTEXT_SIZE * 14 * 14, len(checkpoint["weights"])
     assert len(checkpoint["weights_sha256"]) == 64, checkpoint
+    assert len(checkpoint["vocabulary_sha256"]) == 64, checkpoint
     assert len(report["checkpoint_hash"]) == 64, report
 
     inferred = run_seloryn(
@@ -190,19 +225,51 @@ def main() -> None:
         str(PROJECT),
         "--format=json",
         "--log=json",
-        stdin='{"mode":"infer","tokens":["<bos>","the","cat"],"prompt_count":3,"generation_steps":4}',
+        stdin='{"mode":"infer","tokens":["<bos>","the","cat","sat"],"prompt_count":4,"generation_steps":4}',
     )
     assert inferred.returncode == 0, (inferred.returncode, inferred.stdout, inferred.stderr)
     inference_report = response_record(inferred.stdout)
     assert inference_report["status"] == "ok", inference_report
     assert inference_report["generated"], inference_report
+    assert inference_report["context_size"] == CONTEXT_SIZE, inference_report
+    assert 0.0 < inference_report["first_token_probability"] <= 1.0, inference_report
     assert inference_report["checkpoint_sha256"] == report["checkpoint_hash"], inference_report
+
+    text_inferred = run_seloryn(
+        "run",
+        str(PROJECT),
+        "--format=json",
+        "--log=off",
+        stdin='{"mode":"infer_text","text":"  <bos>   the cat sat  ","generation_steps":4}',
+    )
+    assert text_inferred.returncode == 0, (text_inferred.stdout, text_inferred.stderr)
+    text_report = response_record(text_inferred.stdout)
+    assert text_report["mode"] == "infer_text", text_report
+    assert text_report["prompt_tokens"] == CONTEXT_SIZE, text_report
+    assert text_report["generated"], text_report
+
+    with tempfile.TemporaryDirectory(prefix="seloryn-language-vocab-integrity-") as integrity_directory:
+        integrity_project = Path(integrity_directory) / "language-model"
+        shutil.copytree(PROJECT, integrity_project)
+        reordered = list(reversed(VOCAB))
+        (integrity_project / "data" / "vocab.json").write_text(
+            json.dumps({"tokens": reordered}), encoding="utf-8"
+        )
+        reordered_run = run_seloryn(
+            "run",
+            str(integrity_project),
+            "--format=json",
+            "--log=off",
+            stdin='{"mode":"infer_text","text":"<bos> the cat sat","generation_steps":2}',
+        )
+    assert reordered_run.returncode != 0, reordered_run.stdout
+    assert "checkpoint vocabulary hash does not match tokenizer" in reordered_run.stdout or "checkpoint vocabulary hash does not match tokenizer" in reordered_run.stderr, (reordered_run.stdout, reordered_run.stderr)
 
     invalid = run_seloryn(
         "run",
         str(PROJECT),
         "--format=json",
-        stdin='{"mode":"infer","tokens":["unknown"],"prompt_count":1,"generation_steps":2}',
+        stdin='{"mode":"infer_text","text":"unknown token here now","generation_steps":2}',
     )
     assert invalid.returncode != 0, invalid.stdout
     assert "unknown token in vocabulary" in invalid.stdout or "unknown token in vocabulary" in invalid.stderr, (invalid.stdout, invalid.stderr)
@@ -211,10 +278,10 @@ def main() -> None:
         "run",
         str(PROJECT),
         "--format=json",
-        stdin='{"mode":"infer","tokens":["<bos>"],"prompt_count":2,"generation_steps":2}',
+        stdin='{"mode":"infer","tokens":["<bos>","the","cat"],"prompt_count":3,"generation_steps":2}',
     )
     assert mismatch.returncode != 0, mismatch.stdout
-    assert "prompt_count must match tokens" in mismatch.stdout or "prompt_count must match tokens" in mismatch.stderr, (mismatch.stdout, mismatch.stderr)
+    assert "prompt must contain at least context_size tokens" in mismatch.stdout or "prompt must contain at least context_size tokens" in mismatch.stderr, (mismatch.stdout, mismatch.stderr)
 
     with tempfile.TemporaryDirectory(prefix="seloryn-language-bad-dataset-") as bad_directory:
         bad_project = Path(bad_directory) / "language-model"
@@ -227,10 +294,10 @@ def main() -> None:
             "run",
             str(bad_project),
             "--format=json",
-            stdin='{"mode":"train"}',
+            stdin=f'{{"mode":"train","context_size":{CONTEXT_SIZE},"steps":{STEPS}}}',
         )
     assert malformed_run.returncode != 0, malformed_run.stdout
-    assert "dataset must contain at least two tokens" in malformed_run.stdout or "dataset must contain at least two tokens" in malformed_run.stderr, (malformed_run.stdout, malformed_run.stderr)
+    assert "dataset must contain more tokens than context_size" in malformed_run.stdout or "dataset must contain more tokens than context_size" in malformed_run.stderr, (malformed_run.stdout, malformed_run.stderr)
 
     with tempfile.TemporaryDirectory(prefix="seloryn-language-variable-vocabulary-") as variant_directory:
         variant_project = Path(variant_directory) / "language-model"
@@ -250,32 +317,50 @@ def main() -> None:
             str(variant_project),
             "--format=json",
             "--log=off",
-            stdin='{"mode":"train"}',
+            stdin=f'{{"mode":"train","context_size":{CONTEXT_SIZE},"steps":{STEPS}}}',
         )
     assert variant_run.returncode == 0, (variant_run.stdout, variant_run.stderr)
     variant_report = response_record(variant_run.stdout)
     assert variant_report["vocabulary_size"] == 5, variant_report
+    assert variant_report["context_size"] == CONTEXT_SIZE, variant_report
     assert variant_report["initial_loss"] > variant_report["final_loss"] > 0.0, variant_report
 
+    with tempfile.TemporaryDirectory(prefix="seloryn-language-duplicate-vocab-") as duplicate_directory:
+        duplicate_project = Path(duplicate_directory) / "language-model"
+        shutil.copytree(PROJECT, duplicate_project)
+        (duplicate_project / "data" / "vocab.json").write_text(
+            json.dumps({"tokens": ["<bos>", "same", "same", "<eos>"]}), encoding="utf-8"
+        )
+        duplicate_run = run_seloryn(
+            "run",
+            str(duplicate_project),
+            "--format=json",
+            "--log=off",
+            stdin=f'{{"mode":"train","context_size":{CONTEXT_SIZE},"steps":{STEPS}}}',
+        )
+    assert duplicate_run.returncode != 0, duplicate_run.stdout
+    assert "vocabulary tokens must be unique" in duplicate_run.stdout or "vocabulary tokens must be unique" in duplicate_run.stderr, (duplicate_run.stdout, duplicate_run.stderr)
+
     reference_start = time.perf_counter()
-    reference = reference_train(pairs(load_tokens(TRAIN)), pairs(load_tokens(TEST)))
+    reference = reference_train(windows(load_tokens(TRAIN)), windows(load_tokens(TEST)))
     python_seconds = time.perf_counter() - reference_start
     assert abs(reference["final_loss"] - report["final_loss"]) < 1e-4, (reference, report)
     assert abs(reference["test_loss"] - report["test_loss"]) < 1e-4, (reference, report)
+    assert abs(reference["perplexity"] - report["test_perplexity"]) < 1e-4, (reference, report)
     assert reference["accuracy"] >= 0.5, reference
 
     progress_by_step = {event["data"]["step"]: event["data"]["metric"] for event in progress}
-    points = [progress_by_step[step] for step in (1, 40, 80, 120, 160)]
+    points = [progress_by_step[step] for step in (1, 40, 80, 120, STEPS)]
     minimum = min(points)
     maximum = max(points)
     bars = " ".join("#" * max(1, round(20 * (value - minimum) / max(maximum - minimum, 1e-12))) for value in points)
     print("Seloryn self-hosted language-model proof: PASS")
     print(f"check_exit=0 train_exit=0 streaming_verify_exit={verified.returncode} infer_exit=0 negative_dataset_exit={malformed_run.returncode} variable_vocab=5_exit={variant_run.returncode}")
     print(f"events=25 progress=21 receipt={verified.stdout.strip()} replay_exit={replayed.returncode}")
-    print("comparison | backend | initial_loss | final_loss | test_loss | accuracy | seconds")
-    print(f"comparison | Seloryn/.sely | {report['initial_loss']:.8f} | {report['final_loss']:.8f} | {report['test_loss']:.8f} | {report['test_accuracy']:.6f} | {seloryn_seconds:.4f}")
-    print(f"comparison | Python/pure  | {reference['initial_loss']:.8f} | {reference['final_loss']:.8f} | {reference['test_loss']:.8f} | {reference['accuracy']:.6f} | {python_seconds:.4f}")
-    print(f"loss_curve checkpoints 1,40,80,120,160: {bars}")
+    print("comparison | backend | initial_loss | final_loss | test_loss | perplexity | accuracy | seconds")
+    print(f"comparison | Seloryn/.sely | {report['initial_loss']:.8f} | {report['final_loss']:.8f} | {report['test_loss']:.8f} | {report['test_perplexity']:.8f} | {report['test_accuracy']:.6f} | {seloryn_seconds:.4f}")
+    print(f"comparison | Python/pure  | {reference['initial_loss']:.8f} | {reference['final_loss']:.8f} | {reference['test_loss']:.8f} | {reference['perplexity']:.8f} | {reference['accuracy']:.6f} | {python_seconds:.4f}")
+    print(f"loss_curve checkpoints 1,40,80,120,{STEPS}: {bars}")
     print(f"generated={inference_report['generated']!r} checkpoint_sha256={report['checkpoint_hash']}")
 
 

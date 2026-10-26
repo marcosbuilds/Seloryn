@@ -1,17 +1,19 @@
 module app.serving
 
 from app.checkpoint import restore_checkpoint
-from app.data import one_hot
+from app.data import window_as_one_hot
 from app.model import LanguageModel, probabilities
-from app.tokenizer import Vocabulary, load_vocabulary, token_id, token_text, tokenize
+from app.tokenizer import Vocabulary, load_vocabulary, token_id, token_text, tokenize, tokenize_text
 from data import len, range, to_f64
-from json import as_i64, as_text_list, get, read_file, sha256
+from json import as_i64, as_text, as_text_list, get, read_file, sha256
 
 pub record InferenceReport:
     mode: Text
     prompt_tokens: I64
+    context_size: I64
     generation_steps: I64
     generated: Text
+    first_token_probability: F32
     checkpoint_sha256: Text
     status: Text
 
@@ -36,39 +38,66 @@ pub fn accuracy(inputs: Tensor[F32], targets: Tensor[F32], model: LanguageModel,
             correct = correct + 1.0
     return correct / to_f64(rows)
 
-pub fn generate(model: LanguageModel, vocabulary: Vocabulary, eos: I64, steps: I64) -> Text:
-    return generate_from(model, vocabulary, eos, 0, steps)
+pub fn generate(model: LanguageModel, vocabulary: Vocabulary, eos: I64, start: I64, steps: I64) -> Text:
+    var prompt: List[I64] = []
+    for _index in range(model.context_size):
+        prompt = prompt + [start]
+    return generate_from(model, vocabulary, eos, prompt, steps)
 
-pub fn generate_from(model: LanguageModel, vocabulary: Vocabulary, eos: I64, start: I64, steps: I64) -> Text:
-    var current: I64 = start
+pub fn generate_from(model: LanguageModel, vocabulary: Vocabulary, eos: I64, prompt: List[I64], steps: I64) -> Text:
+    var window: List[I64] = prompt
     var output: Text = ""
     var finished: Bool = false
     for _step in range(steps):
         if not finished:
-            let input: Tensor[F32] = tensor_f32(one_hot(current, vocabulary.size), [1, vocabulary.size])
+            let window_start: I64 = len(window) - model.context_size
+            let features: List[F64] = window_as_one_hot(window, window_start, model.context_size, vocabulary.size)
+            let input: Tensor[F32] = tensor_f32(features, [1, model.context_size * vocabulary.size])
             let next: I64 = argmax(probabilities(input, model), 0, vocabulary.size)
             if output == "":
                 output = token_text(vocabulary, next)
             else:
                 output = output + " " + token_text(vocabulary, next)
-            current = next
+            window = window + [next]
             if next == eos:
                 finished = true
     return output
 
-pub fn infer(request: Json) -> Result[InferenceReport, JsonIoError]:
-    let prompt: List[Text] = as_text_list(get(request, ["tokens"])?)?
-    let prompt_count: I64 = as_i64(get(request, ["prompt_count"])?)?
+fn infer_request(request: Json, text_prompt: Bool) -> Result[InferenceReport, JsonIoError]:
     let generation_steps: I64 = as_i64(get(request, ["generation_steps"])?)?
-    require prompt_count > 0 else JsonIoError("inference prompt_count must be positive")
     require generation_steps > 0 else JsonIoError("inference generation_steps must be positive")
     let vocabulary: Vocabulary = load_vocabulary("data/vocab.json")?
-    let encoded: List[I64] = tokenize(vocabulary, prompt)?
+    var encoded: List[I64] = []
+    if text_prompt:
+        let text: Text = as_text(get(request, ["text"])?)?
+        encoded = tokenize_text(vocabulary, text)?
+    else:
+        let prompt: List[Text] = as_text_list(get(request, ["tokens"])?)?
+        let prompt_count: I64 = as_i64(get(request, ["prompt_count"])?)?
+        require prompt_count > 0 else JsonIoError("inference prompt_count must be positive")
+        let tokenized: List[I64] = tokenize(vocabulary, prompt)?
+        let supplied_count: I64 = len(tokenized)
+        require supplied_count == prompt_count else JsonIoError("prompt_count must match tokens")
+        encoded = tokenized
     let actual_count: I64 = len(encoded)
-    require actual_count == prompt_count else JsonIoError("prompt_count must match tokens")
-    let last_token: I64 = encoded[actual_count - 1]
     let eos: I64 = token_id(vocabulary, "<eos>")?
     let model: LanguageModel = restore_checkpoint("checkpoints/language-model.json", vocabulary)?
+    require actual_count >= model.context_size else JsonIoError("prompt must contain at least context_size tokens")
     let checkpoint: Json = read_file("checkpoints/language-model.json")?
-    let generated: Text = generate_from(model, vocabulary, eos, last_token, generation_steps)
-    return Ok(InferenceReport("infer", prompt_count, generation_steps, generated, sha256(checkpoint), "ok"))
+    let window_start: I64 = actual_count - model.context_size
+    let features: List[F64] = window_as_one_hot(encoded, window_start, model.context_size, vocabulary.size)
+    let input: Tensor[F32] = tensor_f32(features, [1, model.context_size * vocabulary.size])
+    let prediction: Tensor[F32] = probabilities(input, model)
+    let first_token: I64 = argmax(prediction, 0, vocabulary.size)
+    let first_probability: F32 = tensor_get_f32(prediction, [0, first_token])
+    let generated: Text = generate_from(model, vocabulary, eos, encoded, generation_steps)
+    var mode: Text = "infer"
+    if text_prompt:
+        mode = "infer_text"
+    return Ok(InferenceReport(mode, actual_count, model.context_size, generation_steps, generated, first_probability, sha256(checkpoint), "ok"))
+
+pub fn infer(request: Json) -> Result[InferenceReport, JsonIoError]:
+    return infer_request(request, false)
+
+pub fn infer_text(request: Json) -> Result[InferenceReport, JsonIoError]:
+    return infer_request(request, true)

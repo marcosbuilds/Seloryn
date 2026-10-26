@@ -20,7 +20,6 @@ report records its environment, version, artifact identity and limitations.
 | Conformance runner | [`scripts/ci/conformance.py`](../../scripts/ci/conformance.py) | Validates the matrix and executes selected probes without manufacturing results |
 | CI evidence | [`scripts/ci/ci_evidence.py`](../../scripts/ci/ci_evidence.py) and [workflow](../../.github/workflows/ci.yml) | Sanitized per-platform records, expected-record completeness and artifact hashes |
 | Workload comparison | [`benchmarks/`](../../benchmarks/) | Six independent Python references, correctness contracts and case-local median/p95 timing |
-| Agent development evaluation | [`research/agent-token-economy/`](../../research/agent-token-economy/) | Frozen tasks, visible transcripts, local BPE measurement and explicit missingness |
 | Runtime receipts | [`scripts/streaming/`](../../scripts/streaming/) | Hash-chain, replay, redaction and bounded local execution evidence |
 
 ## Reproduce the current checks
@@ -35,7 +34,6 @@ python scripts/ci/conformance.py --run --suite editor
 python scripts/ci/conformance.py --run --suite release
 python scripts/ci/conformance.py --run --suite hardware
 python benchmarks/test_benchmark_contracts.py
-python research/agent-token-economy/runner.py validate
 ```
 
 The GitHub workflow runs the core matrix on every supported runner and keeps
