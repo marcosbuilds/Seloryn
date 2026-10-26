@@ -140,6 +140,36 @@ def main() -> None:
         assert invalid.returncode != 0, invalid.stdout
         assert "checkpoint vocabulary hash does not match tokenizer" in invalid.stdout or "checkpoint vocabulary hash does not match tokenizer" in invalid.stderr
 
+    with tempfile.TemporaryDirectory(prefix="seloryn-embedding-bad-state-") as directory:
+        bad_project = Path(directory) / "language-model"
+        shutil.copytree(PROJECT, bad_project)
+        checkpoint_path = bad_project / "checkpoints" / "language-model-embedding.json"
+        checkpoint_text = checkpoint_path.read_text(encoding="utf-8")
+        bad_checkpoint = json.loads(checkpoint_text)
+        checkpoint_path.write_text(
+            checkpoint_text.replace(
+                f'"state_sha256":"{bad_checkpoint["state_sha256"]}"',
+                f'"state_sha256":"{"0" * 64}"',
+            ),
+            encoding="utf-8",
+        )
+        invalid = run(BINARY, bad_project, {"mode": "infer_embedding_text", "text": "<bos> the cat sat", "generation_steps": 2})
+        assert invalid.returncode != 0, invalid.stdout
+        assert "state hash" in invalid.stdout or "state hash" in invalid.stderr
+
+    with tempfile.TemporaryDirectory(prefix="seloryn-embedding-bad-resume-data-") as directory:
+        bad_project = Path(directory) / "language-model"
+        shutil.copytree(PROJECT, bad_project)
+        first_half = run(BINARY, bad_project, {**payload, "steps": 80})
+        assert first_half.returncode == 0, (first_half.stdout, first_half.stderr)
+        train_path = bad_project / "data" / "train.json"
+        changed_train = json.loads(train_path.read_text(encoding="utf-8"))
+        changed_train["tokens"].append("<eos>")
+        train_path.write_text(json.dumps(changed_train), encoding="utf-8")
+        invalid = run(BINARY, bad_project, {**payload, "steps": STEPS, "resume": True})
+        assert invalid.returncode != 0, invalid.stdout
+        assert "resume dataset hash does not match checkpoint" in invalid.stdout or "resume dataset hash does not match checkpoint" in invalid.stderr
+
     print("Seloryn embedding language-model proof: PASS")
     print(f"architecture=embedding_relu_mlp_softmax parameters={report['parameter_count']} seed={SEED} steps={STEPS}")
     print(f"initial_loss={report['initial_loss']:.8f} final_loss={report['final_loss']:.8f} test_loss={report['test_loss']:.8f} perplexity={report['test_perplexity']:.8f} accuracy={report['test_accuracy']:.6f}")
