@@ -28,6 +28,11 @@ silhouette inspired by the Seloryn mark. It is loaded with
 into Windows. Body copy and logs remain on system UI/monospace faces for
 readability.
 
+The generated face is checked with
+`scripts/assets/test-seloryn-display-font.py`: the check requires the complete
+ASCII UI set, verifies that the uppercase `S` has two independent contours and
+checks its outline/advance bounds before the font is embedded.
+
 `assets/seloryn-folder.svg` defines the folder icon geometry. The Win32 setup
 draws the same small vector shape in the directory button because stock Win32
 controls do not render SVG directly.
