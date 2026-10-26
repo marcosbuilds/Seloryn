@@ -29,6 +29,7 @@ project to train a five-token vocabulary variant without source changes.
 | reloaded test loss | `1.088078260421753` |
 | test accuracy | `0.6666666666666666` |
 | comparison benchmark | Python median `0.360989 s`; Seloryn median `1.062518 s`, 3 cold process runs |
+| cold free-text inference | `0.1325 s`, `0.0903 s`, `0.0819 s` across 3 fresh release processes |
 | generated text from default `<bos>` run | `in in park <eos>` |
 | train dataset SHA-256 | `a2b046c15edeaf917f4d6cfb614f7ba5c7da2bd1912dc7611b0f7793fe63a76a` |
 | test dataset SHA-256 | `2dfe6adb2e29fc1cfa232adb25ff04defa6baec18cebe4a43cf446a25da9a6df` |

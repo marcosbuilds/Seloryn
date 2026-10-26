@@ -96,5 +96,10 @@ The checkpoint binds the exact vocabulary hash, so reordering tokens with the
 same size is rejected. This is not an embedding model, transformer, subword
 tokenizer, GPU trainer, HTTP server or stable production runtime.
 
+As a separate cold-process observation on the Windows release binary, three
+free-text inference runs took `0.1325 s`, `0.0903 s` and `0.0819 s`. This is
+specific to this fixture, host and process boundary; it records the current
+overhead and is not a general throughput or latency guarantee.
+
 The complete hashes, exit codes, replay result and receipt details are recorded beside the
 project in [`evidence.md`](../../examples/projects/self-hosted-language-model/evidence.md).
