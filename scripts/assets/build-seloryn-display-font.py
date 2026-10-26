@@ -60,29 +60,56 @@ ADVANCE = 690
 SIDE = 42
 
 
-def rectangle(pen: TTGlyphPen, x: int, y: int, width: int, height: int) -> None:
-    pen.moveTo((x, y))
-    pen.lineTo((x + width, y))
-    pen.lineTo((x + width, y + height))
-    pen.lineTo((x, y + height))
+def rounded_rectangle(
+    pen: TTGlyphPen, x: int, y: int, width: int, height: int, radius: int
+) -> None:
+    radius = min(radius, width // 2, height // 2)
+    pen.moveTo((x + radius, y))
+    pen.lineTo((x + width - radius, y))
+    pen.qCurveTo((x + width, y), (x + width, y + radius))
+    pen.lineTo((x + width, y + height - radius))
+    pen.qCurveTo((x + width, y + height), (x + width - radius, y + height))
+    pen.lineTo((x + radius, y + height))
+    pen.qCurveTo((x, y + height), (x, y + height - radius))
+    pen.lineTo((x, y + radius))
+    pen.qCurveTo((x, y), (x + radius, y))
     pen.closePath()
+
+
+def ribbon_s(pen: TTGlyphPen) -> None:
+    """Draw the first Seloryn S as a rounded, interlocking strand."""
+    rounded_rectangle(pen, 86, 700, 500, 126, 63)
+    rounded_rectangle(pen, 66, 492, 126, 270, 63)
+    rounded_rectangle(pen, 118, 425, 456, 126, 63)
+    rounded_rectangle(pen, 504, 184, 126, 270, 63)
+    rounded_rectangle(pen, 86, 118, 500, 126, 63)
 
 
 def glyph_for(character: str):
     pen = TTGlyphPen(None)
     if character == " ":
         return pen.glyph(), 360
+    if character.upper() == "S":
+        ribbon_s(pen)
+        return pen.glyph(), ADVANCE
     pattern = PATTERNS.get(character.upper(), PATTERNS["?"])
     for row, line in enumerate(pattern):
         y = (len(pattern) - row - 1) * CELL + 80
         for column, active in enumerate(line):
             if active == "1":
-                rectangle(pen, SIDE + column * CELL, y, CELL - 14, CELL - 14)
+                rounded_rectangle(
+                    pen,
+                    SIDE + column * CELL,
+                    y,
+                    CELL - 14,
+                    CELL - 14,
+                    18,
+                )
     if character in ".,:;":
         pen = TTGlyphPen(None)
-        rectangle(pen, 260, 80, 130, 130)
+        rounded_rectangle(pen, 260, 80, 130, 130, 40)
         if character in ":;":
-            rectangle(pen, 260, 560, 130, 130)
+            rounded_rectangle(pen, 260, 560, 130, 130, 40)
     return pen.glyph(), ADVANCE
 
 

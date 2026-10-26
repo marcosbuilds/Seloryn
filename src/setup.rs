@@ -24,7 +24,9 @@ mod windows_setup {
     use std::ptr::{null, null_mut};
     use std::thread;
 
-    use windows_sys::Win32::Foundation::{COLORREF, HANDLE, HWND, LPARAM, LRESULT, RECT, WPARAM};
+    use windows_sys::Win32::Foundation::{
+        COLORREF, HANDLE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
+    };
     use windows_sys::Win32::Graphics::Gdi::{
         AddFontMemResourceEx, BeginPaint, CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateFontW,
         CreatePen, CreateSolidBrush, DEFAULT_CHARSET, DEFAULT_PITCH, DT_CENTER, DT_SINGLELINE,
@@ -51,22 +53,23 @@ mod windows_setup {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         AdjustWindowRectEx, BM_GETCHECK, BM_SETCHECK, BS_AUTOCHECKBOX, BS_OWNERDRAW, CW_USEDEFAULT,
         CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, ES_AUTOHSCROLL,
-        ES_AUTOVSCROLL, ES_MULTILINE, ES_READONLY, GWLP_USERDATA, GetClientRect, GetMessageW,
-        GetWindowLongPtrW, GetWindowTextLengthW, GetWindowTextW, HWND_BROADCAST, IMAGE_BITMAP,
-        LR_CREATEDIBSECTION, LR_LOADFROMFILE, MB_ICONERROR, MB_OK, MessageBoxW, PostMessageW,
-        PostQuitMessage, RegisterClassW, SendMessageW, SetWindowLongPtrW, SetWindowTextW,
-        ShowWindow, TranslateMessage, WM_APP, WM_CLOSE, WM_COMMAND, WM_CREATE, WM_CTLCOLOREDIT,
+        ES_AUTOVSCROLL, ES_MULTILINE, ES_READONLY, GWLP_USERDATA, GetClientRect, GetCursorPos,
+        GetMessageW, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
+        HWND_BROADCAST, IMAGE_BITMAP, IsWindowVisible, KillTimer, LR_CREATEDIBSECTION,
+        LR_LOADFROMFILE, MB_ICONERROR, MB_OK, MessageBoxW, PostMessageW, PostQuitMessage,
+        RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowTextW, ShowWindow,
+        TranslateMessage, WM_APP, WM_CLOSE, WM_COMMAND, WM_CREATE, WM_CTLCOLORBTN, WM_CTLCOLOREDIT,
         WM_CTLCOLORSTATIC, WM_DESTROY, WM_DRAWITEM, WM_ERASEBKGND, WM_GETMINMAXINFO, WM_PAINT,
-        WM_SETFONT, WNDCLASSW, WS_BORDER, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN, WS_EX_CLIENTEDGE,
-        WS_MINIMIZEBOX, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
+        WM_SETFONT, WM_TIMER, WNDCLASSW, WS_BORDER, WS_CAPTION, WS_CHILD, WS_CLIPCHILDREN,
+        WS_EX_CLIENTEDGE, WS_MINIMIZEBOX, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
     };
 
     const SETUP_VERSION: &str = env!("CARGO_PKG_VERSION");
     const RUNTIME_VERSION: &str = "0.12.0";
     const LANGUAGE_VERSION: &str = "0.12";
-    const CLIENT_WIDTH: i32 = 1080;
-    const CLIENT_HEIGHT: i32 = 680;
-    const PANEL_WIDTH: i32 = 360;
+    const CLIENT_WIDTH: i32 = 920;
+    const CLIENT_HEIGHT: i32 = 620;
+    const PANEL_WIDTH: i32 = 300;
     const WM_INSTALL_EVENT: u32 = WM_APP + 41;
 
     const ID_PATH: usize = 100;
@@ -86,6 +89,8 @@ mod windows_setup {
     const ID_PAGE_BODY: usize = 114;
     const ID_STATUS: usize = 115;
     const ID_RUNTIME_CARD: usize = 116;
+    const ID_CLEANUP: usize = 117;
+    const HOVER_TIMER: usize = 1;
 
     const BG: COLORREF = rgb(6, 17, 14);
     const SURFACE: COLORREF = rgb(14, 37, 32);
@@ -111,6 +116,7 @@ mod windows_setup {
         browse: HWND,
         add_path: HWND,
         make_default: HWND,
+        clean_previous: HWND,
         back: HWND,
         action: HWND,
         cancel: HWND,
@@ -135,6 +141,7 @@ mod windows_setup {
         mono_font: HFONT,
         phase: u8,
         installing: bool,
+        hovered_button: HWND,
     }
 
     pub fn main() {
@@ -260,8 +267,14 @@ mod windows_setup {
             }
             WM_COMMAND => handle_command(hwnd, wparam),
             WM_INSTALL_EVENT => handle_install_event(hwnd, lparam),
-            WM_DRAWITEM => handle_draw_item(lparam),
-            WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT => handle_control_color(hwnd, wparam, lparam),
+            WM_DRAWITEM => handle_draw_item(hwnd, lparam),
+            WM_CTLCOLORSTATIC | WM_CTLCOLOREDIT | WM_CTLCOLORBTN => {
+                handle_control_color(hwnd, wparam, lparam)
+            }
+            WM_TIMER => {
+                update_button_hover(hwnd);
+                0
+            }
             WM_ERASEBKGND => 1,
             WM_PAINT => paint(hwnd),
             WM_CLOSE => {
@@ -279,6 +292,7 @@ mod windows_setup {
             WM_DESTROY => {
                 let pointer = controls(hwnd);
                 if !pointer.is_null() {
+                    KillTimer(hwnd, HOVER_TIMER);
                     destroy_controls(Box::from_raw(pointer));
                     SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
                 }
@@ -313,69 +327,75 @@ mod windows_setup {
             null(),
         );
         let bitmap = load_panel_bitmap(panel);
-        let brand = label(hwnd, "SELORYN", 40, 28, 600, 44, ID_STEP_ONE);
-        let subtitle = label(
+        let brand = label(
             hwnd,
-            "NATIVE DISTRIBUTION  /  VERIFIED PREVIEW",
-            42,
-            78,
-            650,
-            22,
-            ID_STEP_TWO,
+            &format!("SETUP  /  {SETUP_VERSION}"),
+            32,
+            26,
+            540,
+            30,
+            ID_STEP_ONE,
         );
-        let step_one = label(hwnd, "01  WELCOME", 40, 132, 145, 28, ID_STEP_ONE);
-        let step_two = label(hwnd, "02  LOCATION", 196, 132, 160, 28, ID_STEP_TWO);
-        let step_three = label(hwnd, "03  INSTALL", 366, 132, 145, 28, ID_STEP_THREE);
-        let step_four = label(hwnd, "04  DONE", 521, 132, 120, 28, ID_STEP_FOUR);
-        let page_title = label(hwnd, "Welcome to Seloryn", 40, 195, 650, 42, ID_PAGE_TITLE);
+        let step_one = label(hwnd, "01  WELCOME", 32, 84, 135, 26, ID_STEP_ONE);
+        let step_two = label(hwnd, "02  LOCATION", 178, 84, 150, 26, ID_STEP_TWO);
+        let step_three = label(hwnd, "03  INSTALL", 338, 84, 135, 26, ID_STEP_THREE);
+        let step_four = label(hwnd, "04  DONE", 483, 84, 110, 26, ID_STEP_FOUR);
+        let page_title = label(hwnd, "Install Seloryn", 32, 150, 560, 42, ID_PAGE_TITLE);
         let page_body = label(
             hwnd,
-            "A native, per-user installation for the Seloryn 0.12.0 runtime.",
-            42,
-            245,
-            630,
-            40,
+            "A native per-user setup for the verified 0.12.0 runtime.",
+            34,
+            200,
+            570,
+            34,
             ID_PAGE_BODY,
         );
         let runtime_card = label(
             hwnd,
-            "RUNTIME  0.12.0\r\nLANGUAGE  0.12\r\nTARGET    WINDOWS X64\r\nCHANNEL   VERIFIED PREVIEW",
-            42,
-            315,
-            630,
-            112,
+            "NATIVE RUNTIME  /  WINDOWS X64  /  VERIFIED PAYLOAD",
+            34,
+            260,
+            570,
+            54,
             ID_RUNTIME_CARD,
         );
-        let path_label = label(hwnd, "INSTALLATION DIRECTORY", 42, 292, 630, 24, ID_STATUS);
+        let path_label = label(hwnd, "INSTALLATION DIRECTORY", 34, 252, 570, 24, ID_STATUS);
         let path = edit(
             hwnd,
             &default_root().to_string_lossy(),
-            42,
-            320,
-            508,
-            38,
+            34,
+            280,
+            454,
+            36,
             ID_PATH,
         );
-        let browse = button(hwnd, "Browse", 566, 320, 106, 38, ID_BROWSE);
+        let browse = button(hwnd, "Browse", 500, 280, 94, 36, ID_BROWSE);
         let add_path = checkbox(
             hwnd,
             "Add Seloryn to the current user's PATH",
-            42,
-            392,
+            34,
+            350,
             ID_ADD_PATH,
         );
-        let make_default = checkbox(hwnd, "Make 0.12.0 the default version", 42, 426, ID_DEFAULT);
+        let make_default = checkbox(hwnd, "Make 0.12.0 the default version", 34, 385, ID_DEFAULT);
+        let clean_previous = checkbox(
+            hwnd,
+            "Remove previous Seloryn installations",
+            34,
+            420,
+            ID_CLEANUP,
+        );
         SendMessageW(add_path, BM_SETCHECK, BST_CHECKED as _, 0);
         SendMessageW(make_default, BM_SETCHECK, BST_CHECKED as _, 0);
-        let log = log_edit(hwnd, 42, 280, 630, 230, ID_LOG);
+        let log = log_edit(hwnd, 34, 246, 560, 240, ID_LOG);
         let progress = CreateWindowExW(
             0,
             wide("msctls_progress32").as_ptr(),
             null(),
             WS_CHILD | PBS_SMOOTH,
-            42,
-            522,
-            630,
+            34,
+            505,
+            560,
             10,
             hwnd,
             ID_PROGRESS as _,
@@ -383,14 +403,13 @@ mod windows_setup {
             null(),
         );
         SendMessageW(progress, PBM_SETRANGE32, 0, 100);
-        let status = label(hwnd, "Ready to begin.", 42, 545, 630, 24, ID_STATUS);
-        let back = button(hwnd, "Back", 390, 600, 106, 38, ID_BACK);
-        let action = button(hwnd, "Continue", 506, 600, 166, 38, ID_ACTION);
-        let cancel = button(hwnd, "Cancel", 42, 600, 106, 38, ID_CANCEL);
+        let status = label(hwnd, "Ready to begin.", 34, 528, 560, 24, ID_STATUS);
+        let back = button(hwnd, "Back", 350, 564, 94, 36, ID_BACK);
+        let action = button(hwnd, "Continue", 452, 564, 142, 36, ID_ACTION);
+        let cancel = button(hwnd, "Cancel", 34, 564, 94, 36, ID_CANCEL);
 
         for (control, font) in [
             (brand, display_font),
-            (subtitle, body_font),
             (step_one, display_font),
             (step_two, display_font),
             (step_three, display_font),
@@ -403,6 +422,7 @@ mod windows_setup {
             (browse, body_font),
             (add_path, body_font),
             (make_default, body_font),
+            (clean_previous, body_font),
             (log, mono_font),
             (status, body_font),
             (back, body_font),
@@ -416,6 +436,7 @@ mod windows_setup {
             browse,
             add_path,
             make_default,
+            clean_previous,
             back,
             action,
             cancel,
@@ -440,8 +461,10 @@ mod windows_setup {
             mono_font,
             phase: 1,
             installing: false,
+            hovered_button: null_mut(),
         });
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(controls) as isize);
+        SetTimer(hwnd, HOVER_TIMER, 50, None);
         show_phase(hwnd, 1);
     }
 
@@ -682,15 +705,21 @@ mod windows_setup {
         show_phase(hwnd, 3);
         let add_path = is_checked((*pointer).add_path);
         let make_default = is_checked((*pointer).make_default);
+        let clean_previous = is_checked((*pointer).clean_previous);
         let hwnd_raw = hwnd as isize;
         thread::spawn(move || {
-            let result =
-                install_with_progress(&root, add_path, make_default, |progress, message| {
+            let result = install_with_progress(
+                &root,
+                add_path,
+                make_default,
+                clean_previous,
+                |progress, message| {
                     post_install_event(
                         hwnd_raw,
                         InstallEvent::Progress(progress, message.to_owned()),
                     );
-                });
+                },
+            );
             post_install_event(hwnd_raw, InstallEvent::Complete(result));
         });
     }
@@ -715,12 +744,21 @@ mod windows_setup {
                     Ok(message) => {
                         SendMessageW((*pointer).progress, PBM_SETPOS, 100, 0);
                         append_log((*pointer).log, &message);
-                        set_status(
-                            (*pointer).status,
-                            "Installation complete. Seloryn is ready.",
-                        );
-                        (*pointer).phase = 4;
-                        show_phase(hwnd, 4);
+                        let root = PathBuf::from(window_text((*pointer).path));
+                        match launch_terminal(&root) {
+                            Ok(()) => {
+                                DestroyWindow(hwnd);
+                            }
+                            Err(error) => {
+                                append_log(
+                                    (*pointer).log,
+                                    &format!("Terminal handoff failed: {error}"),
+                                );
+                                set_status((*pointer).status, &error);
+                                (*pointer).phase = 4;
+                                show_phase(hwnd, 4);
+                            }
+                        }
                     }
                     Err(error) => {
                         append_log((*pointer).log, &format!("ERROR  {error}"));
@@ -755,6 +793,7 @@ mod windows_setup {
             ((*pointer).path_label, choose),
             ((*pointer).add_path, choose),
             ((*pointer).make_default, choose),
+            ((*pointer).clean_previous, choose),
             ((*pointer).runtime_card, welcome),
             ((*pointer).log, installing),
             ((*pointer).progress, installing),
@@ -785,7 +824,7 @@ mod windows_setup {
             (*pointer).page_body,
             wide(match phase {
                 1 => "A native, per-user installation for the Seloryn 0.12.0 runtime.",
-                2 => "Choose a location. Existing runtime versions remain isolated and untouched.",
+                2 => "Choose a location, then decide how to handle older Seloryn versions.",
                 3 => "The setup is working in the background. Every message below maps to a real operation.",
                 4 => "The runtime and launcher were verified after installation.",
                 _ => "",
@@ -815,17 +854,27 @@ mod windows_setup {
         let hdc = wparam as HDC;
         SetBkMode(hdc, 1);
         let control = lparam as HWND;
-        SetTextColor(
-            hdc,
-            if control == (*pointer).page_title
-                || control == (*pointer).step_one
-                || control == (*pointer).runtime_card
-            {
-                MINT_SOFT
-            } else {
-                TEXT_PRIMARY
-            },
-        );
+        let step = if control == (*pointer).step_one {
+            Some(1)
+        } else if control == (*pointer).step_two {
+            Some(2)
+        } else if control == (*pointer).step_three {
+            Some(3)
+        } else if control == (*pointer).step_four {
+            Some(4)
+        } else {
+            None
+        };
+        let color = if control == (*pointer).page_title || control == (*pointer).runtime_card {
+            MINT_SOFT
+        } else if step.is_some_and(|value| value == (*pointer).phase) {
+            MINT
+        } else if step.is_some_and(|value| value < (*pointer).phase) {
+            MINT_SOFT
+        } else {
+            TEXT_PRIMARY
+        };
+        SetTextColor(hdc, color);
         if control == (*pointer).path || control == (*pointer).log {
             (*pointer).surface_brush as LRESULT
         } else {
@@ -833,17 +882,77 @@ mod windows_setup {
         }
     }
 
-    unsafe fn handle_draw_item(lparam: LPARAM) -> LRESULT {
+    unsafe fn update_button_hover(hwnd: HWND) {
+        let pointer = controls(hwnd);
+        if pointer.is_null() {
+            return;
+        }
+        let mut point = POINT::default();
+        if GetCursorPos(&mut point) == 0 {
+            return;
+        }
+        let mut hovered = null_mut();
+        for button in [
+            (*pointer).browse,
+            (*pointer).back,
+            (*pointer).action,
+            (*pointer).cancel,
+        ] {
+            if button.is_null() || IsWindowVisible(button) == 0 {
+                continue;
+            }
+            let mut rect = RECT::default();
+            if GetWindowRect(button, &mut rect) != 0
+                && point.x >= rect.left
+                && point.x < rect.right
+                && point.y >= rect.top
+                && point.y < rect.bottom
+            {
+                hovered = button;
+                break;
+            }
+        }
+        if hovered != (*pointer).hovered_button {
+            let old = (*pointer).hovered_button;
+            (*pointer).hovered_button = hovered;
+            if !old.is_null() {
+                InvalidateRect(old, null(), 0);
+            }
+            if !hovered.is_null() {
+                InvalidateRect(hovered, null(), 0);
+            }
+        }
+    }
+
+    unsafe fn handle_draw_item(hwnd: HWND, lparam: LPARAM) -> LRESULT {
         let item = &*(lparam as *const DRAWITEMSTRUCT);
+        let pointer = controls(hwnd);
+        let hovered = !pointer.is_null() && item.hwndItem == (*pointer).hovered_button;
         let selected = item.itemState & 1 != 0;
-        let brush = CreateSolidBrush(if item.CtlID == ID_ACTION as u32 {
+        let primary = item.CtlID == ID_ACTION as u32;
+        let fill = if primary {
+            if selected {
+                TEAL
+            } else if hovered {
+                MINT_SOFT
+            } else {
+                MINT
+            }
+        } else if selected {
             MINT
+        } else if hovered {
+            TEAL
         } else {
             SURFACE_RAISED
-        });
+        };
+        let brush = CreateSolidBrush(fill);
         FillRect(item.hDC, &item.rcItem, brush);
         DeleteObject(brush as _);
-        let border = CreatePen(PS_SOLID, 1, if selected { MINT_SOFT } else { TEAL });
+        let border = CreatePen(
+            PS_SOLID,
+            1,
+            if selected || hovered { MINT_SOFT } else { TEAL },
+        );
         let old = SelectObject(item.hDC, border as _);
         RoundRect(
             item.hDC,
@@ -857,14 +966,7 @@ mod windows_setup {
         SelectObject(item.hDC, old);
         DeleteObject(border as _);
         SetBkMode(item.hDC, 1);
-        SetTextColor(
-            item.hDC,
-            if item.CtlID == ID_ACTION as u32 {
-                BG
-            } else {
-                TEXT_PRIMARY
-            },
-        );
+        SetTextColor(item.hDC, if primary { BG } else { TEXT_PRIMARY });
         if item.CtlID as usize == ID_BROWSE {
             draw_folder_icon(item.hDC, item.rcItem.left + 10, item.rcItem.top + 9);
         }
@@ -896,13 +998,10 @@ mod windows_setup {
         MoveToEx(hdc, CLIENT_WIDTH - PANEL_WIDTH, 0, null_mut());
         LineTo(hdc, CLIENT_WIDTH - PANEL_WIDTH, CLIENT_HEIGHT);
         MoveToEx(hdc, 40, 116, null_mut());
-        LineTo(hdc, 672, 116);
+        LineTo(hdc, CLIENT_WIDTH - PANEL_WIDTH - 26, 116);
         SelectObject(hdc, old);
         DeleteObject(divider as _);
         let pointer = controls(hwnd);
-        if !pointer.is_null() && (*pointer).phase == 2 {
-            draw_folder_icon(hdc, 578, 326);
-        }
         if !pointer.is_null() && (*pointer).bitmap.is_null() {
             draw_fallback_panel(hdc);
         }
@@ -943,10 +1042,10 @@ mod windows_setup {
             LineTo(hdc, CLIENT_WIDTH - 24, CLIENT_HEIGHT);
         }
         let points = [
-            windows_sys::Win32::Foundation::POINT { x: 850, y: 390 },
-            windows_sys::Win32::Foundation::POINT { x: 940, y: 340 },
-            windows_sys::Win32::Foundation::POINT { x: 1024, y: 390 },
-            windows_sys::Win32::Foundation::POINT { x: 940, y: 440 },
+            windows_sys::Win32::Foundation::POINT { x: 690, y: 390 },
+            windows_sys::Win32::Foundation::POINT { x: 780, y: 340 },
+            windows_sys::Win32::Foundation::POINT { x: 890, y: 390 },
+            windows_sys::Win32::Foundation::POINT { x: 780, y: 440 },
         ];
         Polygon(hdc, points.as_ptr(), points.len() as i32);
         SelectObject(hdc, old_pen);
@@ -1034,13 +1133,14 @@ mod windows_setup {
     }
 
     fn install(root: &Path, add_path: bool, make_default: bool) -> Result<String, String> {
-        install_with_progress(root, add_path, make_default, |_, _| {})
+        install_with_progress(root, add_path, make_default, false, |_, _| {})
     }
 
     fn install_with_progress<F>(
         root: &Path,
         add_path: bool,
         make_default: bool,
+        clean_previous: bool,
         mut report: F,
     ) -> Result<String, String>
     where
@@ -1050,6 +1150,13 @@ mod windows_setup {
             return Err("This setup was built without embedded runtime payloads.".to_owned());
         }
         report(5, "Validating embedded runtime and launcher payloads");
+        if clean_previous {
+            report(12, "Cleaning previous Seloryn installations");
+            let message = cleanup_previous(root)?;
+            report(18, &message);
+        } else {
+            report(12, "Keeping previous installations (cleanup skipped)");
+        }
         let installed = distribution::install_runtime(
             root,
             RUNTIME_VERSION,
@@ -1081,6 +1188,49 @@ mod windows_setup {
             "Installed Seloryn {RUNTIME_VERSION}. SHA-256 {}. Restart shells to load PATH changes.",
             installed.sha256
         ))
+    }
+
+    fn cleanup_previous(root: &Path) -> Result<String, String> {
+        let mut state = distribution::read_state(root).map_err(|error| error.to_string())?;
+        let previous: Vec<String> = state
+            .versions
+            .iter()
+            .filter(|version| version.as_str() != RUNTIME_VERSION)
+            .cloned()
+            .collect();
+        if previous.is_empty() {
+            return Ok("No previous Seloryn installations found".to_owned());
+        }
+        if state
+            .default_version
+            .as_ref()
+            .is_some_and(|default| previous.iter().any(|version| version == default))
+        {
+            state.default_version = None;
+            distribution::write_state(root, &state).map_err(|error| error.to_string())?;
+        }
+        for version in &previous {
+            distribution::uninstall(root, version).map_err(|error| error.to_string())?;
+        }
+        Ok(format!(
+            "Removed {} previous Seloryn installation(s); user projects were preserved",
+            previous.len()
+        ))
+    }
+
+    fn launch_terminal(root: &Path) -> Result<(), String> {
+        let mut path = OsString::from(root.join("bin"));
+        if let Some(existing) = env::var_os("PATH") {
+            path.push(";");
+            path.push(existing);
+        }
+        std::process::Command::new("cmd.exe")
+            .args(["/K", "seloryn --version"])
+            .env("PATH", path)
+            .current_dir(root)
+            .spawn()
+            .map(|_| ())
+            .map_err(|error| format!("SEL-I007 could not open the verification terminal: {error}"))
     }
 
     fn add_user_path(entry: &Path) -> Result<(), String> {
