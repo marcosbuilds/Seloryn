@@ -5,7 +5,7 @@ Review date: 2026-10-26
 ## Evidence identity
 
 The artifact was built from the working tree based on
-`a82a0046d77f05bba8411cca5c90dbf55320d14d` on branch
+`578983bbc094fa989305a265b99c7581186f480b` on branch
 `feature/job-continuity-bridge`. This is a local preview candidate; it is not a
 tagged release and it is not code-signed.
 
@@ -15,10 +15,10 @@ tagged release and it is not code-signed.
 | Runtime package | `0.12.0` |
 | Installer package | `0.12.0` |
 | Platform | `windows-x64` |
-| Installer | `dist/installer-v8/SelorynSetup-0.12.0-windows-x64.exe` |
-| Installer SHA-256 | `a5546b2026dbc3b54b36649ef415377f50c552e915d8c80f3b4b79080e823e94` |
-| Embedded runtime SHA-256 | `c43de93c0155d09306f7d516a0f5e25717d2a025edf24d22f4b66f8af880a03b` |
-| Embedded launcher SHA-256 | `5a09dedd99cd04856388b48748ac16e9f4d0bf912a0b2eb6038cbc0bdf0c54ae` |
+| Installer | `dist/installer-v9/SelorynSetup-0.12.0-windows-x64.exe` |
+| Installer SHA-256 | `fba1702f579ab23e079e3d7aa220d0e2d028e511a27f3d3842ae5d556fe0f02f` |
+| Embedded runtime SHA-256 | `6b705db42f28aa37a247560dbdd06072d53650f68e6b021a7240cacc7709eb97` |
+| Embedded launcher SHA-256 | `4be5b2dc2265f499894f0c9f796b15f93f27c7753288c64352168c1300f05277` |
 
 ## Implemented behavior
 
@@ -40,8 +40,9 @@ tagged release and it is not code-signed.
   previously registered runtime versions are removed; user projects are not
   traversed or deleted. When skipped, side-by-side versions are preserved.
 - The private display font is validated independently: all required UI
-  codepoints are mapped and the uppercase `S` retains two contours derived from
-  the two centerlines in `assets/seloryn-symbol.svg`.
+  codepoints have outlines, the generated face is deterministic, and the
+  uppercase `S` retains two contours derived from the two centerlines in
+  `assets/seloryn-symbol.svg` with cap-height/advance checks.
 - Runtime files live under `versions/<M.m.p>/bin/seloryn.exe` and are described
   by a hash-bound manifest. The root `bin` directory receives the default
   launcher and an exact versioned launcher such as `seloryn0.12.0.exe`.
@@ -59,7 +60,8 @@ tagged release and it is not code-signed.
 |---|---|
 | Rust regression | `cargo test --locked --all-targets -- --test-threads=1`: 101 core + 8 launcher + 8 setup + 37 CLI + 15 tensor tests passed |
 | Lint gate | `cargo clippy --locked --all-targets -- -D warnings`: passed |
-| Installer build gate | `scripts/release/build-installer.ps1 -OutputDirectory dist/installer-v8`: exit 0; embedded setup exit 0 |
+| Display font QA | `scripts/assets/test-seloryn-display-font.py assets/seloryn-display.ttf`: passed; 378 mapped codepoints; S=792×769; contours=2 |
+| Installer build gate | `scripts/release/build-installer.ps1 -OutputDirectory dist/installer-v9`: exit 0; embedded setup exit 0 |
 | Installed versioned launcher | `seloryn0.12.0 --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Installed default launcher | `seloryn --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Registry listing | `seloryn versions`: exit 0; listed `* 0.12.0` with the runtime hash |
