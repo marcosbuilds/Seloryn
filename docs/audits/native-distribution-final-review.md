@@ -5,7 +5,7 @@ Review date: 2026-10-26
 ## Evidence identity
 
 The artifact was built from the working tree based on
-`2f28013f078d98b4d3e09ccc00a67e4d9f1246a3` on branch
+`a82a0046d77f05bba8411cca5c90dbf55320d14d` on branch
 `feature/job-continuity-bridge`. This is a local preview candidate; it is not a
 tagged release and it is not code-signed.
 
@@ -15,10 +15,10 @@ tagged release and it is not code-signed.
 | Runtime package | `0.12.0` |
 | Installer package | `0.12.0` |
 | Platform | `windows-x64` |
-| Installer | `dist/installer-v7/SelorynSetup-0.12.0-windows-x64.exe` |
-| Installer SHA-256 | `f28de273b184f7556876091cf5fb150082f6d58488a98654bc64d2252cc9e950` |
-| Embedded runtime SHA-256 | `6a0c55816b20b4561da3f85b05ee835981b44100f75507a818c5a4895086ad2d` |
-| Embedded launcher SHA-256 | `6f3f8519c1e0b06c2b573138f83111b18241ebbc274aa4ea97a8b63f4da4b12c` |
+| Installer | `dist/installer-v8/SelorynSetup-0.12.0-windows-x64.exe` |
+| Installer SHA-256 | `a5546b2026dbc3b54b36649ef415377f50c552e915d8c80f3b4b79080e823e94` |
+| Embedded runtime SHA-256 | `c43de93c0155d09306f7d516a0f5e25717d2a025edf24d22f4b66f8af880a03b` |
+| Embedded launcher SHA-256 | `5a09dedd99cd04856388b48748ac16e9f4d0bf912a0b2eb6038cbc0bdf0c54ae` |
 
 ## Implemented behavior
 
@@ -39,6 +39,9 @@ tagged release and it is not code-signed.
 - The location stage offers an explicit cleanup choice. When selected, only
   previously registered runtime versions are removed; user projects are not
   traversed or deleted. When skipped, side-by-side versions are preserved.
+- The private display font is validated independently: all required UI
+  codepoints are mapped and the uppercase `S` retains two contours derived from
+  the two centerlines in `assets/seloryn-symbol.svg`.
 - Runtime files live under `versions/<M.m.p>/bin/seloryn.exe` and are described
   by a hash-bound manifest. The root `bin` directory receives the default
   launcher and an exact versioned launcher such as `seloryn0.12.0.exe`.
@@ -56,7 +59,7 @@ tagged release and it is not code-signed.
 |---|---|
 | Rust regression | `cargo test --locked --all-targets -- --test-threads=1`: 101 core + 8 launcher + 8 setup + 37 CLI + 15 tensor tests passed |
 | Lint gate | `cargo clippy --locked --all-targets -- -D warnings`: passed |
-| Installer build gate | `scripts/release/build-installer.ps1 -OutputDirectory dist/installer-v7`: exit 0; embedded setup exit 0 |
+| Installer build gate | `scripts/release/build-installer.ps1 -OutputDirectory dist/installer-v8`: exit 0; embedded setup exit 0 |
 | Installed versioned launcher | `seloryn0.12.0 --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Installed default launcher | `seloryn --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Registry listing | `seloryn versions`: exit 0; listed `* 0.12.0` with the runtime hash |
