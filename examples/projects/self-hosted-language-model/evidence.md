@@ -61,3 +61,35 @@ autodiff primitives. The source derives the contextual matrix shape from the
 vocabulary and request, passes a separate 5-token training variant, and binds
 checkpoint reload to both the weight hash and exact vocabulary hash. Inference
 does not reload the datasets to revalidate their source hashes.
+
+## Embedding/ReLU MLP gate
+
+The independent probe `tests/self_hosted_embedding_probe.py` uses the release
+binary and a separate stdlib-Python reference in
+`tests/reference/embedding_language_model.py`. It checks project validation,
+indexed I64 data, deterministic initialization, checkpoint schema and per-tensor
+hashes, checkpoint-backed inference, exact direct-vs-split resume, repeatability,
+and vocabulary-integrity rejection.
+
+| check | measured result |
+|---|---:|
+| architecture | `embedding_relu_mlp_softmax` |
+| vocabulary / context / embedding / hidden | `14 / 4 / 8 / 32` |
+| parameter count | `1630` |
+| seed / steps | `17 / 160` |
+| initial loss | `2.639393568` |
+| final train loss | `0.148477018` |
+| test loss | `0.838562548` |
+| test perplexity | `2.313039780` |
+| reloaded test loss | `0.838562548` |
+| test accuracy | `0.666667` |
+| generation | `fox fox ran in the park <eos>` |
+| direct vs split resume | exact report and checkpoint hash match |
+| Python reference parity | final/test loss and perplexity within `2e-4`; accuracy and generation equal |
+| checkpoint schema | `seloryn.sely.language-model.v3` |
+| checkpoint device / dtype / optimizer | `cpu / F32 / sgd(rate=0.5)` |
+| checkpoint state hash | validated from parameter hashes, dataset hashes, seed and step |
+| checkpoint hash | `c351fc799fa676a27840e4f5134b18a232d58a17fb1913ac6a38e696e944da2c` |
+
+The embedding gate is additive: the original v2 one-hot path remains covered by
+the original probe and its v2 checkpoint is unchanged.

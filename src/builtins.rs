@@ -2,6 +2,8 @@
 pub enum Builtin {
     TensorF32,
     TensorI64,
+    TensorEmbedding,
+    UniformF32,
     ZerosF32,
     ZerosI64,
     TensorShape,
@@ -24,6 +26,7 @@ pub enum Builtin {
     Softmax,
     LogSumExp,
     CrossEntropy,
+    CrossEntropyIds,
     SumToShape,
 }
 
@@ -31,6 +34,8 @@ pub fn lookup(name: &str) -> Option<Builtin> {
     match name {
         "tensor_f32" => Some(Builtin::TensorF32),
         "tensor_i64" => Some(Builtin::TensorI64),
+        "tensor_embedding" => Some(Builtin::TensorEmbedding),
+        "tensor_uniform_f32" => Some(Builtin::UniformF32),
         "tensor_zeros_f32" => Some(Builtin::ZerosF32),
         "tensor_zeros_i64" => Some(Builtin::ZerosI64),
         "tensor_shape" => Some(Builtin::TensorShape),
@@ -53,6 +58,7 @@ pub fn lookup(name: &str) -> Option<Builtin> {
         "tensor_softmax" => Some(Builtin::Softmax),
         "tensor_logsumexp" => Some(Builtin::LogSumExp),
         "tensor_cross_entropy" => Some(Builtin::CrossEntropy),
+        "tensor_cross_entropy_ids" => Some(Builtin::CrossEntropyIds),
         "tensor_sum_to_shape" => Some(Builtin::SumToShape),
         _ => None,
     }

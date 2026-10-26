@@ -1,11 +1,12 @@
 module app.production
 
-from app.serving import InferenceReport, infer, infer_text
-from app.training import LanguageReport, run
+from app.serving import InferenceReport, infer, infer_embedding, infer_embedding_text, infer_text
+from app.training import EmbeddingLanguageReport, LanguageReport, run, run_embedding
 from json import as_text, get, read_stdin
 
 pub enum Response:
     Training(LanguageReport)
+    EmbeddingTraining(EmbeddingLanguageReport)
     Inference(InferenceReport)
 
 pub fn request() -> Result[Response, JsonIoError]:
@@ -14,10 +15,19 @@ pub fn request() -> Result[Response, JsonIoError]:
     if mode == "train":
         let report: LanguageReport = run(document)?
         return Ok(Training(report))
+    if mode == "train_embedding":
+        let report: EmbeddingLanguageReport = run_embedding(document)?
+        return Ok(EmbeddingTraining(report))
     if mode == "infer":
         let report: InferenceReport = infer(document)?
         return Ok(Inference(report))
     if mode == "infer_text":
         let report: InferenceReport = infer_text(document)?
         return Ok(Inference(report))
-    return Err(JsonIoError("mode must be train, infer or infer_text"))
+    if mode == "infer_embedding":
+        let report: InferenceReport = infer_embedding(document)?
+        return Ok(Inference(report))
+    if mode == "infer_embedding_text":
+        let report: InferenceReport = infer_embedding_text(document)?
+        return Ok(Inference(report))
+    return Err(JsonIoError("mode must be train, train_embedding, infer, infer_text, infer_embedding or infer_embedding_text"))

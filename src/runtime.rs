@@ -1831,6 +1831,48 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                     gradients.into_iter().map(Value::Tensor).collect(),
                 ))
             }
+            "gradients_with_constants" => {
+                let Some(Value::Function(function_name)) = values.first().cloned() else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "gradients_with_constants requires a callable function",
+                        span,
+                    )));
+                };
+                let inputs = values
+                    .iter()
+                    .skip(1)
+                    .map(|value| match value {
+                        Value::Tensor(tensor) => Ok(tensor.clone()),
+                        _ => Err("gradients_with_constants requires tensor inputs"),
+                    })
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|message| Control::Runtime(self.runtime("SEL-R203", message, span)))?;
+                let differentiable_indices = inputs
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(index, tensor)| {
+                        (tensor.dtype() == crate::tensor::TensorDtype::F32).then_some(index)
+                    })
+                    .collect::<Vec<_>>();
+                if differentiable_indices.is_empty() {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "gradients_with_constants requires at least one Tensor[F32] input",
+                        span,
+                    )));
+                }
+                let gradients = tensor_autograd::differentiate_tensors_with_constants(
+                    self.program,
+                    &function_name,
+                    inputs,
+                    differentiable_indices,
+                )
+                .map_err(|error| Control::Runtime(self.runtime("SEL-R203", error.message, span)))?;
+                Ok(Value::List(
+                    gradients.into_iter().map(Value::Tensor).collect(),
+                ))
+            }
             "range" => {
                 let Some(Value::I64(stop)) = values.first() else {
                     return Err(Control::Runtime(self.runtime(
@@ -2263,7 +2305,12 @@ impl<'a, 'event> Interpreter<'a, 'event> {
 
     fn eval_builtin(&mut self, builtin: Builtin, arguments: &[Expr], span: Span) -> Eval<Value> {
         let expected = match builtin {
-            Builtin::TensorF32 | Builtin::TensorI64 | Builtin::Reshape | Builtin::Matmul => 2,
+            Builtin::TensorF32
+            | Builtin::TensorI64
+            | Builtin::TensorEmbedding
+            | Builtin::UniformF32
+            | Builtin::Reshape
+            | Builtin::Matmul => 2,
             Builtin::ZerosF32 | Builtin::ZerosI64 => 1,
             Builtin::TensorShape
             | Builtin::TensorRank
@@ -2277,6 +2324,7 @@ impl<'a, 'event> Interpreter<'a, 'event> {
             Builtin::Transpose | Builtin::Relu | Builtin::Exp | Builtin::Log => 1,
             Builtin::Softmax | Builtin::LogSumExp | Builtin::SumToShape => 2,
             Builtin::CrossEntropy => 3,
+            Builtin::CrossEntropyIds => 2,
         };
         let valid_arity = if matches!(builtin, Builtin::Sum | Builtin::Mean) {
             arguments.len() == 1 || arguments.len() == 2
@@ -2346,6 +2394,26 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                     })
                     .collect::<Result<Vec<_>, _>>()?;
                 Tensor::from_i64(values, &shape)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::TensorEmbedding => {
+                let indices = tensor_value(&values[0], span, self)?;
+                let table = tensor_value(&values[1], span, self)?;
+                Tensor::embedding(indices, table)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::UniformF32 => {
+                let shape = shape_values(&values[0], span, self)?;
+                let Value::I64(seed) = values[1] else {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R203",
+                        "tensor_uniform_f32 seed must be I64",
+                        span,
+                    )));
+                };
+                Tensor::uniform_f32(&shape, seed)
                     .map(Value::Tensor)
                     .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
             }
@@ -2502,6 +2570,14 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 let axis = self.reduction_axis(&values[2], logits.rank(), span)?;
                 logits
                     .cross_entropy(targets, axis)
+                    .map(Value::Tensor)
+                    .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
+            }
+            Builtin::CrossEntropyIds => {
+                let logits = tensor_value(&values[0], span, self)?;
+                let targets = tensor_value(&values[1], span, self)?;
+                logits
+                    .cross_entropy_ids(targets)
                     .map(Value::Tensor)
                     .map_err(|error| Control::Runtime(self.tensor_error(error, span)))
             }

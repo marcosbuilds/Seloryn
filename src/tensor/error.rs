@@ -63,6 +63,18 @@ pub enum TensorError {
         left: Vec<usize>,
         right: Vec<usize>,
     },
+    EmbeddingRank {
+        indices: usize,
+        table: usize,
+    },
+    EmbeddingShape {
+        indices: Vec<usize>,
+        table: Vec<usize>,
+    },
+    EmbeddingIndex {
+        index: i64,
+        vocabulary_size: usize,
+    },
     IntegerOverflow,
     DivisionByZero,
     NonFinite,
@@ -93,7 +105,10 @@ impl TensorError {
             | Self::NotScalar { .. }
             | Self::TransposeRank { .. }
             | Self::MatmulRank { .. }
-            | Self::MatmulShape { .. } => "SEL-R205",
+            | Self::MatmulShape { .. }
+            | Self::EmbeddingRank { .. }
+            | Self::EmbeddingShape { .. }
+            | Self::EmbeddingIndex { .. } => "SEL-R205",
             Self::IntegerOverflow | Self::DivisionByZero => "SEL-R206",
             Self::NonFinite | Self::EmptyMean => "SEL-R207",
             Self::UnsupportedOperator { .. } => "SEL-R208",
@@ -183,6 +198,22 @@ impl fmt::Display for TensorError {
                     left, right
                 )
             }
+            Self::EmbeddingRank { indices, table } => write!(
+                formatter,
+                "embedding requires rank-2 indices and rank-2 table, got ranks {indices} and {table}"
+            ),
+            Self::EmbeddingShape { indices, table } => write!(
+                formatter,
+                "embedding shapes are incompatible: indices {:?}, table {:?}",
+                indices, table
+            ),
+            Self::EmbeddingIndex {
+                index,
+                vocabulary_size,
+            } => write!(
+                formatter,
+                "embedding index {index} is outside vocabulary size {vocabulary_size}"
+            ),
             Self::IntegerOverflow => write!(formatter, "tensor integer arithmetic overflowed"),
             Self::DivisionByZero => write!(formatter, "tensor division by zero"),
             Self::NonFinite => write!(formatter, "tensor operation produced a non-finite F32"),

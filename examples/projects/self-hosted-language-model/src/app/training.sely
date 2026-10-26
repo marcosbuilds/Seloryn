@@ -1,22 +1,42 @@
 module app.training
 
-from app.checkpoint import restore_checkpoint, save_checkpoint
-from app.data import Dataset, load_dataset
-from app.model import LanguageModel, objective
+from app.checkpoint import EmbeddingCheckpoint, restore_checkpoint, restore_embedding_checkpoint, save_checkpoint, save_embedding_checkpoint
+from app.data import Dataset, IndexedDataset, load_dataset, load_indexed_dataset
+from app.model import EmbeddingModel, LanguageModel, embedding_objective, objective
 from app.optim import Sgd, sgd, step
 from app.parameters import Parameter, parameter
-from app.serving import accuracy, generate
+from app.serving import accuracy, embedding_accuracy, generate, generate_embedding
 from app.tokenizer import Vocabulary, load_vocabulary, token_id
-from autograd import gradients
+from autograd import gradients, gradients_with_constants
 from audit import emit
 from data import range
-from json import as_i64, from_i64, from_text, get, object
+from json import as_bool, as_i64, from_i64, from_text, get, object
 from training import progress
 
 pub record LanguageReport:
     architecture: Text
     vocabulary_size: I64
     context_size: I64
+    steps: I64
+    initial_loss: F32
+    final_loss: F32
+    test_loss: F32
+    test_perplexity: F32
+    reloaded_loss: F32
+    test_accuracy: F64
+    generated: Text
+    train_hash: Text
+    test_hash: Text
+    checkpoint_hash: Text
+
+pub record EmbeddingLanguageReport:
+    architecture: Text
+    vocabulary_size: I64
+    context_size: I64
+    embedding_dim: I64
+    hidden_size: I64
+    parameter_count: I64
+    seed: I64
     steps: I64
     initial_loss: F32
     final_loss: F32
@@ -69,3 +89,70 @@ pub fn run(request: Json) -> Result[LanguageReport, JsonIoError]:
     let eos: I64 = token_id(vocabulary, "<eos>")?
     let bos: I64 = token_id(vocabulary, "<bos>")?
     return train(train_data, test_data, vocabulary, eos, bos, context_size, steps)
+
+fn train_embedding_from(train_data: IndexedDataset, test_data: IndexedDataset, vocabulary: Vocabulary, eos: I64, bos: I64, context_size: I64, embedding_dim: I64, hidden_size: I64, steps: I64, seed: I64, starting_step: I64, starting_model: EmbeddingModel) -> Result[EmbeddingLanguageReport, JsonIoError]:
+    let rate: Tensor[F32] = tensor_f32([0.5], [])
+    let optimizer: Sgd = sgd(rate)
+    var embedding: Parameter = parameter("embedding-mlp.embedding", starting_model.embedding)
+    var first_weights: Parameter = parameter("embedding-mlp.first_weights", starting_model.first_weights)
+    var first_bias: Parameter = parameter("embedding-mlp.first_bias", starting_model.first_bias)
+    var second_weights: Parameter = parameter("embedding-mlp.second_weights", starting_model.second_weights)
+    var second_bias: Parameter = parameter("embedding-mlp.second_bias", starting_model.second_bias)
+    let initial_loss: F32 = tensor_item_f32(embedding_objective(train_data.inputs, embedding.value, first_weights.value, first_bias.value, second_weights.value, second_bias.value, train_data.targets))
+    let remaining_steps: I64 = steps - starting_step
+    for step_index in range(remaining_steps):
+        let derivatives: List[Tensor[F32]] = gradients_with_constants(embedding_objective, train_data.inputs, embedding.value, first_weights.value, first_bias.value, second_weights.value, second_bias.value, train_data.targets)
+        embedding = step(optimizer, embedding, derivatives[0])
+        first_weights = step(optimizer, first_weights, derivatives[1])
+        first_bias = step(optimizer, first_bias, derivatives[2])
+        second_weights = step(optimizer, second_weights, derivatives[3])
+        second_bias = step(optimizer, second_bias, derivatives[4])
+        let current_step: I64 = starting_step + step_index + 1
+        if current_step == 1 or current_step % 8 == 0 or current_step == steps:
+            let live_loss: F32 = tensor_item_f32(embedding_objective(train_data.inputs, embedding.value, first_weights.value, first_bias.value, second_weights.value, second_bias.value, train_data.targets))
+            progress("embedding_relu_mlp", current_step, steps, live_loss)
+    let model: EmbeddingModel = EmbeddingModel(embedding.value, first_weights.value, first_bias.value, second_weights.value, second_bias.value, vocabulary.size, context_size, embedding_dim, hidden_size)
+    let final_loss: F32 = tensor_item_f32(embedding_objective(train_data.inputs, model.embedding, model.first_weights, model.first_bias, model.second_weights, model.second_bias, train_data.targets))
+    let test_loss: F32 = tensor_item_f32(embedding_objective(test_data.inputs, model.embedding, model.first_weights, model.first_bias, model.second_weights, model.second_bias, test_data.targets))
+    let test_perplexity: F32 = tensor_item_f32(tensor_exp(embedding_objective(test_data.inputs, model.embedding, model.first_weights, model.first_bias, model.second_weights, model.second_bias, test_data.targets)))
+    let test_accuracy: F64 = embedding_accuracy(test_data.inputs, test_data.targets, model, test_data.rows, vocabulary.size)
+    let parameter_count: I64 = vocabulary.size * embedding_dim + context_size * embedding_dim * hidden_size + hidden_size + hidden_size * vocabulary.size + vocabulary.size
+    let checkpoint_hash: Text = save_embedding_checkpoint("checkpoints/language-model-embedding.json", model, steps, seed, vocabulary.source_hash, train_data.source_hash, test_data.source_hash)?
+    let completion_event: Json = object(["architecture", "checkpoint_sha256", "parameter_count"], [from_text("embedding_relu_mlp_softmax"), from_text(checkpoint_hash), from_i64(parameter_count)])?
+    emit("training.embedding.complete", completion_event)
+    let restored: EmbeddingCheckpoint = restore_embedding_checkpoint("checkpoints/language-model-embedding.json", vocabulary)?
+    let reloaded: EmbeddingModel = restored.model
+    let reloaded_loss: F32 = tensor_item_f32(embedding_objective(test_data.inputs, reloaded.embedding, reloaded.first_weights, reloaded.first_bias, reloaded.second_weights, reloaded.second_bias, test_data.targets))
+    let generated: Text = generate_embedding(reloaded, vocabulary, eos, bos, 8)
+    return Ok(EmbeddingLanguageReport("embedding_relu_mlp_softmax", vocabulary.size, context_size, embedding_dim, hidden_size, parameter_count, seed, steps, initial_loss, final_loss, test_loss, test_perplexity, reloaded_loss, test_accuracy, generated, train_data.source_hash, test_data.source_hash, checkpoint_hash))
+
+fn train_embedding(train_data: IndexedDataset, test_data: IndexedDataset, vocabulary: Vocabulary, eos: I64, bos: I64, context_size: I64, embedding_dim: I64, hidden_size: I64, steps: I64, seed: I64) -> Result[EmbeddingLanguageReport, JsonIoError]:
+    let initial_model: EmbeddingModel = EmbeddingModel(tensor_uniform_f32([vocabulary.size, embedding_dim], seed), tensor_uniform_f32([context_size * embedding_dim, hidden_size], seed + 1), tensor_zeros_f32([1, hidden_size]), tensor_uniform_f32([hidden_size, vocabulary.size], seed + 2), tensor_zeros_f32([1, vocabulary.size]), vocabulary.size, context_size, embedding_dim, hidden_size)
+    return train_embedding_from(train_data, test_data, vocabulary, eos, bos, context_size, embedding_dim, hidden_size, steps, seed, 0, initial_model)
+
+pub fn run_embedding(request: Json) -> Result[EmbeddingLanguageReport, JsonIoError]:
+    let context_size: I64 = as_i64(get(request, ["context_size"])?)?
+    let embedding_dim: I64 = as_i64(get(request, ["embedding_dim"])?)?
+    let hidden_size: I64 = as_i64(get(request, ["hidden_size"])?)?
+    let steps: I64 = as_i64(get(request, ["steps"])?)?
+    let seed: I64 = as_i64(get(request, ["seed"])?)?
+    let resume: Bool = as_bool(get(request, ["resume"])?)?
+    require context_size > 0 and context_size <= 16 else JsonIoError("embedding context_size must be between 1 and 16")
+    require embedding_dim > 0 and embedding_dim <= 32 else JsonIoError("embedding_dim must be between 1 and 32")
+    require hidden_size > 0 and hidden_size <= 128 else JsonIoError("hidden_size must be between 1 and 128")
+    require steps > 0 and steps <= 1000 else JsonIoError("embedding steps must be between 1 and 1000")
+    let vocabulary: Vocabulary = load_vocabulary("data/vocab.json")?
+    let train_data: IndexedDataset = load_indexed_dataset("data/train.json", vocabulary, context_size)?
+    let test_data: IndexedDataset = load_indexed_dataset("data/test.json", vocabulary, context_size)?
+    let contract_event: Json = object(["operation", "architecture", "context_size", "embedding_dim", "hidden_size", "steps", "seed", "train_sha256", "test_sha256"], [from_text("source_owned_training"), from_text("embedding_relu_mlp_softmax"), from_i64(context_size), from_i64(embedding_dim), from_i64(hidden_size), from_i64(steps), from_i64(seed), from_text(train_data.source_hash), from_text(test_data.source_hash)])?
+    emit("training.embedding.contract", contract_event)
+    let eos: I64 = token_id(vocabulary, "<eos>")?
+    let bos: I64 = token_id(vocabulary, "<bos>")?
+    if resume:
+        let restored: EmbeddingCheckpoint = restore_embedding_checkpoint("checkpoints/language-model-embedding.json", vocabulary)?
+        require restored.seed == seed else JsonIoError("resume seed does not match checkpoint")
+        require restored.train_hash == train_data.source_hash and restored.test_hash == test_data.source_hash else JsonIoError("resume dataset hash does not match checkpoint")
+        require restored.model.context_size == context_size and restored.model.embedding_dim == embedding_dim and restored.model.hidden_size == hidden_size else JsonIoError("resume architecture does not match checkpoint")
+        require restored.steps > 0 and restored.steps < steps else JsonIoError("resume steps must be greater than checkpoint steps")
+        return train_embedding_from(train_data, test_data, vocabulary, eos, bos, context_size, embedding_dim, hidden_size, steps, seed, restored.steps, restored.model)
+    return train_embedding(train_data, test_data, vocabulary, eos, bos, context_size, embedding_dim, hidden_size, steps, seed)

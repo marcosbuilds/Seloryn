@@ -1,9 +1,9 @@
 module app.checkpoint
 
-from app.model import LanguageModel
+from app.model import EmbeddingModel, LanguageModel
 from app.tokenizer import Vocabulary
 from data import len
-from json import as_f64_list, as_i64, as_text, from_f64_list, from_i64, from_text, get, object, read_file, sha256, write_file
+from json import as_f64, as_f64_list, as_i64, as_text, from_f64, from_f64_list, from_i64, from_text, get, object, read_file, sha256, write_file
 from tensor import values
 
 pub fn save_checkpoint(path: Text, model: LanguageModel, steps: I64, vocabulary_hash: Text, train_hash: Text, test_hash: Text) -> Result[Text, JsonIoError]:
@@ -33,3 +33,79 @@ pub fn restore_checkpoint(path: Text, vocabulary: Vocabulary) -> Result[Language
     let expected_weights: I64 = context_size * vocabulary_size * vocabulary_size
     require len(packed) == expected_weights else JsonIoError("checkpoint weight count does not match model shape")
     return Ok(LanguageModel(tensor_f32(packed, [context_size * vocabulary_size, vocabulary_size]), vocabulary_size, context_size))
+
+pub record EmbeddingCheckpoint:
+    model: EmbeddingModel
+    steps: I64
+    seed: I64
+    train_hash: Text
+    test_hash: Text
+
+pub fn save_embedding_checkpoint(path: Text, model: EmbeddingModel, steps: I64, seed: I64, vocabulary_hash: Text, train_hash: Text, test_hash: Text) -> Result[Text, JsonIoError]:
+    let embedding: Json = from_f64_list(values(model.embedding))
+    let first_weights: Json = from_f64_list(values(model.first_weights))
+    let first_bias: Json = from_f64_list(values(model.first_bias))
+    let second_weights: Json = from_f64_list(values(model.second_weights))
+    let second_bias: Json = from_f64_list(values(model.second_bias))
+    let embedding_hash: Text = sha256(embedding)
+    let first_weights_hash: Text = sha256(first_weights)
+    let first_bias_hash: Text = sha256(first_bias)
+    let second_weights_hash: Text = sha256(second_weights)
+    let second_bias_hash: Text = sha256(second_bias)
+    let state: Json = object(["embedding_sha256", "first_weights_sha256", "first_bias_sha256", "second_weights_sha256", "second_bias_sha256", "train_hash", "test_hash", "steps", "seed"], [from_text(embedding_hash), from_text(first_weights_hash), from_text(first_bias_hash), from_text(second_weights_hash), from_text(second_bias_hash), from_text(train_hash), from_text(test_hash), from_i64(steps), from_i64(seed)])?
+    let state_hash: Text = sha256(state)
+    let fields: List[Json] = [from_text("seloryn.sely.language-model.v3"), from_text("embedding_relu_mlp_softmax"), from_text("cpu"), from_text("F32"), from_i64(model.vocabulary_size), from_i64(model.context_size), from_i64(model.embedding_dim), from_i64(model.hidden_size), from_text(vocabulary_hash), from_i64(steps), from_i64(seed), from_text(train_hash), from_text(test_hash), from_text("sgd"), from_f64(0.5), embedding, first_weights, first_bias, second_weights, second_bias, from_text(embedding_hash), from_text(first_weights_hash), from_text(first_bias_hash), from_text(second_weights_hash), from_text(second_bias_hash), from_text(state_hash)]
+    let checkpoint: Json = object(["schema", "architecture", "device", "dtype", "vocabulary_size", "context_size", "embedding_dim", "hidden_size", "vocabulary_sha256", "steps", "seed", "train_hash", "test_hash", "optimizer", "learning_rate", "embedding", "first_weights", "first_bias", "second_weights", "second_bias", "embedding_sha256", "first_weights_sha256", "first_bias_sha256", "second_weights_sha256", "second_bias_sha256", "state_sha256"], fields)?
+    write_file(path, checkpoint)?
+    return Ok(sha256(checkpoint))
+
+pub fn restore_embedding_checkpoint(path: Text, vocabulary: Vocabulary) -> Result[EmbeddingCheckpoint, JsonIoError]:
+    let checkpoint: Json = read_file(path)?
+    let schema: Text = as_text(get(checkpoint, ["schema"])?)?
+    require schema == "seloryn.sely.language-model.v3" else JsonIoError("unsupported embedding language model checkpoint")
+    let architecture: Text = as_text(get(checkpoint, ["architecture"])?)?
+    require architecture == "embedding_relu_mlp_softmax" else JsonIoError("unsupported embedding language model architecture")
+    let device: Text = as_text(get(checkpoint, ["device"])?)?
+    require device == "cpu" else JsonIoError("unsupported embedding checkpoint device")
+    let dtype: Text = as_text(get(checkpoint, ["dtype"])?)?
+    require dtype == "F32" else JsonIoError("unsupported embedding checkpoint dtype")
+    let vocabulary_size: I64 = as_i64(get(checkpoint, ["vocabulary_size"])?)?
+    require vocabulary_size == vocabulary.size else JsonIoError("checkpoint vocabulary does not match tokenizer")
+    let context_size: I64 = as_i64(get(checkpoint, ["context_size"])?)?
+    let embedding_dim: I64 = as_i64(get(checkpoint, ["embedding_dim"])?)?
+    let hidden_size: I64 = as_i64(get(checkpoint, ["hidden_size"])?)?
+    require context_size > 0 and embedding_dim > 0 and hidden_size > 0 else JsonIoError("checkpoint architecture dimensions must be positive")
+    let expected_vocabulary_hash: Text = as_text(get(checkpoint, ["vocabulary_sha256"])?)?
+    require expected_vocabulary_hash == vocabulary.source_hash else JsonIoError("checkpoint vocabulary hash does not match tokenizer")
+    let optimizer: Text = as_text(get(checkpoint, ["optimizer"])?)?
+    require optimizer == "sgd" else JsonIoError("unsupported embedding checkpoint optimizer")
+    let learning_rate: F64 = as_f64(get(checkpoint, ["learning_rate"])?)?
+    require learning_rate == 0.5 else JsonIoError("unsupported embedding checkpoint learning rate")
+    let embedding: Json = get(checkpoint, ["embedding"])?
+    let first_weights: Json = get(checkpoint, ["first_weights"])?
+    let first_bias: Json = get(checkpoint, ["first_bias"])?
+    let second_weights: Json = get(checkpoint, ["second_weights"])?
+    let second_bias: Json = get(checkpoint, ["second_bias"])?
+    require as_text(get(checkpoint, ["embedding_sha256"])?)? == sha256(embedding) else JsonIoError("embedding hash does not match payload")
+    require as_text(get(checkpoint, ["first_weights_sha256"])?)? == sha256(first_weights) else JsonIoError("first weight hash does not match payload")
+    require as_text(get(checkpoint, ["first_bias_sha256"])?)? == sha256(first_bias) else JsonIoError("first bias hash does not match payload")
+    require as_text(get(checkpoint, ["second_weights_sha256"])?)? == sha256(second_weights) else JsonIoError("second weight hash does not match payload")
+    require as_text(get(checkpoint, ["second_bias_sha256"])?)? == sha256(second_bias) else JsonIoError("second bias hash does not match payload")
+    let train_hash: Text = as_text(get(checkpoint, ["train_hash"])?)?
+    let test_hash: Text = as_text(get(checkpoint, ["test_hash"])?)?
+    let steps: I64 = as_i64(get(checkpoint, ["steps"])?)?
+    let seed: I64 = as_i64(get(checkpoint, ["seed"])?)?
+    let state: Json = object(["embedding_sha256", "first_weights_sha256", "first_bias_sha256", "second_weights_sha256", "second_bias_sha256", "train_hash", "test_hash", "steps", "seed"], [get(checkpoint, ["embedding_sha256"])?, get(checkpoint, ["first_weights_sha256"])?, get(checkpoint, ["first_bias_sha256"])?, get(checkpoint, ["second_weights_sha256"])?, get(checkpoint, ["second_bias_sha256"])?, from_text(train_hash), from_text(test_hash), from_i64(steps), from_i64(seed)])?
+    require as_text(get(checkpoint, ["state_sha256"])?)? == sha256(state) else JsonIoError("embedding checkpoint state hash does not match metadata")
+    let embedding_values: List[F64] = as_f64_list(embedding)?
+    let first_weight_values: List[F64] = as_f64_list(first_weights)?
+    let first_bias_values: List[F64] = as_f64_list(first_bias)?
+    let second_weight_values: List[F64] = as_f64_list(second_weights)?
+    let second_bias_values: List[F64] = as_f64_list(second_bias)?
+    require len(embedding_values) == vocabulary_size * embedding_dim else JsonIoError("checkpoint embedding count does not match model shape")
+    require len(first_weight_values) == context_size * embedding_dim * hidden_size else JsonIoError("checkpoint first weight count does not match model shape")
+    require len(first_bias_values) == hidden_size else JsonIoError("checkpoint first bias count does not match model shape")
+    require len(second_weight_values) == hidden_size * vocabulary_size else JsonIoError("checkpoint second weight count does not match model shape")
+    require len(second_bias_values) == vocabulary_size else JsonIoError("checkpoint second bias count does not match model shape")
+    let model: EmbeddingModel = EmbeddingModel(tensor_f32(embedding_values, [vocabulary_size, embedding_dim]), tensor_f32(first_weight_values, [context_size * embedding_dim, hidden_size]), tensor_f32(first_bias_values, [1, hidden_size]), tensor_f32(second_weight_values, [hidden_size, vocabulary_size]), tensor_f32(second_bias_values, [1, vocabulary_size]), vocabulary_size, context_size, embedding_dim, hidden_size)
+    return Ok(EmbeddingCheckpoint(model, steps, seed, train_hash, test_hash))

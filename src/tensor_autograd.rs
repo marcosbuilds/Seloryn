@@ -9,7 +9,7 @@
 //! Every rule is explicit and the graph has a hard node limit.
 
 use crate::ir::{Expr, Function, IfBranch, Item, Program, Statement};
-use crate::tensor::{Tensor, TensorError};
+use crate::tensor::{Tensor, TensorDtype, TensorError};
 use std::collections::HashMap;
 
 const MAX_TAPE_NODES: usize = 100_000;
@@ -49,9 +49,7 @@ impl TracedValue {
     fn tensor(&self) -> Result<(Tensor, Option<usize>), Error> {
         match self {
             Self::Tensor { value, node } => Ok((value.clone(), *node)),
-            _ => Err(Error::new(
-                "tensor autograd expression expected a Tensor[F32]",
-            )),
+            _ => Err(Error::new("tensor autograd expression expected a Tensor")),
         }
     }
 }
@@ -144,6 +142,17 @@ enum Rule {
         log_probabilities: Tensor,
         rows: usize,
     },
+    Embedding {
+        table: Option<usize>,
+        indices: Tensor,
+        table_shape: Vec<i64>,
+    },
+    CrossEntropyIds {
+        logits: Option<usize>,
+        targets: Tensor,
+        probabilities: Tensor,
+        rows: usize,
+    },
     SumToShape {
         input: Option<usize>,
         input_shape: Vec<i64>,
@@ -162,21 +171,32 @@ struct Tape {
 }
 
 impl Tape {
-    fn new_many(inputs: Vec<Tensor>) -> (Self, Vec<TracedValue>) {
+    fn new_arguments(
+        arguments: Vec<Tensor>,
+        differentiable_indices: &[usize],
+    ) -> (Self, Vec<TracedValue>) {
         let mut tape = Self {
             nodes: Vec::new(),
-            inputs: Vec::with_capacity(inputs.len()),
+            inputs: Vec::with_capacity(differentiable_indices.len()),
         };
-        let traced = inputs
+        let traced = arguments
             .into_iter()
-            .map(|input| {
-                let node = tape
-                    .push(input.clone(), Rule::Leaf)
-                    .expect("leaf is bounded");
-                tape.inputs.push(node);
-                TracedValue::Tensor {
-                    value: input,
-                    node: Some(node),
+            .enumerate()
+            .map(|(index, input)| {
+                if differentiable_indices.contains(&index) {
+                    let node = tape
+                        .push(input.clone(), Rule::Leaf)
+                        .expect("leaf is bounded");
+                    tape.inputs.push(node);
+                    TracedValue::Tensor {
+                        value: input,
+                        node: Some(node),
+                    }
+                } else {
+                    TracedValue::Tensor {
+                        value: input,
+                        node: None,
+                    }
                 }
             })
             .collect();
@@ -391,6 +411,45 @@ impl Tape {
                 Self::accumulate(gradients, *logits, logits_gradient)?;
                 Self::accumulate(gradients, *targets, targets_gradient)
             }
+            Rule::Embedding {
+                table,
+                indices,
+                table_shape,
+            } => {
+                let table_gradient = Tensor::embedding_backward(indices, gradient, table_shape)
+                    .map_err(tensor_error)?;
+                Self::accumulate(gradients, *table, table_gradient)
+            }
+            Rule::CrossEntropyIds {
+                logits,
+                targets,
+                probabilities,
+                rows,
+            } => {
+                let expanded = broadcast(gradient, &shape(probabilities)?)?;
+                let scale =
+                    Tensor::from_f32(vec![1.0 / *rows as f32], &[]).map_err(tensor_error)?;
+                let scaled = multiply(&expanded, &scale)?;
+                let mut local = probabilities.values_f32().map_err(tensor_error)?;
+                let classes = probabilities
+                    .shape()
+                    .get(1)
+                    .copied()
+                    .ok_or_else(|| Error::new("cross_entropy_ids requires rank-2 logits"))?;
+                for row in 0..*rows {
+                    let target = targets.get_i64(&[row as i64]).map_err(tensor_error)?;
+                    let target_class = usize::try_from(target)
+                        .map_err(|_| Error::new("cross_entropy_ids target is negative"))?;
+                    let index = row
+                        .checked_mul(classes)
+                        .and_then(|offset| offset.checked_add(target_class))
+                        .ok_or_else(|| Error::new("cross_entropy_ids target index overflowed"))?;
+                    local[index] -= 1.0;
+                }
+                let local =
+                    Tensor::from_f32(local, &shape(probabilities)?).map_err(tensor_error)?;
+                Self::accumulate(gradients, *logits, multiply(&local, &scaled)?)
+            }
             Rule::SumToShape { input, input_shape } => {
                 Self::accumulate(gradients, *input, broadcast(gradient, input_shape)?)
             }
@@ -404,7 +463,11 @@ struct Evaluator<'a> {
 }
 
 impl<'a> Evaluator<'a> {
-    fn new_many(program: &'a Program, inputs: Vec<Tensor>) -> (Self, Vec<TracedValue>) {
+    fn new_arguments(
+        program: &'a Program,
+        arguments: Vec<Tensor>,
+        differentiable_indices: &[usize],
+    ) -> (Self, Vec<TracedValue>) {
         let functions = program
             .items
             .iter()
@@ -413,7 +476,7 @@ impl<'a> Evaluator<'a> {
                 _ => None,
             })
             .collect();
-        let (tape, inputs) = Tape::new_many(inputs);
+        let (tape, inputs) = Tape::new_arguments(arguments, differentiable_indices);
         (Self { functions, tape }, inputs)
     }
 
@@ -559,6 +622,22 @@ impl<'a> Evaluator<'a> {
                     .collect::<Result<Vec<_>, _>>()?,
             )),
             Expr::Group { value, .. } => self.expression(value, locals, depth),
+            Expr::Index { object, index, .. } => {
+                let object = self.expression(object, locals, depth)?;
+                let index = self.expression(index, locals, depth)?;
+                let TracedValue::List(values) = object else {
+                    return Err(Error::new("tensor autograd indexing requires a List"));
+                };
+                let TracedValue::I64(index) = index else {
+                    return Err(Error::new("tensor autograd list index must be I64"));
+                };
+                let index = usize::try_from(index)
+                    .map_err(|_| Error::new("tensor autograd list index must be nonnegative"))?;
+                values
+                    .get(index)
+                    .cloned()
+                    .ok_or_else(|| Error::new("tensor autograd list index is out of range"))
+            }
             Expr::Unary {
                 operator, value, ..
             } => {
@@ -621,8 +700,38 @@ impl<'a> Evaluator<'a> {
         operator: &str,
         right: TracedValue,
     ) -> Result<TracedValue, Error> {
-        let (left_value, left_node) = left.tensor()?;
-        let (right_value, right_node) = right.tensor()?;
+        if let (TracedValue::I64(left), TracedValue::I64(right)) = (&left, &right) {
+            let value = match operator {
+                "+" => left
+                    .checked_add(*right)
+                    .ok_or_else(|| Error::new("tensor autograd integer addition overflowed"))?,
+                "-" => left
+                    .checked_sub(*right)
+                    .ok_or_else(|| Error::new("tensor autograd integer subtraction overflowed"))?,
+                "*" => left.checked_mul(*right).ok_or_else(|| {
+                    Error::new("tensor autograd integer multiplication overflowed")
+                })?,
+                "/" => {
+                    if *right == 0 {
+                        return Err(Error::new("tensor autograd integer division by zero"));
+                    }
+                    left.checked_div(*right)
+                        .ok_or_else(|| Error::new("tensor autograd integer division overflowed"))?
+                }
+                _ => {
+                    return Err(Error::new(format!(
+                        "tensor autograd integer operator `{operator}` is unsupported"
+                    )));
+                }
+            };
+            return Ok(TracedValue::I64(value));
+        }
+        let (left_value, left_node) = left.tensor().map_err(|error| {
+            Error::new(format!("tensor binary left operand: {}", error.message))
+        })?;
+        let (right_value, right_node) = right.tensor().map_err(|error| {
+            Error::new(format!("tensor binary right operand: {}", error.message))
+        })?;
         let output = match operator {
             "+" => add(&left_value, &right_value)?,
             "-" => subtract(&left_value, &right_value)?,
@@ -682,6 +791,12 @@ impl<'a> Evaluator<'a> {
                     Error::new(format!("tensor builtin `{name}` is missing an argument"))
                 })?
                 .tensor()
+                .map_err(|error| {
+                    Error::new(format!(
+                        "tensor builtin `{name}` argument {index}: {}",
+                        error.message
+                    ))
+                })
         };
         let axis = |index: usize| -> Result<usize, Error> {
             match values.get(index) {
@@ -711,6 +826,20 @@ impl<'a> Evaluator<'a> {
                     value: output,
                     node: Some(node),
                 })
+            }
+            "tensor_shape" => {
+                let (input, _) = tensor_arg(0)?;
+                Ok(TracedValue::List(
+                    input
+                        .shape()
+                        .iter()
+                        .map(|dimension| {
+                            i64::try_from(*dimension)
+                                .map(TracedValue::I64)
+                                .map_err(|_| Error::new("tensor shape exceeds I64"))
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                ))
             }
             "tensor_mean" => {
                 let (input, input_node) = tensor_arg(0)?;
@@ -871,6 +1000,49 @@ impl<'a> Evaluator<'a> {
                     node: Some(node),
                 })
             }
+            "tensor_embedding" => {
+                let (indices, _) = tensor_arg(0)?;
+                let (table, table_node) = tensor_arg(1)?;
+                let table_shape = shape(&table)?;
+                let output = Tensor::embedding(&indices, &table).map_err(tensor_error)?;
+                let node = self.tape.push(
+                    output.clone(),
+                    Rule::Embedding {
+                        table: table_node,
+                        indices,
+                        table_shape,
+                    },
+                )?;
+                Ok(TracedValue::Tensor {
+                    value: output,
+                    node: Some(node),
+                })
+            }
+            "tensor_cross_entropy_ids" => {
+                let (logits, logits_node) = tensor_arg(0)?;
+                let (targets, _) = tensor_arg(1)?;
+                let (output, probabilities) = logits
+                    .cross_entropy_ids_with_cache(&targets)
+                    .map_err(tensor_error)?;
+                let rows = logits
+                    .shape()
+                    .first()
+                    .copied()
+                    .ok_or_else(|| Error::new("cross_entropy_ids requires rank-2 logits"))?;
+                let node = self.tape.push(
+                    output.clone(),
+                    Rule::CrossEntropyIds {
+                        logits: logits_node,
+                        targets,
+                        probabilities,
+                        rows,
+                    },
+                )?;
+                Ok(TracedValue::Tensor {
+                    value: output,
+                    node: Some(node),
+                })
+            }
             "tensor_sum_to_shape" => {
                 let (input, input_node) = tensor_arg(0)?;
                 let target = shape_argument(values.get(1))?;
@@ -943,16 +1115,41 @@ pub fn differentiate_tensors(
     function_name: &str,
     inputs: Vec<Tensor>,
 ) -> Result<Vec<Tensor>, Error> {
-    if inputs.is_empty() {
+    let indices = (0..inputs.len()).collect::<Vec<_>>();
+    differentiate_tensors_with_constants(program, function_name, inputs, indices)
+}
+
+pub fn differentiate_tensors_with_constants(
+    program: &Program,
+    function_name: &str,
+    arguments: Vec<Tensor>,
+    differentiable_indices: Vec<usize>,
+) -> Result<Vec<Tensor>, Error> {
+    if arguments.is_empty() {
         return Err(Error::new("tensor gradients requires at least one input"));
     }
-    if inputs
-        .iter()
-        .any(|input| input.dtype() != crate::tensor::TensorDtype::F32)
-    {
-        return Err(Error::new("tensor gradients requires Tensor[F32] inputs"));
+    if differentiable_indices.is_empty() {
+        return Err(Error::new(
+            "tensor gradients requires at least one differentiable input",
+        ));
     }
-    let (mut evaluator, input_values) = Evaluator::new_many(program, inputs);
+    let mut seen = vec![false; arguments.len()];
+    for index in &differentiable_indices {
+        if *index >= arguments.len() {
+            return Err(Error::new("tensor gradient input index is out of range"));
+        }
+        if seen[*index] {
+            return Err(Error::new("tensor gradient input indices must be unique"));
+        }
+        seen[*index] = true;
+        if arguments[*index].dtype() != TensorDtype::F32 {
+            return Err(Error::new(
+                "tensor gradients only differentiate Tensor[F32] inputs",
+            ));
+        }
+    }
+    let (mut evaluator, input_values) =
+        Evaluator::new_arguments(program, arguments, &differentiable_indices);
     let function = evaluator
         .functions
         .get(function_name)
@@ -986,6 +1183,7 @@ fn is_tensor_builtin(name: &str) -> bool {
 
 const TENSOR_BUILTINS: &[&str] = &[
     "tensor_sum",
+    "tensor_shape",
     "tensor_mean",
     "matmul",
     "transpose",
@@ -995,6 +1193,8 @@ const TENSOR_BUILTINS: &[&str] = &[
     "tensor_softmax",
     "tensor_logsumexp",
     "tensor_cross_entropy",
+    "tensor_embedding",
+    "tensor_cross_entropy_ids",
     "tensor_sum_to_shape",
     "reshape",
     "tensor_f32",
@@ -1145,7 +1345,7 @@ fn f32_list(value: Option<&TracedValue>) -> Result<Vec<f32>, Error> {
 mod tests {
     use super::{
         TENSOR_ALIASES, TENSOR_BUILTINS, canonical_tensor_name, differentiate_tensor,
-        differentiate_tensors,
+        differentiate_tensors, differentiate_tensors_with_constants,
     };
     use crate::{ir, parser, tensor::Tensor};
 
@@ -1282,6 +1482,52 @@ mod tests {
                 "finite difference {index}: {numerical} != {}",
                 logits[index]
             );
+        }
+    }
+
+    #[test]
+    fn differentiates_embedding_table_with_integer_constant_ids() {
+        let source = "fn f(ids: Tensor[I64], table: Tensor[F32]) -> Tensor[F32]:\n    return tensor_sum(tensor_embedding(ids, table))\n";
+        let parsed = parser::parse(source);
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        let program = ir::lower(&parsed.program.expect("program"));
+        let gradients = differentiate_tensors_with_constants(
+            &program,
+            "f",
+            vec![
+                Tensor::from_i64(vec![2, 0, 2, 1], &[2, 2]).expect("ids"),
+                Tensor::from_f32(vec![0.0; 6], &[3, 2]).expect("table"),
+            ],
+            vec![1],
+        )
+        .expect("embedding gradients");
+        assert_eq!(gradients.len(), 1);
+        assert_eq!(
+            gradients[0].values_f32().expect("table gradient"),
+            vec![1.0, 1.0, 1.0, 1.0, 2.0, 2.0]
+        );
+    }
+
+    #[test]
+    fn differentiates_indexed_cross_entropy_for_logits_only() {
+        let source = "fn f(logits: Tensor[F32], targets: Tensor[I64]) -> Tensor[F32]:\n    return tensor_cross_entropy_ids(logits, targets)\n";
+        let parsed = parser::parse(source);
+        assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+        let program = ir::lower(&parsed.program.expect("program"));
+        let gradients = differentiate_tensors_with_constants(
+            &program,
+            "f",
+            vec![
+                Tensor::from_f32(vec![0.0, 1.0, 2.0, 0.0], &[2, 2]).expect("logits"),
+                Tensor::from_i64(vec![1, 0], &[2]).expect("targets"),
+            ],
+            vec![0],
+        )
+        .expect("indexed cross entropy gradients");
+        let values = gradients[0].values_f32().expect("logits gradient");
+        let expected = [0.1344707, -0.1344707, -0.0596015, 0.0596015];
+        for (actual, expected) in values.iter().zip(expected) {
+            assert!((actual - expected).abs() < 1e-5, "{actual} != {expected}");
         }
     }
 }
