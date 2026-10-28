@@ -26,21 +26,33 @@ mod windows_setup {
 
     use std::env;
     use std::ffi::{OsString, c_void};
+    use std::io::Write;
+    use std::iter::Peekable;
     use std::path::{Path, PathBuf};
     use std::ptr::{null, null_mut};
+    use std::str::Chars;
     use std::thread;
 
     use windows_sys::Win32::Foundation::{
         COLORREF, HANDLE, HWND, LPARAM, LRESULT, POINT, RECT, WPARAM,
     };
     use windows_sys::Win32::Graphics::Gdi::{
-        AddFontMemResourceEx, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BeginPaint, BitBlt,
-        CLEARTYPE_QUALITY, CLIP_DEFAULT_PRECIS, CreateCompatibleDC, CreateDIBSection, CreateFontW,
-        CreatePen, CreateSolidBrush, DEFAULT_CHARSET, DEFAULT_PITCH, DIB_RGB_COLORS, DT_CENTER,
-        DT_SINGLELINE, DT_VCENTER, DeleteDC, DeleteObject, DrawTextW, Ellipse, EndPaint,
+        AddFontMemResourceEx, BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BeginPaint, CLEARTYPE_QUALITY,
+        CLIP_DEFAULT_PRECIS, CreateDIBSection, CreateFontW, CreatePen, CreateSolidBrush,
+        DEFAULT_CHARSET, DEFAULT_PITCH, DIB_RGB_COLORS, DT_CENTER, DT_LEFT, DT_RIGHT,
+        DT_SINGLELINE, DT_VCENTER, DT_WORDBREAK, DeleteObject, DrawTextW, Ellipse, EndPaint,
         FF_DONTCARE, FW_NORMAL, FW_SEMIBOLD, FillRect, HBITMAP, HBRUSH, HDC, HFONT, InvalidateRect,
-        LineTo, MoveToEx, OUT_DEFAULT_PRECIS, PAINTSTRUCT, PS_SOLID, Polygon, RoundRect, SRCCOPY,
+        LineTo, MoveToEx, OUT_DEFAULT_PRECIS, PAINTSTRUCT, PS_SOLID, Polygon, RoundRect,
         SelectObject, SetBkMode, SetTextColor,
+    };
+    use windows_sys::Win32::Graphics::GdiPlus::{
+        FillModeAlternate, GdipAddPathArc, GdipAddPathBezier, GdipAddPathLine, GdipClosePathFigure,
+        GdipCreateFromHDC, GdipCreatePath, GdipCreatePen1, GdipCreateSolidFill, GdipDeleteBrush,
+        GdipDeleteGraphics, GdipDeletePath, GdipDeletePen, GdipDrawEllipseI, GdipDrawLineI,
+        GdipDrawPath, GdipFillEllipseI, GdipFillPath, GdipSetPixelOffsetMode, GdipSetSmoothingMode,
+        GdipStartPathFigure, GdiplusShutdown, GdiplusStartup, GdiplusStartupInput, GpBrush,
+        GpGraphics, GpPath, GpPen, GpSolidFill, Ok as GdipOk, PixelOffsetModeHalf,
+        SmoothingModeAntiAlias8x8, UnitPixel,
     };
     use windows_sys::Win32::System::Com::CoTaskMemFree;
     use windows_sys::Win32::System::Diagnostics::Debug::MessageBeep;
@@ -50,7 +62,7 @@ mod windows_setup {
         RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
     };
     use windows_sys::Win32::UI::Controls::{
-        BST_CHECKED, DRAWITEMSTRUCT, EM_REPLACESEL, EM_SCROLLCARET, EM_SETMARGINS, EM_SETSEL,
+        DRAWITEMSTRUCT, EM_REPLACESEL, EM_SCROLLCARET, EM_SETMARGINS, EM_SETSEL,
         InitCommonControls, PBM_SETPOS, PBM_SETRANGE32, PBS_SMOOTH,
     };
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::EnableWindow;
@@ -59,28 +71,27 @@ mod windows_setup {
         SHGetPathFromIDListW,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        AdjustWindowRectEx, BM_GETCHECK, BM_SETCHECK, BS_AUTOCHECKBOX, BS_OWNERDRAW, CW_USEDEFAULT,
-        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, ES_AUTOHSCROLL,
-        ES_AUTOVSCROLL, ES_MULTILINE, ES_READONLY, GWLP_USERDATA, GetClientRect, GetCursorPos,
-        GetMessageW, GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-        HWND_BROADCAST, IsWindowVisible, KillTimer, MB_ICONERROR, MB_OK, MessageBoxW, PostMessageW,
+        AdjustWindowRectEx, BS_AUTOCHECKBOX, BS_OWNERDRAW, CW_USEDEFAULT, CreateWindowExW,
+        DefWindowProcW, DestroyWindow, DispatchMessageW, ES_AUTOHSCROLL, ES_AUTOVSCROLL,
+        ES_MULTILINE, ES_READONLY, GWLP_USERDATA, GetClientRect, GetCursorPos, GetMessageW,
+        GetWindowLongPtrW, GetWindowRect, GetWindowTextLengthW, GetWindowTextW, HWND_BROADCAST,
+        IsWindowVisible, KillTimer, MB_ICONERROR, MB_OK, MessageBoxW, PostMessageW,
         PostQuitMessage, RegisterClassW, SendMessageW, SetTimer, SetWindowLongPtrW, SetWindowTextW,
         ShowWindow, TranslateMessage, WM_APP, WM_CLOSE, WM_COMMAND, WM_CREATE, WM_CTLCOLORBTN,
         WM_CTLCOLOREDIT, WM_CTLCOLORSTATIC, WM_DESTROY, WM_DRAWITEM, WM_ERASEBKGND,
-        WM_GETMINMAXINFO, WM_PAINT, WM_SETFONT, WM_TIMER, WNDCLASSW, WS_BORDER, WS_CAPTION,
-        WS_CHILD, WS_CLIPCHILDREN, WS_EX_CLIENTEDGE, WS_MINIMIZEBOX, WS_SYSMENU, WS_TABSTOP,
-        WS_VISIBLE, WS_VSCROLL,
+        WM_GETMINMAXINFO, WM_PAINT, WM_SETFONT, WM_TIMER, WNDCLASSW, WS_CAPTION, WS_CHILD,
+        WS_CLIPCHILDREN, WS_MINIMIZEBOX, WS_SYSMENU, WS_TABSTOP, WS_VISIBLE, WS_VSCROLL,
     };
 
     const RUNTIME_VERSION: &str = "0.12.0";
     const LANGUAGE_VERSION: &str = "0.12";
-    const CLIENT_WIDTH: i32 = 880;
-    const CLIENT_HEIGHT: i32 = 700;
-    const CONTENT_LEFT: i32 = 32;
-    const CONTENT_RIGHT: i32 = CLIENT_WIDTH - 32;
+    const CLIENT_WIDTH: i32 = 820;
+    const CLIENT_HEIGHT: i32 = 588;
+    const CONTENT_LEFT: i32 = 28;
+    const CONTENT_RIGHT: i32 = CLIENT_WIDTH - 28;
     const CONTENT_WIDTH: i32 = CONTENT_RIGHT - CONTENT_LEFT;
-    const PACKAGE_IMAGE_WIDTH: i32 = 680;
-    const PACKAGE_IMAGE_HEIGHT: i32 = 360;
+    const CARD_TOP: i32 = 196;
+    const CARD_BOTTOM: i32 = 456;
     const WM_INSTALL_EVENT: u32 = WM_APP + 41;
 
     const ID_PATH: usize = 100;
@@ -103,19 +114,24 @@ mod windows_setup {
     const ID_PATH_LABEL: usize = 119;
     const HOVER_TIMER: usize = 1;
 
-    const BG: COLORREF = rgb(255, 255, 255);
-    const SURFACE: COLORREF = rgb(255, 255, 255);
-    const SURFACE_RAISED: COLORREF = rgb(245, 247, 246);
-    const MINT: COLORREF = rgb(20, 148, 116);
-    const MINT_SOFT: COLORREF = rgb(41, 175, 143);
-    const TEAL: COLORREF = rgb(20, 112, 91);
-    const TEAL_DARK: COLORREF = rgb(205, 214, 209);
-    const TEXT_PRIMARY: COLORREF = rgb(18, 22, 20);
-    const TEXT_SECONDARY: COLORREF = rgb(78, 86, 81);
-    const TEXT_MUTED: COLORREF = rgb(137, 145, 140);
-    const CTA: COLORREF = rgb(218, 240, 230);
-    const CTA_HOVER: COLORREF = rgb(190, 228, 209);
-    const ERROR: COLORREF = rgb(239, 133, 133);
+    const BG: COLORREF = rgb(0, 0, 0);
+    const SURFACE: COLORREF = rgb(9, 18, 15);
+    const SURFACE_RAISED: COLORREF = rgb(14, 30, 24);
+    const MINT: COLORREF = rgb(43, 209, 160);
+    const MINT_SOFT: COLORREF = rgb(91, 231, 190);
+    const TEAL: COLORREF = rgb(56, 211, 166);
+    const TEAL_DARK: COLORREF = rgb(27, 61, 49);
+    const TEXT_PRIMARY: COLORREF = rgb(245, 255, 250);
+    const TEXT_SECONDARY: COLORREF = rgb(174, 201, 190);
+    const TEXT_MUTED: COLORREF = rgb(99, 128, 116);
+    const CTA: COLORREF = rgb(43, 209, 160);
+    const CTA_HOVER: COLORREF = rgb(91, 231, 190);
+    const ERROR: COLORREF = rgb(255, 104, 124);
+    const WHITE: COLORREF = rgb(255, 255, 255);
+    const BRAND_SYMBOL_SVG: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/brand/seloryn-symbol.svg"
+    ));
 
     const fn rgb(red: u32, green: u32, blue: u32) -> COLORREF {
         red | (green << 8) | (blue << 16)
@@ -123,7 +139,13 @@ mod windows_setup {
 
     fn mix_color(start: COLORREF, end: COLORREF, amount: u8) -> COLORREF {
         let amount = u32::from(amount);
-        let channel = |from: u32, to: u32| from + (to.saturating_sub(from) * amount / 255);
+        let channel = |from: u32, to: u32| {
+            if to >= from {
+                from + ((to - from) * amount / 255)
+            } else {
+                from - ((from - to) * amount / 255)
+            }
+        };
         rgb(
             channel(start & 0xff, end & 0xff),
             channel((start >> 8) & 0xff, (end >> 8) & 0xff),
@@ -159,9 +181,11 @@ mod windows_setup {
         background_brush: HBRUSH,
         surface_brush: HBRUSH,
         input_brush: HBRUSH,
-        font_resource: HANDLE,
+        display_font_resource: HANDLE,
+        body_font_resource: HANDLE,
         display_font: HFONT,
         body_font: HFONT,
+        body_large_font: HFONT,
         body_bold_font: HFONT,
         mono_font: HFONT,
         phase: u8,
@@ -169,21 +193,56 @@ mod windows_setup {
         progress_value: u32,
         hover_amount: u8,
         hovered_button: HWND,
+        add_path_checked: bool,
+        make_default_checked: bool,
+        clean_previous_checked: bool,
     }
 
     pub fn main() {
         let arguments: Vec<OsString> = env::args_os().skip(1).collect();
-        if arguments.first().is_some_and(|value| value == "--headless") {
+        if arguments
+            .first()
+            .is_some_and(|value| value == "--headless" || value == "--headless-progress")
+        {
+            let progress_output = arguments
+                .first()
+                .is_some_and(|value| value == "--headless-progress");
             let add_path = arguments.iter().any(|value| value == "--add-path");
             let make_default = arguments.iter().any(|value| value == "--make-default");
+            let clean_previous = arguments.iter().any(|value| value == "--clean-previous");
             let root = arguments
                 .windows(2)
                 .find(|pair| pair[0] == "--install-root")
                 .map(|pair| PathBuf::from(&pair[1]))
                 .unwrap_or_else(default_root);
-            match install(&root, add_path, make_default) {
-                Ok(message) => println!("{message}"),
+            let result = if progress_output {
+                install_with_progress(
+                    &root,
+                    add_path,
+                    make_default,
+                    clean_previous,
+                    |progress, message| {
+                        println!("PROGRESS\t{progress}\t{}", message.replace('\t', " "));
+                        let _ = std::io::stdout().flush();
+                    },
+                )
+            } else {
+                install_with_progress(&root, add_path, make_default, clean_previous, |_, _| {})
+            };
+            match result {
+                Ok(message) => {
+                    if progress_output {
+                        println!("COMPLETE\tOK\t{message}");
+                        let _ = std::io::stdout().flush();
+                    } else {
+                        println!("{message}");
+                    }
+                }
                 Err(error) => {
+                    if progress_output {
+                        println!("COMPLETE\tERROR\t{}", error.replace('\t', " "));
+                        let _ = std::io::stdout().flush();
+                    }
                     eprintln!("{error}");
                     std::process::exit(1);
                 }
@@ -231,8 +290,17 @@ mod windows_setup {
     fn run_window() -> Result<(), String> {
         unsafe {
             InitCommonControls();
+            let mut gdiplus_token = 0_usize;
+            let startup = GdiplusStartupInput {
+                GdiplusVersion: 1,
+                ..std::mem::zeroed()
+            };
+            if GdiplusStartup(&mut gdiplus_token, &startup, null_mut()) != GdipOk {
+                return Err("could not initialize the setup renderer".to_owned());
+            }
             let instance = GetModuleHandleW(null());
             if instance.is_null() {
+                GdiplusShutdown(gdiplus_token);
                 return Err("could not obtain the setup module handle".to_owned());
             }
             let class_name = wide("SelorynSetupWindow");
@@ -250,6 +318,7 @@ mod windows_setup {
                 lpszClassName: class_name.as_ptr(),
             };
             if RegisterClassW(&class) == 0 {
+                GdiplusShutdown(gdiplus_token);
                 return Err("could not register the setup window".to_owned());
             }
             let style = window_style();
@@ -269,6 +338,7 @@ mod windows_setup {
                 null(),
             );
             if window.is_null() {
+                GdiplusShutdown(gdiplus_token);
                 return Err("could not create the setup window".to_owned());
             }
             ShowWindow(window, 1);
@@ -277,6 +347,7 @@ mod windows_setup {
                 TranslateMessage(&message);
                 DispatchMessageW(&message);
             }
+            GdiplusShutdown(gdiplus_token);
         }
         Ok(())
     }
@@ -345,86 +416,87 @@ mod windows_setup {
         let background_brush = CreateSolidBrush(BG);
         let surface_brush = CreateSolidBrush(SURFACE);
         let input_brush = CreateSolidBrush(SURFACE_RAISED);
-        let (font_resource, display_face) = load_private_font();
-        let display_font = create_font(-32, FW_NORMAL, display_face);
-        let body_font = create_font(-15, FW_NORMAL, "Segoe UI");
-        let body_bold_font = create_font(-15, FW_SEMIBOLD, "Segoe UI");
-        let mono_font = create_font(-14, FW_NORMAL, "Cascadia Mono");
+        let (display_font_resource, display_face) =
+            load_private_font(DISPLAY_FONT_PAYLOAD, "Segoe UI Semibold");
+        let (body_font_resource, body_face) = load_private_font(BODY_FONT_PAYLOAD, "Segoe UI");
+        let display_font = create_font(-30, FW_NORMAL, display_face);
+        let body_font = create_font(-14, FW_NORMAL, body_face);
+        let body_large_font = create_font(-22, FW_SEMIBOLD, body_face);
+        let body_bold_font = create_font(-14, FW_SEMIBOLD, body_face);
+        let mono_font = create_font(-13, FW_NORMAL, "Cascadia Mono");
 
-        let step_one = label(hwnd, "WELCOME", 50, 104, 120, 24, ID_STEP_ONE);
-        let step_two = label(hwnd, "LOCATION", 270, 104, 120, 24, ID_STEP_TWO);
-        let step_three = label(hwnd, "INSTALL", 490, 104, 120, 24, ID_STEP_THREE);
-        let step_four = label(hwnd, "DONE", 710, 104, 120, 24, ID_STEP_FOUR);
+        let step_one = label(hwnd, "WELCOME", 180, 78, 112, 24, ID_STEP_ONE);
+        let step_two = label(hwnd, "LOCATION", 352, 78, 112, 24, ID_STEP_TWO);
+        let step_three = label(hwnd, "INSTALL", 524, 78, 112, 24, ID_STEP_THREE);
+        let step_four = label(hwnd, "DONE", 696, 78, 112, 24, ID_STEP_FOUR);
         let page_title = label(
             hwnd,
             "WELCOME TO SELORYN",
             CONTENT_LEFT,
-            154,
+            126,
             CONTENT_WIDTH,
-            42,
+            38,
             ID_PAGE_TITLE,
         );
         let page_body = label(
             hwnd,
             "A native per-user setup for the verified 0.12.0 runtime.",
             CONTENT_LEFT + 2,
-            204,
+            166,
             CONTENT_WIDTH - 4,
-            30,
+            24,
             ID_PAGE_BODY,
         );
         let path_label = label(
             hwnd,
             "INSTALLATION DIRECTORY",
-            CONTENT_LEFT + 2,
-            250,
+            CONTENT_LEFT + 4,
+            218,
             CONTENT_WIDTH - 4,
-            22,
+            20,
             ID_PATH_LABEL,
         );
         let path = edit(
             hwnd,
             &default_root().to_string_lossy(),
-            CONTENT_LEFT + 2,
-            284,
-            620,
-            40,
+            CONTENT_LEFT + 4,
+            246,
+            588,
+            38,
             ID_PATH,
         );
-        let browse = button(hwnd, "Browse", 666, 284, 182, 40, ID_BROWSE);
+        let browse = button(hwnd, "Browse", 632, 246, 160, 38, ID_BROWSE);
         let add_path = checkbox(
             hwnd,
             "Add Seloryn to the current user's PATH",
-            CONTENT_LEFT + 2,
-            344,
+            CONTENT_LEFT + 4,
+            302,
             ID_ADD_PATH,
         );
         let make_default = checkbox(
             hwnd,
             "Make 0.12.0 the default version",
-            CONTENT_LEFT + 2,
-            378,
+            CONTENT_LEFT + 4,
+            336,
             ID_DEFAULT,
         );
         let clean_previous = checkbox(
             hwnd,
             "Remove previous Seloryn installations",
-            CONTENT_LEFT + 2,
-            412,
+            CONTENT_LEFT + 4,
+            370,
             ID_CLEANUP,
         );
-        SendMessageW(add_path, BM_SETCHECK, BST_CHECKED as _, 0);
-        SendMessageW(make_default, BM_SETCHECK, BST_CHECKED as _, 0);
-        let log = log_edit(hwnd, CONTENT_LEFT + 2, 266, CONTENT_WIDTH - 4, 250, ID_LOG);
+        let log = log_edit(hwnd, CONTENT_LEFT + 4, 218, CONTENT_WIDTH - 8, 226, ID_LOG);
         let progress = CreateWindowExW(
             0,
             wide("msctls_progress32").as_ptr(),
             null(),
             WS_CHILD | PBS_SMOOTH,
             CONTENT_LEFT,
-            552,
+            456,
             CONTENT_WIDTH,
-            10,
+            8,
             hwnd,
             ID_PROGRESS as _,
             instance,
@@ -435,21 +507,21 @@ mod windows_setup {
             hwnd,
             "Ready to begin.",
             CONTENT_LEFT,
-            616,
-            CONTENT_WIDTH,
+            478,
+            CONTENT_WIDTH - 76,
             24,
             ID_STATUS,
         );
-        let back = button(hwnd, "Back", 540, 646, 112, 40, ID_BACK);
-        let action = button(hwnd, "Continue", 668, 646, 180, 40, ID_ACTION);
-        let cancel = button(hwnd, "Cancel", CONTENT_LEFT, 646, 112, 40, ID_CANCEL);
+        let back = button(hwnd, "Back", 514, 520, 108, 40, ID_BACK);
+        let action = button(hwnd, "Continue", 634, 520, 158, 40, ID_ACTION);
+        let cancel = button(hwnd, "Cancel", CONTENT_LEFT, 520, 108, 40, ID_CANCEL);
 
         for (control, font) in [
             (step_one, body_bold_font),
             (step_two, body_bold_font),
             (step_three, body_bold_font),
             (step_four, body_bold_font),
-            (page_title, display_font),
+            (page_title, body_large_font),
             (page_body, body_font),
             (path_label, body_font),
             (path, body_font),
@@ -488,9 +560,11 @@ mod windows_setup {
             background_brush,
             surface_brush,
             input_brush,
-            font_resource,
+            display_font_resource,
+            body_font_resource,
             display_font,
             body_font,
+            body_large_font,
             body_bold_font,
             mono_font,
             phase: 1,
@@ -498,6 +572,9 @@ mod windows_setup {
             progress_value: 0,
             hover_amount: 0,
             hovered_button: null_mut(),
+            add_path_checked: true,
+            make_default_checked: true,
+            clean_previous_checked: false,
         });
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, Box::into_raw(controls) as isize);
         SetTimer(hwnd, HOVER_TIMER, 50, None);
@@ -524,21 +601,28 @@ mod windows_setup {
         )
     }
 
-    unsafe fn load_private_font() -> (HANDLE, &'static str) {
-        if DISPLAY_FONT_PAYLOAD.is_empty() {
-            return (null_mut(), "Segoe UI Semibold");
+    unsafe fn load_private_font(payload: &[u8], fallback: &'static str) -> (HANDLE, &'static str) {
+        if payload.is_empty() {
+            return (null_mut(), fallback);
         }
         let font_count = 0_u32;
         let token = AddFontMemResourceEx(
-            DISPLAY_FONT_PAYLOAD.as_ptr().cast::<c_void>(),
-            DISPLAY_FONT_PAYLOAD.len() as u32,
+            payload.as_ptr().cast::<c_void>(),
+            payload.len() as u32,
             null(),
             &font_count,
         );
         if token.is_null() {
-            (null_mut(), "Segoe UI Semibold")
+            (null_mut(), fallback)
         } else {
-            (token, "Seloryn Signature")
+            (
+                token,
+                if fallback == "Segoe UI Semibold" {
+                    "Seloryn Strand Display"
+                } else {
+                    "Sora"
+                },
+            )
         }
     }
 
@@ -645,11 +729,11 @@ mod windows_setup {
         height: i32,
         id: usize,
     ) -> HWND {
-        CreateWindowExW(
-            WS_EX_CLIENTEDGE,
+        let control = CreateWindowExW(
+            0,
             wide("EDIT").as_ptr(),
             wide(text).as_ptr(),
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL as u32 | WS_BORDER,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL as u32,
             x,
             y,
             width,
@@ -658,15 +742,18 @@ mod windows_setup {
             id as _,
             GetModuleHandleW(null()),
             null(),
-        )
+        );
+        SendMessageW(control, EM_SETMARGINS, 0, ((12_u32 << 16) | 12) as LPARAM);
+        control
     }
 
     unsafe fn log_edit(parent: HWND, x: i32, y: i32, width: i32, height: i32, id: usize) -> HWND {
         let control = CreateWindowExW(
-            WS_EX_CLIENTEDGE,
+            0,
             wide("EDIT").as_ptr(),
             null(),
             WS_CHILD
+                | WS_TABSTOP
                 | ES_MULTILINE as u32
                 | ES_AUTOVSCROLL as u32
                 | ES_READONLY as u32
@@ -689,10 +776,10 @@ mod windows_setup {
             0,
             wide("BUTTON").as_ptr(),
             wide(text).as_ptr(),
-            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX as u32,
+            WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX as u32 | BS_OWNERDRAW as u32,
             x,
             y,
-            430,
+            CONTENT_WIDTH - 8,
             28,
             parent,
             id as _,
@@ -738,6 +825,18 @@ mod windows_setup {
             }
             return 0;
         }
+        if id == ID_ADD_PATH || id == ID_DEFAULT || id == ID_CLEANUP {
+            match id {
+                ID_ADD_PATH => (*pointer).add_path_checked = !(*pointer).add_path_checked,
+                ID_DEFAULT => (*pointer).make_default_checked = !(*pointer).make_default_checked,
+                ID_CLEANUP => {
+                    (*pointer).clean_previous_checked = !(*pointer).clean_previous_checked
+                }
+                _ => {}
+            }
+            InvalidateRect(hwnd, null(), 0);
+            return 0;
+        }
         if id == ID_BROWSE && (*pointer).phase == 2 {
             if let Some(path) = browse_for_folder(hwnd) {
                 SetWindowTextW((*pointer).path, wide(&path).as_ptr());
@@ -760,7 +859,20 @@ mod windows_setup {
                 2 => start_install(hwnd),
                 3 => start_install(hwnd),
                 4 => {
-                    DestroyWindow(hwnd);
+                    let root = PathBuf::from(window_text((*pointer).path));
+                    match launch_terminal(&root) {
+                        Ok(()) => {
+                            DestroyWindow(hwnd);
+                        }
+                        Err(error) => {
+                            append_log(
+                                (*pointer).log,
+                                &format!("Terminal handoff failed: {error}"),
+                            );
+                            set_status((*pointer).status, &error);
+                            SetWindowTextW((*pointer).action, wide("Close").as_ptr());
+                        }
+                    }
                 }
                 _ => {}
             }
@@ -790,9 +902,9 @@ mod windows_setup {
         (*pointer).phase = 3;
         (*pointer).installing = true;
         show_phase(hwnd, 3);
-        let add_path = is_checked((*pointer).add_path);
-        let make_default = is_checked((*pointer).make_default);
-        let clean_previous = is_checked((*pointer).clean_previous);
+        let add_path = (*pointer).add_path_checked;
+        let make_default = (*pointer).make_default_checked;
+        let clean_previous = (*pointer).clean_previous_checked;
         let hwnd_raw = hwnd as isize;
         thread::spawn(move || {
             let result = install_with_progress(
@@ -825,9 +937,9 @@ mod windows_setup {
                 set_status((*pointer).status, &message);
                 let progress_rect = RECT {
                     left: CONTENT_LEFT,
-                    top: 548,
+                    top: 452,
                     right: CONTENT_RIGHT,
-                    bottom: 568,
+                    bottom: 470,
                 };
                 InvalidateRect(hwnd, &progress_rect, 0);
             }
@@ -840,21 +952,12 @@ mod windows_setup {
                         (*pointer).progress_value = 100;
                         SendMessageW((*pointer).progress, PBM_SETPOS, 100, 0);
                         append_log((*pointer).log, &message);
-                        let root = PathBuf::from(window_text((*pointer).path));
-                        match launch_terminal(&root) {
-                            Ok(()) => {
-                                DestroyWindow(hwnd);
-                            }
-                            Err(error) => {
-                                append_log(
-                                    (*pointer).log,
-                                    &format!("Terminal handoff failed: {error}"),
-                                );
-                                set_status((*pointer).status, &error);
-                                (*pointer).phase = 4;
-                                show_phase(hwnd, 4);
-                            }
-                        }
+                        (*pointer).phase = 4;
+                        show_phase(hwnd, 4);
+                        set_status(
+                            (*pointer).status,
+                            "Installation verified. Open a terminal when you are ready.",
+                        );
                     }
                     Err(error) => {
                         append_log((*pointer).log, &format!("ERROR  {error}"));
@@ -919,8 +1022,8 @@ mod windows_setup {
             wide(match phase {
                 1 => "A quiet, per-user setup for the verified Seloryn 0.12.0 runtime.",
                 2 => "Choose where Seloryn lives and how this version should behave.",
-                3 => "Every line below maps to a real installation operation.",
-                4 => "The runtime and launcher were verified after installation.",
+                3 => "Each update below maps to a real installation operation.",
+                4 => "The runtime and launcher were verified successfully.",
                 _ => "",
             })
             .as_ptr(),
@@ -931,7 +1034,7 @@ mod windows_setup {
                 1 => "Continue",
                 2 => "Install",
                 3 => "Installing...",
-                4 => "Close",
+                4 => "Open terminal",
                 _ => "Continue",
             })
             .as_ptr(),
@@ -998,6 +1101,9 @@ mod windows_setup {
             (*pointer).back,
             (*pointer).action,
             (*pointer).cancel,
+            (*pointer).add_path,
+            (*pointer).make_default,
+            (*pointer).clean_previous,
         ] {
             if button.is_null() || IsWindowVisible(button) == 0 {
                 continue;
@@ -1045,14 +1151,80 @@ mod windows_setup {
         let selected = item.itemState & 1 != 0;
         let disabled = item.itemState & 0x0004 != 0;
         let focused = item.itemState & 0x0010 != 0;
+        let checkbox = matches!(item.CtlID as usize, ID_ADD_PATH | ID_DEFAULT | ID_CLEANUP);
+        if checkbox {
+            let checked = match item.CtlID as usize {
+                ID_ADD_PATH => !pointer.is_null() && (*pointer).add_path_checked,
+                ID_DEFAULT => !pointer.is_null() && (*pointer).make_default_checked,
+                ID_CLEANUP => !pointer.is_null() && (*pointer).clean_previous_checked,
+                _ => false,
+            };
+            draw_round_rect(
+                item.hDC,
+                item.rcItem.left,
+                item.rcItem.top + 1,
+                item.rcItem.right,
+                item.rcItem.bottom - 1,
+                8,
+                if hovered { SURFACE_RAISED } else { SURFACE },
+                SURFACE,
+                0.0,
+            );
+            let box_left = item.rcItem.left + 3;
+            let box_top = item.rcItem.top + (item.rcItem.bottom - item.rcItem.top - 18) / 2;
+            draw_round_rect(
+                item.hDC,
+                box_left,
+                box_top,
+                box_left + 18,
+                box_top + 18,
+                5,
+                if checked { MINT } else { SURFACE },
+                if checked { MINT } else { TEAL_DARK },
+                if focused { 2.0 } else { 1.0 },
+            );
+            if checked {
+                draw_line(
+                    item.hDC,
+                    box_left + 5,
+                    box_top + 9,
+                    box_left + 8,
+                    box_top + 12,
+                    WHITE,
+                    1.8,
+                );
+                draw_line(
+                    item.hDC,
+                    box_left + 8,
+                    box_top + 12,
+                    box_left + 14,
+                    box_top + 5,
+                    WHITE,
+                    1.8,
+                );
+            }
+            let text = wide(&window_text(item.hwndItem));
+            let mut rect = item.rcItem;
+            rect.left += 30;
+            SetBkMode(item.hDC, 1);
+            SetTextColor(item.hDC, if disabled { TEXT_MUTED } else { TEXT_PRIMARY });
+            DrawTextW(
+                item.hDC,
+                text.as_ptr(),
+                -1,
+                &mut rect,
+                DT_VCENTER | DT_SINGLELINE,
+            );
+            return 1;
+        }
         let primary = item.CtlID == ID_ACTION as u32;
         let hover_amount = if hovered && !pointer.is_null() {
-            (*pointer).hover_amount
+            pointer.as_ref().unwrap().hover_amount
         } else {
             0
         };
         let fill = if disabled {
-            SURFACE
+            SURFACE_RAISED
         } else if primary {
             if selected {
                 CTA_HOVER
@@ -1062,73 +1234,73 @@ mod windows_setup {
         } else {
             SURFACE_RAISED
         };
-        let fill_brush = CreateSolidBrush(fill);
-        let old_brush = SelectObject(item.hDC, fill_brush as _);
-        let border = CreatePen(
-            PS_SOLID,
-            if focused { 2 } else { 1 },
-            if disabled {
-                TEAL_DARK
-            } else if selected || hovered || focused {
-                TEXT_PRIMARY
-            } else {
-                TEAL_DARK
-            },
-        );
-        let old = SelectObject(item.hDC, border as _);
-        RoundRect(
+        draw_round_rect(
             item.hDC,
             item.rcItem.left,
             item.rcItem.top,
             item.rcItem.right,
             item.rcItem.bottom,
             14,
-            14,
+            fill,
+            if disabled {
+                TEAL_DARK
+            } else if selected || hovered || focused {
+                MINT
+            } else {
+                TEAL_DARK
+            },
+            if focused { 2.0 } else { 1.0 },
         );
-        SelectObject(item.hDC, old);
-        DeleteObject(border as _);
-        SelectObject(item.hDC, old_brush);
-        DeleteObject(fill_brush as _);
         SetBkMode(item.hDC, 1);
         SetTextColor(
             item.hDC,
             if disabled {
                 TEXT_SECONDARY
+            } else if primary {
+                BG
             } else {
                 TEXT_PRIMARY
             },
         );
         if item.CtlID as usize == ID_BROWSE {
-            draw_folder_icon(item.hDC, item.rcItem.left + 10, item.rcItem.top + 9);
+            draw_folder_icon(item.hDC, item.rcItem.left + 12, item.rcItem.top + 7);
         }
         let text = wide(&window_text(item.hwndItem));
         let mut rect = item.rcItem;
         if item.CtlID as usize == ID_BROWSE {
-            rect.left += 24;
+            rect.left += 26;
         }
         if primary && !disabled && !pointer.is_null() && (*pointer).phase < 4 {
-            let circle_brush = CreateSolidBrush(TEXT_PRIMARY);
-            let arrow_pen = CreatePen(PS_SOLID, 2, BG);
-            let old_circle_brush = SelectObject(item.hDC, circle_brush as _);
-            let old_arrow_pen = SelectObject(item.hDC, arrow_pen as _);
             let center_x = item.rcItem.right - 20;
             let center_y = (item.rcItem.top + item.rcItem.bottom) / 2;
-            Ellipse(
+            fill_circle(item.hDC, center_x, center_y, 10, TEXT_PRIMARY);
+            draw_line(
                 item.hDC,
-                center_x - 10,
-                center_y - 10,
-                center_x + 10,
-                center_y + 10,
+                center_x - 5,
+                center_y,
+                center_x + 5,
+                center_y,
+                BG,
+                1.6,
             );
-            MoveToEx(item.hDC, center_x - 5, center_y, null_mut());
-            LineTo(item.hDC, center_x + 5, center_y);
-            MoveToEx(item.hDC, center_x + 1, center_y - 4, null_mut());
-            LineTo(item.hDC, center_x + 5, center_y);
-            LineTo(item.hDC, center_x + 1, center_y + 4);
-            SelectObject(item.hDC, old_arrow_pen);
-            SelectObject(item.hDC, old_circle_brush);
-            DeleteObject(arrow_pen as _);
-            DeleteObject(circle_brush as _);
+            draw_line(
+                item.hDC,
+                center_x + 1,
+                center_y - 4,
+                center_x + 5,
+                center_y,
+                BG,
+                1.6,
+            );
+            draw_line(
+                item.hDC,
+                center_x + 5,
+                center_y,
+                center_x + 1,
+                center_y + 4,
+                BG,
+                1.6,
+            );
             rect.right -= 32;
         }
         DrawTextW(
@@ -1139,6 +1311,213 @@ mod windows_setup {
             DT_CENTER | DT_VCENTER | DT_SINGLELINE,
         );
         1
+    }
+
+    fn argb(color: COLORREF) -> u32 {
+        0xff00_0000 | ((color & 0xff) << 16) | (color & 0xff00) | ((color >> 16) & 0xff)
+    }
+
+    unsafe fn begin_gdip(hdc: HDC) -> *mut GpGraphics {
+        let mut graphics = null_mut();
+        if GdipCreateFromHDC(hdc, &mut graphics) != GdipOk || graphics.is_null() {
+            return null_mut();
+        }
+        GdipSetSmoothingMode(graphics, SmoothingModeAntiAlias8x8);
+        GdipSetPixelOffsetMode(graphics, PixelOffsetModeHalf);
+        graphics
+    }
+
+    unsafe fn make_brush(color: COLORREF) -> *mut GpBrush {
+        let mut brush: *mut GpSolidFill = null_mut();
+        if GdipCreateSolidFill(argb(color), &mut brush) != GdipOk {
+            null_mut()
+        } else {
+            brush.cast()
+        }
+    }
+
+    unsafe fn make_pen(color: COLORREF, width: f32) -> *mut GpPen {
+        let mut pen = null_mut();
+        if GdipCreatePen1(argb(color), width, UnitPixel, &mut pen) != GdipOk {
+            null_mut()
+        } else {
+            pen
+        }
+    }
+
+    unsafe fn rounded_path(
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+        radius: i32,
+    ) -> *mut GpPath {
+        let radius = radius
+            .min((right - left) / 2)
+            .min((bottom - top) / 2)
+            .max(1);
+        let mut path = null_mut();
+        if GdipCreatePath(FillModeAlternate, &mut path) != GdipOk || path.is_null() {
+            return null_mut();
+        }
+        let l = left as f32;
+        let t = top as f32;
+        let r = right as f32;
+        let b = bottom as f32;
+        let radius = radius as f32;
+        let diameter = radius * 2.0;
+        GdipAddPathLine(path, l + radius, t, r - radius, t);
+        GdipAddPathArc(path, r - diameter, t, diameter, diameter, 270.0, 90.0);
+        GdipAddPathLine(path, r, t + radius, r, b - radius);
+        GdipAddPathArc(
+            path,
+            r - diameter,
+            b - diameter,
+            diameter,
+            diameter,
+            0.0,
+            90.0,
+        );
+        GdipAddPathLine(path, r - radius, b, l + radius, b);
+        GdipAddPathArc(path, l, b - diameter, diameter, diameter, 90.0, 90.0);
+        GdipAddPathLine(path, l, b - radius, l, t + radius);
+        GdipAddPathArc(path, l, t, diameter, diameter, 180.0, 90.0);
+        GdipClosePathFigure(path);
+        path
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn draw_round_rect(
+        hdc: HDC,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+        radius: i32,
+        fill: COLORREF,
+        stroke: COLORREF,
+        stroke_width: f32,
+    ) {
+        let graphics = begin_gdip(hdc);
+        if graphics.is_null() {
+            return;
+        }
+        let path = rounded_path(left, top, right, bottom, radius);
+        if !path.is_null() {
+            let brush = make_brush(fill);
+            if !brush.is_null() {
+                GdipFillPath(graphics, brush, path);
+                GdipDeleteBrush(brush);
+            }
+            if stroke_width > 0.0 {
+                let pen = make_pen(stroke, stroke_width);
+                if !pen.is_null() {
+                    GdipDrawPath(graphics, pen, path);
+                    GdipDeletePen(pen);
+                }
+            }
+            GdipDeletePath(path);
+        }
+        GdipDeleteGraphics(graphics);
+    }
+
+    unsafe fn draw_line(hdc: HDC, x1: i32, y1: i32, x2: i32, y2: i32, color: COLORREF, width: f32) {
+        let graphics = begin_gdip(hdc);
+        if graphics.is_null() {
+            return;
+        }
+        let pen = make_pen(color, width);
+        if !pen.is_null() {
+            GdipDrawLineI(graphics, pen, x1, y1, x2, y2);
+            GdipDeletePen(pen);
+        }
+        GdipDeleteGraphics(graphics);
+    }
+
+    unsafe fn fill_circle(hdc: HDC, x: i32, y: i32, radius: i32, color: COLORREF) {
+        let graphics = begin_gdip(hdc);
+        if graphics.is_null() {
+            return;
+        }
+        let brush = make_brush(color);
+        if !brush.is_null() {
+            GdipFillEllipseI(
+                graphics,
+                brush,
+                x - radius,
+                y - radius,
+                radius * 2,
+                radius * 2,
+            );
+            GdipDeleteBrush(brush);
+        }
+        GdipDeleteGraphics(graphics);
+    }
+
+    unsafe fn draw_circle(
+        hdc: HDC,
+        x: i32,
+        y: i32,
+        radius: i32,
+        fill: COLORREF,
+        stroke: COLORREF,
+        width: f32,
+    ) {
+        let graphics = begin_gdip(hdc);
+        if graphics.is_null() {
+            return;
+        }
+        let brush = make_brush(fill);
+        if !brush.is_null() {
+            GdipFillEllipseI(
+                graphics,
+                brush,
+                x - radius,
+                y - radius,
+                radius * 2,
+                radius * 2,
+            );
+            GdipDeleteBrush(brush);
+        }
+        let pen = make_pen(stroke, width);
+        if !pen.is_null() {
+            GdipDrawEllipseI(
+                graphics,
+                pen,
+                x - radius,
+                y - radius,
+                radius * 2,
+                radius * 2,
+            );
+            GdipDeletePen(pen);
+        }
+        GdipDeleteGraphics(graphics);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn draw_text_line(
+        hdc: HDC,
+        font: HFONT,
+        text: &str,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+        color: COLORREF,
+        flags: u32,
+    ) {
+        let old_font = SelectObject(hdc, font as _);
+        SetBkMode(hdc, 1);
+        SetTextColor(hdc, color);
+        let mut rect = RECT {
+            left,
+            top,
+            right,
+            bottom,
+        };
+        let value = wide(text);
+        DrawTextW(hdc, value.as_ptr(), -1, &mut rect, flags);
+        SelectObject(hdc, old_font);
     }
 
     unsafe fn paint(hwnd: HWND) -> LRESULT {
@@ -1153,19 +1532,30 @@ mod windows_setup {
         if !pointer.is_null() {
             draw_stepper(hdc, pointer);
             match (*pointer).phase {
-                1 => draw_package_image(hdc, pointer),
-                2 => draw_surface_card(hdc, 24, 240, CONTENT_RIGHT + 8, 456),
-                3 | 4 => draw_surface_card(hdc, 24, 240, CONTENT_RIGHT + 8, 532),
+                1 => draw_welcome_visual(hdc, pointer),
+                2 => draw_surface_card(hdc, CONTENT_LEFT, CARD_TOP, CONTENT_RIGHT, CARD_BOTTOM),
+                3 | 4 => draw_surface_card(hdc, CONTENT_LEFT, CARD_TOP, CONTENT_RIGHT, 452),
                 _ => {}
             }
             if (*pointer).phase == 3 || (*pointer).phase == 4 {
                 draw_progress(
                     hdc,
                     CONTENT_LEFT,
-                    552,
+                    456,
                     CONTENT_WIDTH,
                     8,
                     (*pointer).progress_value,
+                );
+                draw_text_line(
+                    hdc,
+                    (*pointer).body_bold_font,
+                    &format!("{}%", (*pointer).progress_value),
+                    CONTENT_RIGHT - 64,
+                    474,
+                    CONTENT_RIGHT,
+                    496,
+                    MINT_SOFT,
+                    DT_RIGHT | DT_SINGLELINE,
                 );
             }
         }
@@ -1174,106 +1564,347 @@ mod windows_setup {
     }
 
     unsafe fn draw_surface_card(hdc: HDC, left: i32, top: i32, right: i32, bottom: i32) {
-        let brush = CreateSolidBrush(SURFACE);
-        let pen = CreatePen(PS_SOLID, 1, TEAL_DARK);
-        let old_brush = SelectObject(hdc, brush as _);
-        let old_pen = SelectObject(hdc, pen as _);
-        RoundRect(hdc, left, top, right, bottom, 12, 12);
-        SelectObject(hdc, old_pen);
-        SelectObject(hdc, old_brush);
-        DeleteObject(pen as _);
-        DeleteObject(brush as _);
+        draw_round_rect(hdc, left, top, right, bottom, 14, SURFACE, TEAL_DARK, 1.0);
     }
 
     unsafe fn draw_stepper(hdc: HDC, pointer: *mut Controls) {
-        let centers = [110, 330, 550, 770];
-        let y = 64;
-        let base_pen = CreatePen(PS_SOLID, 1, TEAL_DARK);
-        let old_pen = SelectObject(hdc, base_pen as _);
-        MoveToEx(hdc, centers[0], y, null_mut());
-        LineTo(hdc, centers[3], y);
-        SelectObject(hdc, old_pen);
-        DeleteObject(base_pen as _);
-
+        let centers = [236, 408, 580, 752];
+        let y = 44;
+        draw_line(hdc, centers[0], y, centers[3], y, TEAL_DARK, 1.0);
         let active = (*pointer).phase.min(4) as usize;
         if active > 1 {
-            let progress_pen = CreatePen(PS_SOLID, 2, MINT);
-            let old_progress = SelectObject(hdc, progress_pen as _);
-            MoveToEx(hdc, centers[0], y, null_mut());
-            LineTo(hdc, centers[active - 1], y);
-            SelectObject(hdc, old_progress);
-            DeleteObject(progress_pen as _);
+            draw_line(hdc, centers[0], y, centers[active - 1], y, MINT, 2.0);
         }
-
-        let old_font = SelectObject(hdc, (*pointer).body_bold_font as _);
-        SetBkMode(hdc, 1);
+        draw_brand_mark(hdc, 22, 24, 30, 30);
+        draw_text_line(
+            hdc,
+            (*pointer).body_bold_font,
+            "SELORYN",
+            58,
+            27,
+            198,
+            46,
+            TEAL,
+            DT_LEFT | DT_SINGLELINE,
+        );
         for (index, center) in centers.iter().enumerate() {
             let current = index + 1 == active;
             let completed = index + 1 < active;
-            let color = if current {
+            let fill = if current || completed { MINT } else { BG };
+            let stroke = if current || completed {
                 MINT
-            } else if completed {
-                MINT_SOFT
+            } else {
+                TEAL_DARK
+            };
+            let number_color = if current || completed {
+                WHITE
             } else {
                 TEXT_MUTED
             };
-            let pen = CreatePen(PS_SOLID, if current { 2 } else { 1 }, color);
-            let brush = CreateSolidBrush(BG);
-            let old_circle_pen = SelectObject(hdc, pen as _);
-            let old_circle_brush = SelectObject(hdc, brush as _);
-            Ellipse(hdc, center - 18, y - 18, center + 18, y + 18);
-            SelectObject(hdc, old_circle_brush);
-            SelectObject(hdc, old_circle_pen);
-            DeleteObject(brush as _);
-            DeleteObject(pen as _);
-
-            SetTextColor(hdc, color);
-            let mut number = RECT {
-                left: center - 17,
-                top: y - 13,
-                right: center + 17,
-                bottom: y + 13,
-            };
-            DrawTextW(
+            draw_circle(
                 hdc,
-                wide(&format!("{:02}", index + 1)).as_ptr(),
-                -1,
-                &mut number,
+                *center,
+                y,
+                16,
+                fill,
+                stroke,
+                if current { 2.0 } else { 1.0 },
+            );
+            draw_text_line(
+                hdc,
+                (*pointer).body_bold_font,
+                &format!("{:02}", index + 1),
+                center - 14,
+                y - 9,
+                center + 14,
+                y + 9,
+                number_color,
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE,
             );
         }
-        SelectObject(hdc, old_font);
     }
 
-    unsafe fn draw_package_image(hdc: HDC, pointer: *mut Controls) {
-        if (*pointer).package_bitmap.is_null() {
-            draw_surface_card(
-                hdc,
-                96,
-                252,
-                96 + PACKAGE_IMAGE_WIDTH,
-                252 + PACKAGE_IMAGE_HEIGHT,
+    fn next_svg_number(chars: &mut Peekable<Chars<'_>>) -> Option<f32> {
+        while chars
+            .peek()
+            .is_some_and(|value| value.is_whitespace() || *value == ',')
+        {
+            chars.next();
+        }
+        let mut token = String::new();
+        while chars.peek().is_some_and(|value| {
+            value.is_ascii_digit() || matches!(*value, '.' | '-' | '+' | 'e' | 'E')
+        }) {
+            token.push(chars.next().unwrap());
+        }
+        token.parse().ok()
+    }
+
+    unsafe fn draw_svg_path(
+        graphics: *mut GpGraphics,
+        d: &str,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        color: COLORREF,
+    ) {
+        let scale = (width as f32 / 91.0).min(height as f32 / 88.0);
+        let origin_x = x as f32 - 35.0 * scale;
+        let origin_y = y as f32 - 37.0 * scale;
+        let map = |value: f32, offset: f32| value * scale + offset;
+        let mut chars = d.chars().peekable();
+        let mut command = 'M';
+        let mut current = (0.0_f32, 0.0_f32);
+        let mut path = null_mut();
+        if GdipCreatePath(FillModeAlternate, &mut path) != GdipOk || path.is_null() {
+            return;
+        }
+        GdipStartPathFigure(path);
+        while chars.peek().is_some() {
+            while chars
+                .peek()
+                .is_some_and(|value| value.is_whitespace() || *value == ',')
+            {
+                chars.next();
+            }
+            if let Some(value) = chars
+                .peek()
+                .copied()
+                .filter(|value| value.is_ascii_alphabetic())
+            {
+                command = value;
+                chars.next();
+                continue;
+            }
+            let count = match command {
+                'M' | 'm' => 2,
+                'H' | 'h' | 'V' | 'v' => 1,
+                'C' | 'c' => 6,
+                _ => break,
+            };
+            let mut values = [0.0_f32; 6];
+            for value in values.iter_mut().take(count) {
+                let Some(number) = next_svg_number(&mut chars) else {
+                    break;
+                };
+                *value = number;
+            }
+            let point = |px: f32, py: f32| (map(px, origin_x), map(py, origin_y));
+            match command {
+                'M' => {
+                    current = (values[0], values[1]);
+                    GdipAddPathLine(
+                        path,
+                        map(current.0, origin_x),
+                        map(current.1, origin_y),
+                        map(current.0, origin_x),
+                        map(current.1, origin_y),
+                    );
+                }
+                'H' => {
+                    let next = (values[0], current.1);
+                    GdipAddPathLine(
+                        path,
+                        map(current.0, origin_x),
+                        map(current.1, origin_y),
+                        map(next.0, origin_x),
+                        map(next.1, origin_y),
+                    );
+                    current = next;
+                }
+                'V' => {
+                    let next = (current.0, values[0]);
+                    GdipAddPathLine(
+                        path,
+                        map(current.0, origin_x),
+                        map(current.1, origin_y),
+                        map(next.0, origin_x),
+                        map(next.1, origin_y),
+                    );
+                    current = next;
+                }
+                'C' => {
+                    let end = point(values[4], values[5]);
+                    GdipAddPathBezier(
+                        path,
+                        map(current.0, origin_x),
+                        map(current.1, origin_y),
+                        map(values[0], origin_x),
+                        map(values[1], origin_y),
+                        map(values[2], origin_x),
+                        map(values[3], origin_y),
+                        end.0,
+                        end.1,
+                    );
+                    current = (values[4], values[5]);
+                }
+                _ => {}
+            }
+        }
+        let pen = make_pen(color, (20.0 * scale).max(2.0));
+        if !pen.is_null() {
+            GdipDrawPath(graphics, pen, path);
+            GdipDeletePen(pen);
+        }
+        GdipDeletePath(path);
+    }
+
+    unsafe fn draw_brand_mark(hdc: HDC, x: i32, y: i32, width: i32, height: i32) {
+        let graphics = begin_gdip(hdc);
+        if graphics.is_null() {
+            return;
+        }
+        for (index, path) in BRAND_SYMBOL_SVG
+            .split("d=\"")
+            .skip(1)
+            .filter_map(|value| value.split('\"').next())
+            .filter(|value| value.trim_start().starts_with('M'))
+            .take(2)
+            .enumerate()
+        {
+            draw_svg_path(
+                graphics,
+                path,
+                x,
+                y,
+                width,
+                height,
+                if index == 0 { MINT } else { TEAL },
             );
-            return;
         }
-        let memory = CreateCompatibleDC(hdc);
-        if memory.is_null() {
-            return;
-        }
-        let previous = SelectObject(memory, (*pointer).package_bitmap as _);
-        BitBlt(
+        GdipDeleteGraphics(graphics);
+    }
+
+    unsafe fn draw_welcome_visual(hdc: HDC, pointer: *mut Controls) {
+        draw_surface_card(hdc, CONTENT_LEFT, CARD_TOP, CONTENT_RIGHT, CARD_BOTTOM);
+        draw_line(hdc, 448, 222, 448, 426, TEAL_DARK, 1.0);
+        draw_text_line(
             hdc,
-            (CLIENT_WIDTH - PACKAGE_IMAGE_WIDTH) / 2,
-            244,
-            PACKAGE_IMAGE_WIDTH,
-            PACKAGE_IMAGE_HEIGHT,
-            memory,
-            0,
-            0,
-            SRCCOPY,
+            (*pointer).body_bold_font,
+            "READY FOR YOUR MACHINE",
+            52,
+            222,
+            414,
+            242,
+            MINT,
+            DT_LEFT | DT_SINGLELINE,
         );
-        SelectObject(memory, previous);
-        DeleteDC(memory);
+        draw_text_line(
+            hdc,
+            (*pointer).body_large_font,
+            "A clean runtime.\nKept local.",
+            52,
+            248,
+            410,
+            320,
+            TEXT_PRIMARY,
+            DT_LEFT | DT_WORDBREAK,
+        );
+        draw_text_line(
+            hdc,
+            (*pointer).body_font,
+            "Seloryn installs for this Windows user and keeps\nprojects outside the runtime untouched.",
+            52,
+            328,
+            414,
+            380,
+            TEXT_SECONDARY,
+            DT_LEFT | DT_WORDBREAK,
+        );
+        draw_round_rect(
+            hdc,
+            52,
+            394,
+            154,
+            426,
+            10,
+            SURFACE_RAISED,
+            SURFACE_RAISED,
+            0.0,
+        );
+        draw_round_rect(
+            hdc,
+            216,
+            394,
+            330,
+            426,
+            10,
+            SURFACE_RAISED,
+            SURFACE_RAISED,
+            0.0,
+        );
+        draw_text_line(
+            hdc,
+            (*pointer).body_bold_font,
+            "PER-USER",
+            68,
+            401,
+            142,
+            419,
+            TEAL,
+            DT_LEFT | DT_SINGLELINE,
+        );
+        draw_text_line(
+            hdc,
+            (*pointer).body_bold_font,
+            "VERIFIED",
+            232,
+            401,
+            318,
+            419,
+            TEAL,
+            DT_LEFT | DT_SINGLELINE,
+        );
+
+        draw_round_rect(hdc, 478, 222, 768, 426, 12, SURFACE_RAISED, TEAL_DARK, 1.0);
+        draw_brand_mark(hdc, 510, 240, 28, 32);
+        draw_text_line(
+            hdc,
+            (*pointer).body_bold_font,
+            "SELORYN RUNTIME",
+            544,
+            238,
+            744,
+            258,
+            TEAL,
+            DT_LEFT | DT_SINGLELINE,
+        );
+        draw_text_line(
+            hdc,
+            (*pointer).display_font,
+            "0.12.0",
+            510,
+            278,
+            744,
+            320,
+            TEXT_PRIMARY,
+            DT_LEFT | DT_SINGLELINE,
+        );
+        draw_text_line(
+            hdc,
+            (*pointer).body_font,
+            "Windows x64  ·  verified preview",
+            512,
+            332,
+            748,
+            352,
+            TEXT_SECONDARY,
+            DT_LEFT | DT_SINGLELINE,
+        );
+        draw_line(hdc, 512, 376, 734, 376, TEAL_DARK, 1.0);
+        draw_circle(hdc, 524, 398, 7, MINT, MINT, 1.0);
+        draw_text_line(
+            hdc,
+            (*pointer).body_font,
+            "4 guided stages",
+            544,
+            388,
+            720,
+            408,
+            TEXT_SECONDARY,
+            DT_LEFT | DT_SINGLELINE,
+        );
     }
 
     unsafe fn draw_package_box_icon(hdc: HDC, x: i32, y: i32, color: COLORREF) {
@@ -1420,62 +2051,37 @@ mod windows_setup {
     }
 
     unsafe fn draw_progress(hdc: HDC, x: i32, y: i32, width: i32, height: i32, value: u32) {
-        let track = CreateSolidBrush(SURFACE_RAISED);
-        let track_rect = RECT {
-            left: x,
-            top: y,
-            right: x + width,
-            bottom: y + height,
-        };
-        FillRect(hdc, &track_rect, track);
-        DeleteObject(track as _);
-        let fill_width = ((width - 2).max(0) as u32 * value.min(100) / 100) as i32;
+        draw_round_rect(
+            hdc,
+            x,
+            y,
+            x + width,
+            y + height,
+            height / 2,
+            SURFACE_RAISED,
+            SURFACE_RAISED,
+            0.0,
+        );
+        let fill_width = (width as u32 * value.min(100) / 100) as i32;
         if fill_width > 0 {
-            let fill = CreateSolidBrush(MINT);
-            let fill_rect = RECT {
-                left: x + 1,
-                top: y + 1,
-                right: x + 1 + fill_width,
-                bottom: y + height - 1,
-            };
-            FillRect(hdc, &fill_rect, fill);
-            DeleteObject(fill as _);
+            draw_round_rect(
+                hdc,
+                x,
+                y,
+                x + fill_width.max(height),
+                y + height,
+                height / 2,
+                MINT,
+                MINT,
+                0.0,
+            );
         }
     }
 
     unsafe fn draw_folder_icon(hdc: HDC, x: i32, y: i32) {
-        let brush = CreateSolidBrush(SURFACE);
-        let pen = CreatePen(PS_SOLID, 1, MINT_SOFT);
-        let old_brush = SelectObject(hdc, brush as _);
-        let old_pen = SelectObject(hdc, pen as _);
-        let points = [
-            POINT { x, y: y + 5 },
-            POINT { x: x + 8, y: y + 5 },
-            POINT {
-                x: x + 11,
-                y: y + 2,
-            },
-            POINT {
-                x: x + 21,
-                y: y + 2,
-            },
-            POINT {
-                x: x + 23,
-                y: y + 6,
-            },
-            POINT {
-                x: x + 23,
-                y: y + 20,
-            },
-            POINT { x, y: y + 20 },
-        ];
-        Polygon(hdc, points.as_ptr(), points.len() as i32);
-        MoveToEx(hdc, x + 1, y + 9, null_mut());
-        LineTo(hdc, x + 22, y + 9);
-        SelectObject(hdc, old_brush);
-        SelectObject(hdc, old_pen);
-        DeleteObject(brush as _);
-        DeleteObject(pen as _);
+        draw_round_rect(hdc, x, y + 3, x + 24, y + 21, 4, SURFACE, MINT_SOFT, 1.4);
+        draw_line(hdc, x + 2, y + 9, x + 22, y + 9, MINT, 1.4);
+        draw_line(hdc, x + 3, y + 3, x + 9, y + 3, MINT_SOFT, 1.4);
     }
 
     unsafe fn browse_for_folder(hwnd: HWND) -> Option<String> {
@@ -1518,6 +2124,7 @@ mod windows_setup {
         for font in [
             controls.display_font,
             controls.body_font,
+            controls.body_large_font,
             controls.body_bold_font,
             controls.mono_font,
         ] {
@@ -1525,8 +2132,10 @@ mod windows_setup {
                 DeleteObject(font as _);
             }
         }
-        if !controls.font_resource.is_null() {
-            windows_sys::Win32::Graphics::Gdi::RemoveFontMemResourceEx(controls.font_resource);
+        for font_resource in [controls.display_font_resource, controls.body_font_resource] {
+            if !font_resource.is_null() {
+                windows_sys::Win32::Graphics::Gdi::RemoveFontMemResourceEx(font_resource);
+            }
         }
         if !controls.package_bitmap.is_null() {
             DeleteObject(controls.package_bitmap as _);
@@ -1543,10 +2152,6 @@ mod windows_setup {
         String::from_utf16_lossy(&buffer[..read as usize])
     }
 
-    unsafe fn is_checked(hwnd: HWND) -> bool {
-        SendMessageW(hwnd, BM_GETCHECK, 0, 0) == BST_CHECKED as isize
-    }
-
     unsafe fn append_log(hwnd: HWND, message: &str) {
         let mut text = message.to_owned();
         if !text.ends_with('\n') {
@@ -1559,10 +2164,6 @@ mod windows_setup {
 
     unsafe fn set_status(hwnd: HWND, message: &str) {
         SetWindowTextW(hwnd, wide(message).as_ptr());
-    }
-
-    fn install(root: &Path, add_path: bool, make_default: bool) -> Result<String, String> {
-        install_with_progress(root, add_path, make_default, false, |_, _| {})
     }
 
     fn install_with_progress<F>(

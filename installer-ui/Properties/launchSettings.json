@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "SelorynInstaller (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "SelorynInstaller (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
