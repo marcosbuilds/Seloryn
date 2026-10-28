@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09120f">
+  <title>seloryn-font — Em uso real</title>
+  <link rel="stylesheet" href="./seloryn-font.css">
+  <style>
+    :root { color-scheme:dark; --bg:#09120f;--panel:#0f1b16;--line:#2b3e34;--muted:#a1b9ac;--green:#34cca7;--deep:#148874;--text:#e5eee7; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--text);background:var(--bg);font:15px/1.5 system-ui, 'Segoe UI',sans-serif; }
+    a { color:inherit; }
+    .shell { width:min(1320px,calc(100% - 96px));margin-inline:auto; }
+    .top { border-bottom:1px solid var(--line); }
+    .nav { min-height:105px;display:flex;align-items:center;justify-content:space-between;gap:16px; }
+    .brand { display:flex;align-items:center;gap:11px;text-decoration:none; }
+    .symbol { height:55px;width:55px; }
+    .brand-text { font:700 39px/.95 'Seloryn Font',sans-serif; color:var(--text); }
+    .right { display:flex;align-items:center;gap:35px;font-size:13px;color:#bacac1; }
+    .right a { text-decoration:none; }
+    .right a:hover { color:var(--green); }
+    .version { color:var(--green);border:1px solid #34634f;border-radius:30px;padding:8px 16px;font:300 15px 'Seloryn Font'; }
+    .hero { padding:67px 0 50px; }
+    .smalltag { font-size:11px;letter-spacing:.19em;font-weight:700;color:var(--green);text-transform:uppercase; }
+    h1,h2,h3,p { margin-top:0; }
+    h1 { font:700 clamp(84px,10.3vw,151px)/1.03 'Seloryn Font',sans-serif;letter-spacing:-.025em; margin:22px 0 12px; color:var(--green); }
+    .headline { font:300 clamp(30px,4.5vw,58px)/1.25 'Seloryn Font',sans-serif;letter-spacing:0;max-width:1060px;color:#edf8f0;margin:0; }
+    .intro { display:flex;justify-content:space-between;align-items:flex-end;gap:20px; margin-top:25px; }
+    .copy { max-width:590px;color:var(--muted);font-size:14px;line-height:1.7; }
+    .badges { display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end; }
+    .little { border:1px solid var(--line);border-radius:36px;padding:10px 15px;font-size:11px;letter-spacing:.09em;color:#b5cbc0;white-space:nowrap; }
+    .rule { border:0;border-top:1px solid var(--line);margin:0; }
+    .sectionlead {display:flex;align-items:center;justify-content:space-between;gap:16px; margin:30px 0 24px;}
+    .sectionlead h2 {font:700 40px/1.2 'Seloryn Font';margin:7px 0 0;}
+    .sectionlead p {font-size:12px;color:var(--muted);margin:0;}
+    .project { display:grid;grid-template-columns:minmax(0,1.75fr) minmax(250px,.88fr); gap:0; background:#0c1812; border:1px solid var(--line);border-radius:12px;overflow:hidden; }
+    .codecol {min-width:0;border-right:1px solid var(--line)}
+    .project-head {display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 25px;border-bottom:1px solid var(--line);}
+    .filename {font:700 21px/1.1 'Seloryn Font',sans-serif;color:#e6f3ea;}
+    .filetag {font-size:11px;letter-spacing:.12em;color:var(--green)}
+    pre {margin:0;padding:31px 26px 38px;overflow-x:auto;font:400 20px/1.85 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre;tab-size:4;min-height:312px;letter-spacing:.015em;}
+    code { font:inherit; }
+    .kw {color:#59e6bd;font-weight:700}.tt {color:#a8d7c6}.num {color:#f1dec1}.func {color:#eff8f0}.line-comment {color:var(--muted)}
+    .sourcefoot {border-top:1px solid var(--line);color:var(--muted);font-size:11px;padding:15px 26px;display:flex;justify-content:space-between;align-items:center;gap:20px;}
+    .sourcefoot a {color:var(--green);text-underline-offset:3px;text-decoration-color:#255d4b}
+    .side { padding:30px 30px;display:flex;flex-direction:column;gap:30px; }
+    .side-label {color:var(--green);font-size:11px;letter-spacing:.17em;font-weight:700;}
+    .side h3 {font:700 36px/1.2 'Seloryn Font';margin:15px 0 13px;color:var(--text)}
+    .side p {color:#9caf9f;font:300 18px/1.45 'Seloryn Font';margin:0;}
+    .command {margin-top:auto;border-top:1px solid var(--line);padding-top:24px;}
+    .command code {font:400 15px/1.6 ui-monospace,Consolas,monospace;color:#dae6dd;display:block;overflow-wrap:anywhere;margin-top:13px;}
+    .typesection {padding:62px 0 95px;}
+    .typenav {display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:26px;}
+    .controls {display:flex;align-items:center;gap:11px;flex-wrap:wrap;}
+    button {appearance:none;border:1px solid var(--line);color:var(--text);background:transparent;padding:11px 16px;border-radius:50px;font:300 17px 'Seloryn Font';cursor:pointer}
+    button[aria-pressed="true"] {background:var(--green);border-color:var(--green);color:var(--bg);font-weight:700;}
+    label {color:var(--muted);font-size:12px;display:flex;align-items:center;gap:9px}
+    input[type=range] {accent-color:var(--green);width:120px;}
+    textarea {width:100%;min-height:151px;padding:18px 0 28px;border:0;border-bottom:1px solid var(--line);outline:0;resize:vertical;background:transparent;color:var(--green);font:700 84px/1.3 'Seloryn Font';overflow-wrap:anywhere;letter-spacing:.005em;}
+    .alphabets {display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:32px;}
+    .alphabets p {color:var(--muted);letter-spacing:.13em;font-size:11px;font-weight:700}
+    .alphabet {font:300 29px/1.65 'Seloryn Font';overflow-wrap:anywhere;color:var(--text);}
+    .alphabet.heavy {font-weight:700;color:var(--green)}
+    footer {border-top:1px solid var(--line);padding:24px 0 39px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;color:#a1b9ac;font-size:11px;letter-spacing:.08em;}
+    footer a {color:var(--green);text-decoration:none;}
+    @media (max-width:900px){.shell{width:calc(100% - 42px)}.right{gap:16px}.project{grid-template-columns:1fr}.codecol{border-right:0;border-bottom:1px solid var(--line)}.side{gap:19px}.alphabets{grid-template-columns:1fr}.intro{align-items:flex-start;flex-direction:column}.badges{justify-content:flex-start}pre{font-size:17px}h1{font-size:100px}}
+    @media (max-width:560px){.nav{min-height:80px}.symbol{height:38px;width:38px}.brand-text{font-size:28px}.right>a{display:none}.hero{padding-top:48px}.headline{font-size:31px}h1{font-size:67px}.sectionlead{align-items:flex-start;flex-direction:column}.sectionlead h2{font-size:34px}.sectionlead p{margin:0}.project-head,.sourcefoot{padding-inline:15px}pre{padding-inline:14px;font-size:15px}.side{padding:20px}.typesection{padding-block:45px}textarea{font-size:49px;min-height:115px}.alphabet{font-size:26px}}
+  </style>
+</head>
+<body>
+<header class="top"><nav class="shell nav" aria-label="Principal">
+  <a class="brand" href="#inicio"><img class="symbol" src="./seloryn-symbol.svg" alt="Símbolo oficial Seloryn"><span class="brand-text">Seloryn</span></a>
+  <div class="right"><a href="#exemplo">Exemplo real</a><a href="#fonte">Tipografia</a><a href="https://github.com/marcosbuilds/Seloryn" target="_blank" rel="noreferrer">GitHub</a><span class="version">Font 02</span></div>
+</nav></header>
+<main class="shell" id="inicio">
+  <section class="hero" aria-labelledby="headline">
+    <div class="smalltag">SELORYN / IDENTIDADE TIPOGRÁFICA / EN + PT-BR</div>
+    <h1 id="headline">Seloryn</h1>
+    <p class="headline">A linguagem tem sua própria forma.</p>
+    <div class="intro">
+       <p class="copy">Uma tipografia feita para acompanhar o símbolo: duas correntes de curvas arredondadas, aberturas com intenção e espessuras que respiram. Aplicação ilustrativa sobre um exemplo verdadeiro do projeto Seloryn.</p>
+       <div class="badges"><span class="little">LIGHT 300</span><span class="little">BOLD 700</span><span class="little">138 GLIFOS / EN + PT-BR</span></div>
+    </div>
+  </section>
+  <hr class="rule">
+  <section id="exemplo" aria-labelledby="example-h">
+    <div class="sectionlead"><div><div class="smalltag">01 / APLICAÇÃO REAL</div><h2 id="example-h">Código verificável.</h2></div><p>Programa .sely original do repositório público</p></div>
+    <div class="project">
+      <div class="codecol">
+        <div class="project-head"><span class="filename">tensor-matmul.sely</span><span class="filetag">SOURCE / .SELY</span></div>
+        <pre aria-label="Código Seloryn original"><code><span class="kw">fn</span> <span class="func">main</span>() -&gt; <span class="tt">Tensor[F32]</span>:
+    <span class="kw">let</span> left: <span class="tt">Tensor[F32]</span> = <span class="func">tensor_f32</span>([<span class="num">1.0</span>, <span class="num">2.0</span>, <span class="num">3.0</span>, <span class="num">4.0</span>], [<span class="num">2</span>, <span class="num">2</span>])
+    <span class="kw">let</span> right: <span class="tt">Tensor[F32]</span> = <span class="func">tensor_f32</span>([<span class="num">5.0</span>, <span class="num">6.0</span>, <span class="num">7.0</span>, <span class="num">8.0</span>], [<span class="num">2</span>, <span class="num">2</span>])
+    <span class="kw">return</span> <span class="func">matmul</span>(left, right)</code></pre>
+        <div class="sourcefoot"><span>EXAMPLES / TENSORS / CPU</span><a href="https://github.com/marcosbuilds/Seloryn/blob/master/examples/tensors/tensor-matmul.sely" target="_blank" rel="noreferrer">Ver fonte original no GitHub</a></div>
+      </div>
+      <aside class="side">
+        <div><div class="side-label">LÓGICA / EXECUÇÃO</div><h3>Duas matrizes.<br>Uma operação.</h3><p>Uma amostra verdadeira da linguagem, apresentada com a família Seloryn Font. O exemplo demonstra o uso de tensores e multiplicação de matrizes.</p></div>
+        <div class="command"><div class="side-label">COMANDO DOCUMENTADO</div><code>seloryn run examples/tensors/tensor-matmul.sely</code></div>
+      </aside>
+    </div>
+  </section>
+  <section id="fonte" class="typesection" aria-labelledby="type-h">
+    <div class="typenav"><div><div class="smalltag">02 / ALFABETO E PESOS</div><h2 id="type-h" style="font:700 40px/1.2 'Seloryn Font';margin:10px 0 0">Experimente a forma.</h2></div>
+    <div class="controls"><button id="light" type="button" aria-pressed="false">Light / 300</button><button id="bold" type="button" aria-pressed="true">Bold / 700</button><label for="scale">Tamanho <input type="range" id="scale" min="30" max="112" value="84"><output id="scaleout">84px</output></label></div></div>
+    <textarea id="testtext" spellcheck="false" aria-label="Digite o texto para testar a fonte">Seloryn. Código verificável.</textarea>
+    <div class="alphabets"><div><p>LIGHT / 300</p><div class="alphabet">ABCDEFGHIJKLM<br>NOPQRSTUVWXYZ<br>abcdefghijklmn<br>opqrstuvwxyz</div></div><div><p>BOLD / 700</p><div class="alphabet heavy">0123456789<br>á à â ã é ê í ó ô õ ú ç<br>Á À Â Ã É Ê Í Ó Ô Õ Ú Ç<br>fn main() -&gt; Tensor[F32]</div></div></div>
+  </section>
+</main>
+<footer class="shell"><span>SELORYN FONT / V2.0 / DESIGNED FOR ENGLISH &amp; PORTUGUÊS BRASILEIRO</span><span>Conceito de aplicação da fonte · Código real, interface demonstrativa</span></footer>
+<script>
+  const field=document.getElementById('testtext'), slider=document.getElementById('scale'), out=document.getElementById('scaleout');
+  function setWeight(w){field.style.fontWeight=w;document.getElementById('light').setAttribute('aria-pressed',String(w===300));document.getElementById('bold').setAttribute('aria-pressed',String(w===700));}
+  document.getElementById('light').addEventListener('click',()=>setWeight(300));
+  document.getElementById('bold').addEventListener('click',()=>setWeight(700));
+  slider.addEventListener('input',()=>{field.style.fontSize=slider.value+'px';out.value=slider.value+'px'});
+</script>
+</body>
+</html>

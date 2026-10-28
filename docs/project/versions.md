@@ -42,7 +42,8 @@ same language line.
 The installable package inventory is maintained separately in
 [`packages/catalog.toml`](../../packages/catalog.toml). It distinguishes the
 current local `0.12` candidates from the latest published runtime and extension
-previews; a local candidate must not be presented as an official download.
+previews and records the separate `seloryn-font` `2.0.0` experimental package;
+a local candidate must not be presented as an official download.
 
 Historical tags remain immutable. Runtime tags use `seloryn-vM.mm`; extension
 tags use `vscode-vM.m.P`. Those namespaces are retained for artifact tooling,

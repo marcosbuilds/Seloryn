@@ -23,3 +23,7 @@ are recorded in `../packages/catalog.toml`.
 
 The native setup embeds its font and artwork for the setup process. It does not
 install a system-wide font or claim that a public font installer exists.
+
+The separate installable brand-family candidate lives in
+`../packages/fonts/seloryn-font/`. It is experimental and does not replace the
+display/signature faces embedded by the native setup.

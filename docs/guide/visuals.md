@@ -9,6 +9,7 @@
 | `assets/diagrams/training-flow.png` | Design-only forward pass, gradient and optimizer flow; only narrow scalar/autograd and linear fixtures exist today | Original project raster diagram |
 | `assets/fonts/*` | Installer/display faces and their source/license metadata | Mixed project-owned and third-party assets; see [`assets/README.md`](../../assets/README.md) |
 | `assets/installer/*` | Native setup artwork | Original project assets |
+| `packages/fonts/seloryn-font/` | Experimental installable Seloryn Font family, Light 300 and Bold 700 | Supplied official candidate; see its [`package.toml`](../../packages/fonts/seloryn-font/package.toml) |
 | `theSVG` links | Distinguish outside vendors/services visually | External brand assets; not bundled |
 
 ### External SVG sourcing rule

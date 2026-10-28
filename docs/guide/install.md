@@ -31,6 +31,14 @@ The older PowerShell lifecycle script remains useful for development-only
 installation of an already-built binary. It is not the native setup artifact
 and does not create a release.
 
+## Experimental font package
+
+The supplied Seloryn Font v2.0 candidate is available at
+[`packages/fonts/seloryn-font/`](../../packages/fonts/seloryn-font/). Install the
+TTF files manually on a development machine; use the WOFF/WOFF2 files and
+`seloryn-font.css` for web previews. The package is proportional, covers
+English and Brazilian Portuguese, and is not a stable or published release.
+
 ## Native setup build and verification
 
 Run this on Windows with the Rust development toolchain:
