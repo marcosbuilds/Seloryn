@@ -1386,6 +1386,7 @@ mod windows_setup {
         path
     }
 
+    #[allow(clippy::too_many_arguments)]
     unsafe fn draw_round_rect(
         hdc: HDC,
         left: i32,
@@ -1493,6 +1494,7 @@ mod windows_setup {
         GdipDeleteGraphics(graphics);
     }
 
+    #[allow(clippy::too_many_arguments)]
     unsafe fn draw_text_line(
         hdc: HDC,
         font: HFONT,
