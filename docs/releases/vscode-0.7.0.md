@@ -6,7 +6,7 @@ identity and packaging gain; it does not claim a new language capability.
 
 Included:
 
-- the canonical public `assets/seloryn-symbol.svg` as the `.sely` file-icon
+- the canonical public `assets/brand/seloryn-symbol.svg` as the `.sely` file-icon
   source and the extension mark render;
 - a release verifier rule that prevents the extension package from advancing
   beyond the language compatibility line;
@@ -20,6 +20,6 @@ the marketplace-compatible render required by VS Code packaging.
 
 - `python scripts/release/verify-version.py`
 - `python tests/versioning_probe.py`
-- `npm test --prefix tooling/vscode`
-- `npm run test:cli --prefix tooling/vscode`
-- `npm run package --prefix tooling/vscode`
+- `npm test --prefix packages/vscode`
+- `npm run test:cli --prefix packages/vscode`
+- `npm run package --prefix packages/vscode`

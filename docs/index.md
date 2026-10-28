@@ -1,6 +1,6 @@
 # Documentation
 
-![Seloryn language flow](../assets/architecture-flow.png)
+![Seloryn language flow](../assets/diagrams/architecture-flow.png)
 
 The public documentation is deliberately short-named and categorized around
 Seloryn's AI-first mission: development, integration and serving with explicit

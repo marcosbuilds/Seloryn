@@ -1,8 +1,11 @@
 # Installation — Windows preview distribution
 
-There is no public download or stable runtime release yet. The repository now
-contains a native Windows x64 setup executable build path for the verified
-preview `0.12.0` runtime. The setup embeds the Rust runtime and native launcher,
+There is no public `0.12.0` download or stable runtime release yet. The latest
+published runtime preview is [`0.7.0`](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07);
+the complete package map and official download URLs are in
+[`packages/catalog.toml`](../../packages/catalog.toml). The repository also
+contains a native Windows x64 setup executable build path for the local
+verified preview `0.12.0` runtime. The setup embeds the Rust runtime and native launcher,
 installs them into isolated per-version directories, writes a hash-bound
 manifest, supports an explicit default-version choice, and can update only the
 current user's `PATH`. It does not require Python, Rust, Cargo, Git, or a

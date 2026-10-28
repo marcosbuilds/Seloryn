@@ -1,0 +1,54 @@
+schema = "seloryn.package-catalog.v1"
+updated = "2026-10-28"
+
+[runtime]
+kind = "runtime"
+source = "Cargo.toml"
+current_package = "0.12.0"
+current_channel = "verified-preview"
+current_status = "local-candidate"
+latest_published_package = "0.7.0"
+latest_published_tag = "seloryn-v0.07"
+latest_published_release = "https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07"
+download_windows_x64 = "https://github.com/marcosbuilds/Seloryn/releases/download/seloryn-v0.07/seloryn-runtime-0.7.0-windows-x64.zip"
+download_linux_x64 = "https://github.com/marcosbuilds/Seloryn/releases/download/seloryn-v0.07/seloryn-runtime-0.7.0-linux-x64.zip"
+download_macos_arm64 = "https://github.com/marcosbuilds/Seloryn/releases/download/seloryn-v0.07/seloryn-runtime-0.7.0-macos-arm64.zip"
+
+[vscode]
+kind = "extension"
+source = "vscode/package.json"
+current_package = "0.12.0"
+current_channel = "verified-preview"
+current_status = "local-candidate"
+latest_published_package = "0.4.0"
+latest_published_tag = "vscode-v0.4.0"
+latest_published_release = "https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.4.0"
+download_vsix = "https://github.com/marcosbuilds/Seloryn/releases/download/vscode-v0.4.0/seloryn-language-0.4.0.vsix"
+
+[windows_setup]
+kind = "installer"
+source = "../scripts/release/build-installer.ps1"
+current_package = "0.12.0"
+current_status = "local-candidate"
+latest_published_package = ""
+latest_published_release = ""
+download = ""
+
+[fonts.sora]
+kind = "font-source"
+asset = "../assets/fonts/sora-variable.ttf"
+license = "SIL Open Font License 1.1"
+source_url = "https://github.com/sora-xor/sora-font"
+source_revision = "7f9a9c5d0ccd1c099cfac420aa27133df1c5fdc4"
+download_variable_ttf = "https://raw.githubusercontent.com/sora-xor/sora-font/7f9a9c5d0ccd1c099cfac420aa27133df1c5fdc4/fonts/variable/Sora%5Bwght%5D.ttf"
+status = "third-party-scaffold"
+
+[fonts.seloryn_display]
+kind = "font"
+asset = "../assets/fonts/seloryn-display.ttf"
+status = "generated-display-face"
+
+[fonts.seloryn_signature]
+kind = "font"
+asset = "../assets/fonts/seloryn-signature-regular.ttf"
+status = "embedded-installer-face"

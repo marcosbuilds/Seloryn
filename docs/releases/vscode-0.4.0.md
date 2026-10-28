@@ -13,9 +13,9 @@ validation.
 
 ## Verification
 
-- `npm test --prefix tooling/vscode`
-- `npm run test:cli --prefix tooling/vscode`
-- `npm run package --prefix tooling/vscode`
+- `npm test --prefix packages/vscode`
+- `npm run test:cli --prefix packages/vscode`
+- `npm run package --prefix packages/vscode`
 - `python tests/mlp_training_probe.py`
 - `python tests/gpu_probe.py`
 

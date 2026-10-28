@@ -297,13 +297,13 @@ jobs:
           --
           python tests/gpu_training_probe.py
       - name: Install VS Code packaging dependencies
-        run: npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
+        run: npm ci --prefix packages/vscode --ignore-scripts --no-audit --no-fund
       - name: Build deterministic VSIX preview
-        run: npm run package --prefix tooling/vscode
+        run: npm run package --prefix packages/vscode
       - name: VS Code extension and CLI diagnostic integration
-        run: npm run test:cli --prefix tooling/vscode
+        run: npm run test:cli --prefix packages/vscode
       - name: VS Code extension metadata and API-double tests
-        run: npm test --prefix tooling/vscode
+        run: npm test --prefix packages/vscode
       - name: PowerShell 5.1 CLI smoke
         if: runner.os == 'Windows'
         shell: powershell

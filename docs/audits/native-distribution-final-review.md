@@ -42,7 +42,7 @@ tagged release and it is not code-signed.
 - The private display font is validated independently: all required UI
   codepoints have outlines, the generated face is deterministic, and the
   uppercase `S` retains two contours derived from the two centerlines in
-  `assets/seloryn-symbol.svg` with cap-height/advance checks.
+  `assets/brand/seloryn-symbol.svg` with cap-height/advance checks.
 - Runtime files live under `versions/<M.m.p>/bin/seloryn.exe` and are described
   by a hash-bound manifest. The root `bin` directory receives the default
   launcher and an exact versioned launcher such as `seloryn0.12.0.exe`.
@@ -60,7 +60,7 @@ tagged release and it is not code-signed.
 |---|---|
 | Rust regression | `cargo test --locked --all-targets -- --test-threads=1`: 101 core + 8 launcher + 8 setup + 37 CLI + 15 tensor tests passed |
 | Lint gate | `cargo clippy --locked --all-targets -- -D warnings`: passed |
-| Display font QA | `scripts/assets/test-seloryn-display-font.py assets/seloryn-display.ttf`: passed; 378 mapped codepoints; S=792×769; contours=2 |
+| Display font QA | `scripts/assets/test-seloryn-display-font.py assets/fonts/seloryn-display.ttf`: passed; 378 mapped codepoints; S=792×769; contours=2 |
 | Installer build gate | `scripts/release/build-installer.ps1 -OutputDirectory dist/installer-v9`: exit 0; embedded setup exit 0 |
 | Installed versioned launcher | `seloryn0.12.0 --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |
 | Installed default launcher | `seloryn --version`: exit 0; reported `seloryn 0.12 package=0.12.0` |

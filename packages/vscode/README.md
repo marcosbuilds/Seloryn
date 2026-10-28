@@ -60,13 +60,13 @@ small API double and exercise completion filtering, local symbol discovery,
 prompt bounds, generated-text sanitization and the empty-provider fallback:
 
 ```text
-npm test --prefix tooling/vscode
+npm test --prefix packages/vscode
 ```
 
 After a release CLI build, the real CLI bridge can be checked with:
 
 ```text
-npm run test:cli --prefix tooling/vscode
+npm run test:cli --prefix packages/vscode
 ```
 
 This fixture covers a saved path containing spaces and Unicode, CRLF input,
@@ -78,7 +78,7 @@ is a real `.sely` source file used by the extension test. With a local Seloryn
 development binary it can also be checked with:
 
 ```text
-seloryn check tooling/vscode/examples/extension-evidence.sely
+seloryn check packages/vscode/examples/extension-evidence.sely
 ```
 
 ## Local VSIX
@@ -101,13 +101,13 @@ The optional file-icon theme uses the canonical public Seloryn symbol for
 `.sely` files. VS Code Marketplace packaging rejects SVG files as the extension
 manifest icon, so the manifest uses a 128px PNG render of that same mark. The
 package test fails if the packaged SVG source diverges from
-`assets/seloryn-symbol.svg`.
+`assets/brand/seloryn-symbol.svg`.
 To show the Seloryn mark beside `.sely` files in the Explorer, select `Seloryn File Icons`
 from `Preferences: File Icon Theme`. The extension does not change the user's
 global icon-theme setting automatically.
 
 For an interactive VS Code check, open the repository as an extension
-development host with `tooling/vscode` as the extension directory. A real
+development host with `packages/vscode` as the extension directory. A real
 VS Code installation and a configured Language Model provider are required for
 visual highlighting and live ghost text; the repository does not claim that
 those external conditions were available in headless tests.

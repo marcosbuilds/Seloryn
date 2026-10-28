@@ -1,12 +1,14 @@
 # Visual references
 
-![Seloryn mark](../../assets/seloryn-symbol.svg)
+![Seloryn mark](../../assets/brand/seloryn-symbol.svg)
 
 | Asset | Purpose | Origin |
 |---|---|---|
-| `seloryn-symbol.svg` | Canonical language, runtime, extension and `.sely` file identity | Original project asset, canonical vector |
-| `architecture-flow.png` | Design pipeline from source to future runtime/backends; the bounded checker, interpreter and CPU tensor path exist today | Original project raster diagram |
-| `training-flow.png` | Design-only forward pass, gradient and optimizer flow; only narrow scalar/autograd and linear fixtures exist today | Original project raster diagram |
+| `assets/brand/seloryn-symbol.svg` | Canonical language, runtime, extension and `.sely` file identity | Original project asset, canonical vector |
+| `assets/diagrams/architecture-flow.png` | Design pipeline from source to future runtime/backends; the bounded checker, interpreter and CPU tensor path exist today | Original project raster diagram |
+| `assets/diagrams/training-flow.png` | Design-only forward pass, gradient and optimizer flow; only narrow scalar/autograd and linear fixtures exist today | Original project raster diagram |
+| `assets/fonts/*` | Installer/display faces and their source/license metadata | Mixed project-owned and third-party assets; see [`assets/README.md`](../../assets/README.md) |
+| `assets/installer/*` | Native setup artwork | Original project assets |
 | `theSVG` links | Distinguish outside vendors/services visually | External brand assets; not bundled |
 
 ### External SVG sourcing rule

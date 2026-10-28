@@ -521,7 +521,7 @@ def main() -> None:
     parser.add_argument(
         "--source",
         type=Path,
-        default=Path(__file__).resolve().parents[2] / "assets" / "Sora-wght.ttf",
+        default=Path(__file__).resolve().parents[2] / "assets" / "fonts" / "sora-variable.ttf",
     )
     args = parser.parse_args()
     build(args.source, args.output)

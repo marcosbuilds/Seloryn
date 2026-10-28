@@ -29,6 +29,43 @@ seloryn job run <job-id> [--owner=<owner>] [--binary=<seloryn>] [--root=<directo
 seloryn lsp --stdio
 ```
 
+### Terminal output and diagnostics
+
+Seloryn keeps one responsibility per stream:
+
+- `stdout` contains the command result and is safe to pipe to another tool.
+- `stderr` contains diagnostics and opt-in training events; it never changes a
+  successful program result.
+- `--format=json` is a complete machine-readable contract for success and
+  failure. A successful `check` returns one `seloryn.check.v1` envelope on
+  `stdout`; a failed check returns one `seloryn.analysis.v1` envelope on
+  `stderr` and no partial result.
+- Human diagnostics include a stable `SEL-*` code, source location, message and
+  help text. Operating-system failures are normalized to portable phrases such
+  as `path not found` and `permission denied`, instead of leaking the local
+  Windows language into automation.
+
+Invalid command lines identify the received arguments and print the exact
+usage for that command. For example, `seloryn lsp` explains that the required
+form is `seloryn lsp --stdio`; `seloryn build project` explains that both
+`--profile` and `--output` are required. `seloryn --help` remains the complete
+command index.
+
+`json2-signed` validates `SELORYN_RECEIPT_KEY` before starting execution. A
+missing or empty key fails immediately with `SEL-C006`; no training or
+checkpoint work is started. For redirected processes, consumers should drain
+`stdout` and `stderr` concurrently because the training stream is flushed as
+events are produced.
+
+### Installation consistency
+
+The versioned Windows launcher is the source of truth for the selected runtime.
+Use `seloryn versions` to inspect it and `seloryn use 0.12.0` to select the
+installed version. The native installer repairs the default launcher when a
+legacy binary has left it out of sync, while the development-only legacy
+installer refuses to overwrite a managed versioned installation. Restart a
+shell after changing `PATH`.
+
 The local `job` contract canonicalizes a bounded JSON spec and stores an
 event-authoritative state snapshot under `.seloryn/jobs/<job-id>`. Public
 `transition` is administrative only: it can move `accepted` to `queued`, but

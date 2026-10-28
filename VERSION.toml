@@ -34,7 +34,7 @@ evidence = "src/tensor_autograd.rs; examples/projects/self-hosted-linear; tests/
 id = "N6-RELIABLE-TRAINING-AND-GPU-PROBE"
 language = "0.04"
 summary = "Hardened CPU MLP resume/training evidence plus physical-host non-fallback GPU compute/readback probe"
-evidence = "src/runtime.rs; src/gpu.rs; tests/mlp_training_probe.py; tests/gpu_probe.py; tooling/vscode"
+evidence = "src/runtime.rs; src/gpu.rs; tests/mlp_training_probe.py; tests/gpu_probe.py; packages/vscode"
 
 [[gains]]
 id = "N7-STRICT-PROJECT-MANIFESTS"
@@ -59,35 +59,35 @@ id = "EXT-N3B-TENSOR-AUTODIFF"
 language = "0.01"
 package = "0.1.0"
 summary = "Initial Seloryn editor preview with .sely association, syntax highlighting, completions and CLI diagnostics"
-evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.1.0.md"
+evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; docs/releases/vscode-0.1.0.md"
 
 [[extension_gains]]
 id = "EXT-N4-CPU-MLP-TRAINING"
 language = "0.02"
 package = "0.2.0"
 summary = "Editor completions and snippets expose the verified bounded CPU MLP training workflow"
-evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.2.0.md"
+evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; docs/releases/vscode-0.2.0.md"
 
 [[extension_gains]]
 id = "EXT-N5-SELF-HOSTED-OPTIMIZATION"
 language = "0.03"
 package = "0.3.0"
 summary = "Editor completions and snippets expose the Seloryn-authored tensor optimization workflow"
-evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.3.0.md"
+evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; docs/releases/vscode-0.3.0.md"
 
 [[extension_gains]]
 id = "EXT-N6-TRAINING-HARDWARE-COMMANDS"
 language = "0.04"
 package = "0.4.0"
 summary = "VS Code terminal commands expose verified CPU training, physical device inventory and bounded GPU compute/readback evidence"
-evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/package.test.js; tooling/vscode/test/cli.integration.test.js; docs/releases/vscode-0.4.0.md"
+evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/package.test.js; packages/vscode/test/cli.integration.test.js; docs/releases/vscode-0.4.0.md"
 
 [[extension_gains]]
 id = "EXT-N9-CANONICAL-IDENTITY"
 language = "0.07"
 package = "0.7.0"
 summary = "The extension package, language id and .sely file icon use the canonical public Seloryn symbol and the release line follows language compatibility"
-evidence = "assets/seloryn-symbol.svg; tooling/vscode/assets/seloryn-icon-source.svg; tooling/vscode/assets/seloryn-icon.png; tooling/vscode/icons/seloryn-file-icon-theme.json; tooling/vscode/test/package.test.js; docs/project/versions.md"
+evidence = "assets/brand/seloryn-symbol.svg; packages/vscode/assets/seloryn-icon-source.svg; packages/vscode/assets/seloryn-icon.png; packages/vscode/icons/seloryn-file-icon-theme.json; packages/vscode/test/package.test.js; docs/project/versions.md"
 
 [[gains]]
 id = "N10-JSON-TYPED-ARRAY-INGESTION"
@@ -124,42 +124,42 @@ id = "EXT-N10-JSON-TYPED-ARRAY-INGESTION"
 language = "0.08"
 package = "0.8.0"
 summary = "Editor completions expose typed JSON array ingestion on the language 0.08 compatibility line"
-evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.8.0.md"
+evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; docs/releases/vscode-0.8.0.md"
 
 [[extension_gains]]
 id = "EXT-N11-LSP-CLIENT"
 language = "0.08"
 package = "0.8.1"
 summary = "VS Code uses the parser-backed LSP for unsaved diagnostics, completion and definition while retaining the CLI bridge as an explicit fallback"
-evidence = "tooling/vscode/lsp-client.js; tooling/vscode/extension.js; tooling/vscode/test/lsp.test.js; tooling/vscode/package.json; docs/releases/vscode-0.8.1.md"
+evidence = "packages/vscode/lsp-client.js; packages/vscode/extension.js; packages/vscode/test/lsp.test.js; packages/vscode/package.json; docs/releases/vscode-0.8.1.md"
 
 [[extension_gains]]
 id = "EXT-N12-MLP-BATCH-INFERENCE"
 language = "0.09"
 package = "0.9.0"
 summary = "VS Code exposes the verified batch-inference checkpoint workflow on the language 0.09 compatibility line"
-evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; docs/releases/vscode-0.9.0.md"
+evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; docs/releases/vscode-0.9.0.md"
 
 [[extension_gains]]
 id = "EXT-N13-SELF-HOSTED-CUSTOM-MLP"
 language = "0.10"
 package = "0.10.0"
 summary = "VS Code completions expose the source-owned custom MLP, persistence, progress and canonical GPU alias workflow on the language 0.10 line"
-evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; examples/projects/self-hosted-mlp; docs/releases/vscode-0.10.0.md"
+evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; examples/projects/self-hosted-mlp; docs/releases/vscode-0.10.0.md"
 
 [[extension_gains]]
 id = "EXT-N14-SELF-HOSTED-LANGUAGE-MODEL"
 language = "0.11"
 package = "0.11.0"
 summary = "VS Code completions expose text-array JSON ingestion and the source-owned modular language-model workflow on the language 0.11 line"
-evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/test/extension.test.js; examples/projects/self-hosted-language-model; docs/releases/vscode-0.11.0.md"
+evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; examples/projects/self-hosted-language-model; docs/releases/vscode-0.11.0.md"
 
 [[extension_gains]]
 id = "EXT-N15-GENERIC-SELF-HOSTED-LANGUAGE-MODEL"
 language = "0.12"
 package = "0.12.0"
 summary = "VS Code completions expose fused cross-entropy and the runtime-sized source-owned language-model workflow on the language 0.12 line"
-evidence = "tooling/vscode/package.json; tooling/vscode/extension.js; tooling/vscode/syntaxes/seloryn.tmLanguage.json; docs/releases/vscode-0.12.0.md"
+evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/syntaxes/seloryn.tmLanguage.json; docs/releases/vscode-0.12.0.md"
 
 [[runtime_gains]]
 id = "R1-WORKSPACE-CONTRACTS"

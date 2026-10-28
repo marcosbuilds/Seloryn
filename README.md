@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/seloryn-symbol.svg" alt="Seloryn symbol" width="88" height="88" />
+  <img src="assets/brand/seloryn-symbol.svg" alt="Seloryn symbol" width="88" height="88" />
   <h1>Seloryn</h1>
   <p><strong>Readable logic. Real computation.</strong></p>
   <p>A documented original programming language design for reliable AI systems.</p>
@@ -17,13 +17,13 @@ local-inference benchmark](docs/benchmarks/auditable-local-inference.md).
 ## Public preview artifacts
 
 - [Seloryn runtime 0.7.0 / language 0.07](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07): the last published runtime line.
-- [Seloryn VS Code extension package 0.12.0](tooling/vscode): local candidate with syntax highlighting, parser-backed LSP diagnostics/completion/definition, source-owned MLP and language-model completions, CLI fallback and `.sely` file icons on the language `0.12` line. Marketplace publication is pending.
+- [Seloryn VS Code extension package 0.12.0](packages/vscode): local candidate with syntax highlighting, parser-backed LSP diagnostics/completion/definition, source-owned MLP and language-model completions, CLI fallback and `.sely` file icons on the language `0.12` line. Marketplace publication is pending.
 
 These are verified previews, not a stable ABI or a claim of GPU tensor/MLP
 training, distributed execution, package registry, HTTP runtime or a general
 model framework.
 
-![Seloryn architecture](assets/architecture-flow.png)
+![Seloryn architecture](assets/diagrams/architecture-flow.png)
 
 ## What exists today vs. what is designed
 
@@ -50,8 +50,8 @@ instead of gaining features by default.
 | Typed tensor reads and lossless dtype conversion | Experimental N1 implementation | `tensor_get_f32` / `tensor_get_i64`, `tensor_to_f32` / `tensor_to_i64`, bounds and dtype regressions in [`tests/tensor_cpu.rs`](tests/tensor_cpu.rs) |
 | Deterministic core IR and execution boundary | Experimental implemented | `src/ir.rs`, runtime parity tests; bounded subset only |
 | Local modules and strict project manifests | Experimental implemented | Public project fixtures, real TOML parsing and future-language rejection; no registry or external package resolver |
-| VS Code syntax highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and optional `.sely` file icons | Verified editor preview | [`tooling/vscode`](tooling/vscode); headless transport/controller tests, real CLI fixture and reproducible local VSIX; Explorer rendering remains environment-dependent |
-| `seloryn lsp --stdio` diagnostics, completion, definition and document symbols | Initial LSP v1 verified locally and wired to VS Code | [`src/lsp.rs`](src/lsp.rs), [`tooling/vscode/lsp-client.js`](tooling/vscode/lsp-client.js), [`tests/lsp_probe.py`](tests/lsp_probe.py); indexed analysis, incremental parsing and rename remain future |
+| VS Code syntax highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and optional `.sely` file icons | Verified editor preview | [`packages/vscode`](packages/vscode); headless transport/controller tests, real CLI fixture and reproducible local VSIX; Explorer rendering remains environment-dependent |
+| `seloryn lsp --stdio` diagnostics, completion, definition and document symbols | Initial LSP v1 verified locally and wired to VS Code | [`src/lsp.rs`](src/lsp.rs), [`packages/vscode/lsp-client.js`](packages/vscode/lsp-client.js), [`tests/lsp_probe.py`](tests/lsp_probe.py); indexed analysis, incremental parsing and rename remain future |
 | JSON read/parse/encode/get and bounded file capability | Experimental implemented | JSON project fixtures; paths remain root-confined |
 | Typed JSON number-array ingestion into `List[I64]` / `List[F64]` | **Verified language gain** | [`examples/projects/json-array-pipeline`](examples/projects/json-array-pipeline), [`tests/json_array_probe.py`](tests/json_array_probe.py); bounded by runtime list limits |
 | Hash-validated bounded CPU MLP checkpoint batch inference | **Verified language gain** | [`examples/projects/mlp-inference`](examples/projects/mlp-inference), [`tests/mlp_inference_probe.py`](tests/mlp_inference_probe.py); CPU-only, bounded inputs, no serving ABI |

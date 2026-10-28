@@ -1,10 +1,12 @@
 # Editor support
 
-The public repository contains a verified-preview VS Code extension release at
-[`tooling/vscode`](../../tooling/vscode). It supports the current bounded
-language surface and can be packaged as a local VSIX. It is not a complete
-Language Server Protocol implementation and is not a release of the Seloryn
-runtime.
+The public repository contains the verified-preview VS Code extension source at
+[`packages/vscode`](../../packages/vscode). The latest published extension is
+[`vscode-v0.4.0`](https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.4.0);
+the current `0.12.0` package is a local candidate until a matching GitHub
+Release is published. It supports the current bounded language surface and can
+be packaged as a local VSIX. It is not a complete Language Server Protocol
+implementation and is not a release of the Seloryn runtime.
 
 It provides:
 
@@ -30,15 +32,15 @@ suggestion. It never presents a local fallback as AI-generated text.
 The extension's independent Node tests run without VS Code:
 
 ```text
-npm test --prefix tooling/vscode
+npm test --prefix packages/vscode
 ```
 
 Build and install the local editor preview with:
 
 ```text
-npm ci --prefix tooling/vscode
-npm run package --prefix tooling/vscode
-code --install-extension tooling/vscode/seloryn-language-0.12.0.vsix
+npm ci --prefix packages/vscode
+npm run package --prefix packages/vscode
+code --install-extension packages/vscode/seloryn-language-0.12.0.vsix
 ```
 
 In VS Code, choose `Seloryn File Icons` from `Preferences: File Icon Theme` to
@@ -61,7 +63,7 @@ rendering and live model-provider behavior; those checks are not claimed here.
 After building the release CLI, the real integration fixture can be run with:
 
 ```text
-npm run test:cli --prefix tooling/vscode
+npm run test:cli --prefix packages/vscode
 ```
 
 It invokes the binary with an argument vector against a saved `.sely` file whose

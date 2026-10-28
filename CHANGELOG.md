@@ -129,5 +129,5 @@ not a promise that GitHub publication already happened.
 - `vscode-v0.4.0`, `vscode-v0.3.0`, `vscode-v0.2.0` and `vscode-v0.1.0`
   remain preserved as prerelease history. They are not relabeled to hide
   their earlier compatibility lines. The current local candidate is tracked
-  in `tooling/vscode/package.json`; historical tags are not candidates for the
+  in `packages/vscode/package.json`; historical tags are not candidates for the
   current `0.12` compatibility line.

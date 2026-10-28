@@ -15,7 +15,7 @@ automatic differentiation** over an explicit computation graph, with leaf
 parameters, intermediate values, saved tensors and one derivative rule per
 differentiable primitive.
 
-![Gradient dataflow](../../assets/training-flow.png)
+![Gradient dataflow](../../assets/diagrams/training-flow.png)
 
 ### Target semantics
 

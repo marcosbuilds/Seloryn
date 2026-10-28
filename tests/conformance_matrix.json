@@ -335,8 +335,8 @@
     },
     {
       "id": "vscode-package",
-      "path": "tooling/vscode/package.json",
-      "command": ["npm", "run", "package", "--prefix", "tooling/vscode"],
+      "path": "packages/vscode/package.json",
+      "command": ["npm", "run", "package", "--prefix", "packages/vscode"],
       "suites": ["editor"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Node.js", "npm dependencies"],
@@ -344,8 +344,8 @@
     },
     {
       "id": "vscode-tests",
-      "path": "tooling/vscode/package.json",
-      "command": ["npm", "test", "--prefix", "tooling/vscode"],
+      "path": "packages/vscode/package.json",
+      "command": ["npm", "test", "--prefix", "packages/vscode"],
       "suites": ["editor"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Node.js", "npm dependencies"],
@@ -353,8 +353,8 @@
     },
     {
       "id": "vscode-cli-integration",
-      "path": "tooling/vscode/package.json",
-      "command": ["npm", "run", "test:cli", "--prefix", "tooling/vscode"],
+      "path": "packages/vscode/package.json",
+      "command": ["npm", "run", "test:cli", "--prefix", "packages/vscode"],
       "suites": ["editor"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Node.js", "npm dependencies", "release binary"],
@@ -641,12 +641,12 @@
       "area": "developer-experience",
       "claim": "Bounded parser-backed LSP lifecycle plus VS Code package and CLI integration evidence.",
       "status": "verified-preview",
-      "implementation": ["src/lsp.rs", "tooling/vscode", "tests/lsp_probe.py"],
+      "implementation": ["src/lsp.rs", "packages/vscode", "tests/lsp_probe.py"],
       "positive_probes": ["lsp", "vscode-package", "vscode-tests", "vscode-cli-integration"],
       "negative_probes": ["lsp", "vscode-cli-integration"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "Node.js", "npm dependencies", "release binary"],
-      "documentation": ["docs/project/status.md", "docs/guide/editor.md", "tooling/vscode/README.md"],
+      "documentation": ["docs/project/status.md", "docs/guide/editor.md", "packages/vscode/README.md"],
       "limits": ["Indexed/incremental analysis, rename and Marketplace publication remain outside this proof."]
     },
     {

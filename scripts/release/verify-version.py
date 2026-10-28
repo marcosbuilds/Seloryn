@@ -224,7 +224,7 @@ def validate(root: Path = ROOT) -> None:
     if not diagnostic_language or diagnostic_language.group(1) != current_language:
         fail("diagnostic/LSP language version does not match VERSION.toml")
 
-    extension = json.loads((root / "tooling" / "vscode" / "package.json").read_text(encoding="utf-8"))
+    extension = json.loads((root / "packages" / "vscode" / "package.json").read_text(encoding="utf-8"))
     if extension["version"] != extension_package:
         fail("VS Code package version does not match VERSION.toml")
 
@@ -233,7 +233,7 @@ def validate(root: Path = ROOT) -> None:
     if f'version = "{runtime_package}"' not in lock_block:
         fail("Cargo.lock does not match VERSION.toml")
 
-    npm_lock = json.loads((root / "tooling" / "vscode" / "package-lock.json").read_text(encoding="utf-8"))
+    npm_lock = json.loads((root / "packages" / "vscode" / "package-lock.json").read_text(encoding="utf-8"))
     if npm_lock["version"] != extension_package or npm_lock["packages"][""]["version"] != extension_package:
         fail("package-lock.json does not match VERSION.toml")
 
