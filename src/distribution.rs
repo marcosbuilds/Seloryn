@@ -653,7 +653,17 @@ fn replace_file(source: &Path, destination: &Path) -> Result<(), DistributionErr
 }
 
 fn contained_path(root: &Path, relative: &Path) -> Result<PathBuf, DistributionError> {
+    let raw = relative.as_os_str().to_string_lossy();
+    let has_windows_root = raw.starts_with('\\')
+        || raw.starts_with('/')
+        || raw.as_bytes().get(1).is_some_and(|byte| *byte == b':');
+    let has_windows_parent = raw
+        .split(['\\', '/'])
+        .any(|component| component == "..");
+
     if relative.is_absolute()
+        || has_windows_root
+        || has_windows_parent
         || relative.components().any(|component| {
             matches!(
                 component,
