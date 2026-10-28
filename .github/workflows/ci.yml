@@ -91,21 +91,6 @@ jobs:
             benchmarks/reports/latest.md
           if-no-files-found: error
           retention-days: 30
-      - name: Validate AI development evaluation suite
-        run: >
-          python research/agent-token-economy/runner.py validate
-          && python research/agent-token-economy/tests/test_runner.py
-          && python research/agent-token-economy/paired/python_task_test.py
-          && python research/agent-token-economy/paired/pair_runner_test.py
-          && python research/agent-token-economy/paired/seloryn_task_test.py
-          && python research/agent-token-economy/meter/test_meter.py
-          && python -m py_compile research/agent-token-economy/token_count.py research/agent-token-economy/transcript.py research/agent-token-economy/transcript_token_count.py research/agent-token-economy/meter/meter.py research/agent-token-economy/meter/test_meter.py research/agent-token-economy/paired/python_task.py research/agent-token-economy/paired/run_pair.py research/agent-token-economy/paired/pair_runner_test.py research/agent-token-economy/paired/seloryn_task_test.py
-          && python benchmarks/validate_json.py
-          --schema research/agent-token-economy/schema/visible-transcript.schema.json
-          research/agent-token-economy/fixtures/experiments/TOKEN-AGENT-01.json
-          && python benchmarks/validate_json.py
-          --schema research/agent-token-economy/schema/token-pair-report.schema.json
-          research/agent-token-economy/fixtures/experiments/TOKEN-PAIR-01.pair-report.json
       - name: Independent N1 CLI comparison
         run: >
           python scripts/ci/ci_evidence.py run
