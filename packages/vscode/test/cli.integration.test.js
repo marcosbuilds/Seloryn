@@ -30,7 +30,11 @@ try {
   });
   assert.equal(valid.error, undefined);
   assert.equal(valid.status, 0);
-  assert.match(valid.stdout, /checked /u);
+  const validPayload = JSON.parse(valid.stdout);
+  assert.equal(validPayload.schema, 'seloryn.check.v1');
+  assert.equal(validPayload.checked, true);
+  assert.equal(validPayload.status, 'ok');
+  assert.equal(validPayload.path, sourcePath);
   assert.equal(valid.stderr, '');
 
   const invalidSource = 'fn main() -> Unit:\r\n    if 1:\r\n        return\r\n';
