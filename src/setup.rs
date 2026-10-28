@@ -7,13 +7,20 @@ fn main() {
 }
 
 #[cfg(windows)]
+#[allow(dead_code)]
+#[path = "distribution.rs"]
+mod distribution;
+
+#[cfg(windows)]
+#[allow(dead_code)]
+#[path = "json.rs"]
+mod json;
+
+#[cfg(windows)]
 mod windows_setup {
     #![allow(dead_code, unsafe_op_in_unsafe_fn)]
 
-    #[path = "../distribution.rs"]
-    mod distribution;
-    #[path = "../json.rs"]
-    mod json;
+    use super::distribution;
 
     include!(concat!(env!("OUT_DIR"), "/installer_payload.rs"));
 
@@ -971,12 +978,6 @@ mod windows_setup {
         SetTextColor(hdc, color);
         if control == (*pointer).path || control == (*pointer).log {
             (*pointer).input_brush as LRESULT
-        } else if control == (*pointer).path_label
-            || control == (*pointer).add_path
-            || control == (*pointer).make_default
-            || control == (*pointer).clean_previous
-        {
-            (*pointer).background_brush as LRESULT
         } else {
             (*pointer).background_brush as LRESULT
         }
@@ -1058,8 +1059,6 @@ mod windows_setup {
             } else {
                 mix_color(CTA, CTA_HOVER, hover_amount)
             }
-        } else if selected {
-            SURFACE_RAISED
         } else {
             SURFACE_RAISED
         };
@@ -1095,8 +1094,6 @@ mod windows_setup {
             item.hDC,
             if disabled {
                 TEXT_SECONDARY
-            } else if primary {
-                TEXT_PRIMARY
             } else {
                 TEXT_PRIMARY
             },
