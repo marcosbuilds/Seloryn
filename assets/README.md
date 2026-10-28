@@ -5,25 +5,23 @@ their package when the packaging tool requires a self-contained archive.
 
 ```text
 assets/
-├── brand/       canonical Seloryn identity vectors
+├── brand/       canonical Seloryn wordmark and symbol vectors
 ├── diagrams/    public architecture and training diagrams
 ├── fonts/       project faces and the licensed Sora source family
 └── installer/   native setup artwork
 ```
 
-The two Seloryn font files have different responsibilities: `seloryn-display`
-is the generated display face used by the font QA path, while
-`seloryn-signature-regular` is the supplied installer face. They are not
-merged because they have different glyph sets, metadata and runtime roles.
-`sora-variable.ttf` is not a Seloryn font; it is the OFL-licensed source family
-used as the scaffold for the generated display face. Its license is kept beside
-the font in `fonts/sora-ofl.txt`. The vendored variable file matches upstream
-commit `7f9a9c5d0ccd1c099cfac420aa27133df1c5fdc4`; its source and download URL
-are recorded in `../packages/catalog.toml`.
+`brand/seloryn-logo.svg` is the complete identity lockup: official S plus the
+Seloryn wordmark. Use it whenever the product name is being presented. The
+isolated `brand/seloryn-symbol.svg` is reserved for app/extension marks, compact
+avatars and short visual references.
+
+`fonts/seloryn-font-light.ttf` and `fonts/seloryn-font-bold.ttf` are the v2
+Seloryn Font supplied with the installer redesign. The WinUI frontend uses the
+light face for readable copy and the bold face for the wordmark/display tier;
+the headless/native fallback embeds the same pair. The old generated display
+face and Sora remain vendored only for compatibility with unrelated existing
+assets and are no longer the modern installer typography.
 
 The native setup embeds its font and artwork for the setup process. It does not
 install a system-wide font or claim that a public font installer exists.
-
-The separate installable brand-family candidate lives in
-`../packages/fonts/seloryn-font/`. It is experimental and does not replace the
-display/signature faces embedded by the native setup.

@@ -1,6 +1,5 @@
 <div align="center">
-  <img src="assets/brand/seloryn-symbol.svg" alt="Seloryn symbol" width="88" height="88" />
-  <h1>Seloryn</h1>
+  <img src="assets/brand/seloryn-logo.svg" alt="Seloryn" width="320" />
   <p><strong>Readable logic. Real computation.</strong></p>
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>

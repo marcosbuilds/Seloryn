@@ -2,6 +2,11 @@
 
 Review date: 2026-10-26
 
+> Historical record for the native 0.12.0 preview evaluated on this date. The
+> current Windows installer is the experimental-beta WinUI package documented
+> in [`docs/guide/install.md`](../guide/install.md); this audit's artifact
+> identity and verdict are intentionally preserved as historical evidence.
+
 ## Evidence identity
 
 The artifact was built from the working tree based on

@@ -19,13 +19,15 @@ fn main() {
     println!("cargo:rerun-if-env-changed=SELORYN_RUNTIME_PAYLOAD");
     println!("cargo:rerun-if-env-changed=SELORYN_LAUNCHER_PAYLOAD");
     println!("cargo:rerun-if-env-changed=SELORYN_FONT_PAYLOAD");
+    println!("cargo:rerun-if-env-changed=SELORYN_BODY_FONT_PAYLOAD");
     println!("cargo:rerun-if-env-changed=SELORYN_PACKAGE_IMAGE_PAYLOAD");
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo sets OUT_DIR"));
     let payload = format!(
-        "{}{}{}{}",
+        "{}{}{}{}{}",
         embedded_bytes("SELORYN_RUNTIME_PAYLOAD", "RUNTIME_PAYLOAD"),
         embedded_bytes("SELORYN_LAUNCHER_PAYLOAD", "LAUNCHER_PAYLOAD"),
         embedded_bytes("SELORYN_FONT_PAYLOAD", "DISPLAY_FONT_PAYLOAD"),
+        embedded_bytes("SELORYN_BODY_FONT_PAYLOAD", "BODY_FONT_PAYLOAD"),
         embedded_bytes("SELORYN_PACKAGE_IMAGE_PAYLOAD", "PACKAGE_IMAGE_PAYLOAD")
     );
     fs::write(out_dir.join("installer_payload.rs"), payload)

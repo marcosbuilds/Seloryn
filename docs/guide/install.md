@@ -1,25 +1,27 @@
 # Installation — Windows preview distribution
 
-There is no public `0.12.0` download or stable runtime release yet. The latest
+There is no public stable runtime or installer version yet. The latest
 published runtime preview is [`0.7.0`](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07);
 the complete package map and official download URLs are in
 [`packages/catalog.toml`](../../packages/catalog.toml). The repository also
-contains a native Windows x64 setup executable build path for the local
-verified preview `0.12.0` runtime. The setup embeds the Rust runtime and native launcher,
+contains an experimental Windows-only beta setup package for the current local
+runtime preview. The setup embeds the Rust runtime and native launcher,
 installs them into isolated per-version directories, writes a hash-bound
 manifest, supports an explicit default-version choice, and can update only the
 current user's `PATH`. It does not require Python, Rust, Cargo, Git, or a
 network connection after the executable has been built.
 
-The candidate artifact is produced by
+The experimental beta artifact is produced by
 [`scripts/release/build-installer.ps1`](../../scripts/release/build-installer.ps1)
-as `SelorynSetup-0.12.0-windows-x64.exe`. The build gate executes that artifact
+as `SelorynSetup-experimental-beta-windows-x64.zip`. There is intentionally no
+public installer version number yet. Extract the ZIP and run `SelorynSetup.exe`;
+the build gate executes the separate headless backend
 against a fresh install root and verifies the installed runtime, manifest hash,
 versioned launcher, default launcher dispatch, and `seloryn versions`. This is
 local evidence for a preview artifact, not a public release or a code-signed
 distribution.
 
-The native setup UI defaults to the per-user install directory, adds the
+The WinUI setup UI defaults to the per-user install directory, adds the
 per-user `PATH` only when selected, and makes `0.12.0` the default only when
 selected. Existing version directories are never overwritten by a different
 payload. The native launcher validates the manifest and runtime hash before
@@ -49,8 +51,8 @@ Run this on Windows with the Rust development toolchain:
 .\scripts\release\build-installer.ps1
 ```
 
-The generated installer is a self-contained Windows x64 executable. Run it
-from Explorer or a shell, choose the installation directory, select PATH and
+The generated package is a self-contained Windows x64 beta ZIP. Extract it,
+run `SelorynSetup.exe` from Explorer, choose the installation directory, select PATH and
 default-version behavior explicitly, and press **Install**. Open a new shell
 after a PATH change. The installed commands include:
 

@@ -1,53 +1,64 @@
-# Native installer visual and interaction design
+# Seloryn installer visual and interaction design
 
-The Windows setup is a fixed-size native wizard for the current `0.12.0`
-verified preview. Its client area is `880 × 560` pixels and its window style
-does not expose a resize frame or maximize button. The fixed geometry is
-intentional: it prevents the old absolute-positioned controls from shrinking
-below their content and makes the visual panel and operational panel stable.
+The user-facing Windows setup is a WinUI 3/XAML application built with the
+Windows App SDK and C#/.NET. It is deliberately a compact, fixed-size wizard
+instead of a custom-painted Win32 form. The renderer is the Windows compositor,
+so text, SVG images, controls, focus states and antialiasing remain crisp at
+100%, 125% and 150% scale.
+
+## Runtime boundary
+
+The frontend lives in `installer-ui/`. It owns the visual system, navigation,
+folder picker, keyboard-accessible controls and progress presentation. The
+Rust `seloryn-setup` binary remains the transactional installer backend. The
+release build embeds that backend as `Assets/seloryn-setup-backend.exe` and
+invokes it with `--headless-progress`; the frontend parses real progress events
+instead of simulating a timer.
+
+The shipped modern build is an unpackaged, self-contained WinUI app folder
+distributed as a ZIP. This keeps the Windows App SDK native runtime beside the
+entrypoint and avoids a fragile single-file binary that would be hundreds of
+megabytes after native self-extraction. The release also emits a separate
+headless executable for CI and recovery workflows.
 
 ## Visual system
 
-The left side uses the Seloryn palette: `#06110E` background, `#0E2520`
-surfaces, `#34CCA7` primary accent, `#148874` secondary accent, `#F1F7F4`
-primary text and `#B1C9C1` secondary text. The right side is a fixed `300px`
-brand panel with a white surface and the official two-strand symbol geometry
-from `assets/brand/seloryn-symbol.svg`, drawn directly by the native UI. The panel
-uses only restrained linework, a rounded plate and the logo; there is no
-external background artwork to stretch or crop. The left side contains only
-setup controls and state; the panel carries the identity and runtime metadata.
+The canvas is absolute black `#000000`, with near-black green surfaces,
+white/mint text and a restrained Seloryn green accent. The actual
+`assets/brand/seloryn-logo.svg` is used wherever the product name is presented;
+the isolated `assets/brand/seloryn-symbol.svg` is kept for compact app/mark
+contexts. No logo is redrawn by hand. The v2 `Seloryn Font` files supplied in
+`assets/fonts/seloryn-font-light.ttf` and `assets/fonts/seloryn-font-bold.ttf`
+drive the frontend's copy and display tiers. Nothing is installed system-wide.
 
-`assets/fonts/seloryn-signature-regular.ttf` is the display face supplied for the
-installer. It is loaded with `AddFontMemResourceEx` and removed when the setup
-exits; it is never installed into Windows. Body copy and logs remain on system
-UI/monospace faces for readability.
+Three hairline Bézier flows sit behind the content at very low contrast. They
+reuse the same split-flow vocabulary as the mark. Their eased dash-offset
+animations continuously travel forward and back at different durations, while
+the complete wordmark keeps a short entry reveal. The motion is decorative,
+pointer-transparent and deliberately quiet behind the actual content.
 
-`assets/installer/seloryn-folder.svg` defines the folder icon geometry. The Win32 setup
-draws the same small vector shape in the directory button because stock Win32
-controls do not render SVG directly.
+The layout has one controlled scroll region: the installation log. Welcome,
+location and done stages fit their fixed client area, so content is not hidden
+below an unscrollable card. Checkbox controls are native WinUI controls with
+real toggle state and keyboard focus. Progress is driven by backend events and
+shows the percentage beside the live status.
 
 ## Staged flow
 
-1. **Welcome** — shows runtime, language, target and preview channel.
-2. **Location** — shows the preselected per-user path, a real folder chooser,
-   PATH/default options and an explicit checkbox to clean previous registered
-   runtime versions or preserve them side by side. Cleanup never touches user
-   projects.
-3. **Install** — runs the existing Rust transaction on a worker thread and
-   streams typed progress events into a read-only log. The UI thread stays on
-   the message loop.
-4. **Done** — is a failure/retry fallback. On successful verification the setup
-   closes and starts a new `cmd.exe` with `seloryn --version` on the freshly
-   installed `bin` path.
+1. **Welcome** — identifies the verified Seloryn runtime and install model.
+2. **Location** — chooses a per-user root and exposes PATH, default-runtime and
+   cleanup options. Cleanup only removes registered Seloryn versions; projects
+   are preserved.
+3. **Install** — streams the Rust transaction into a readable monospace log.
+4. **Done** — confirms the final path and lets the user explicitly open a new
+   terminal. No terminal is forced open after installation.
 
-Progress values advance only after real payload, manifest, post-install and
-PATH operations report completion. A failed worker event stays visible in the
-log and exposes retry without hiding the error.
+## Build and validation
 
-## Scope and limits
-
-This is an initial app-only typeface and a one-runtime setup flow. It does not
-claim a complete Seloryn brand family, system-wide font installation,
-multiversion selection UI or clean-machine compatibility. The next visual gate
-is to exercise the built executable at 100%, 125% and 150% Windows scale and
-capture the real wizard states before calling the UI polished.
+`scripts/release/build-installer.ps1` builds the Rust payloads, publishes the
+WinUI frontend with the .NET SDK on `D:\Toolchains\dotnet`, creates the
+Windows-only `SelorynSetup-experimental-beta-windows-x64.zip`, and validates the
+separate headless backend. The output manifest labels this as an experimental
+beta without public installer versioning, identifies `SelorynSetup.exe` as the
+modern entry point and records the ZIP hash. The embedded runtime keeps its
+internal compatibility package metadata for the install transaction.

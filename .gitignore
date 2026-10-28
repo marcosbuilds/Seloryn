@@ -12,6 +12,9 @@ Thumbs.db
 __pycache__/
 target/
 dist/
+assets/fonts/font-kit-*/
+ui-install-test-*/
+installer-ui/*-preview.png
 build/
 .cache/
 .ci-evidence/
