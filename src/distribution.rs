@@ -657,9 +657,7 @@ fn contained_path(root: &Path, relative: &Path) -> Result<PathBuf, DistributionE
     let has_windows_root = raw.starts_with('\\')
         || raw.starts_with('/')
         || raw.as_bytes().get(1).is_some_and(|byte| *byte == b':');
-    let has_windows_parent = raw
-        .split(['\\', '/'])
-        .any(|component| component == "..");
+    let has_windows_parent = raw.split(['\\', '/']).any(|component| component == "..");
 
     if relative.is_absolute()
         || has_windows_root
