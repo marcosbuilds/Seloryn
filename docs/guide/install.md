@@ -29,7 +29,9 @@ thread and streams real stage messages into its log.
 
 The older PowerShell lifecycle script remains useful for development-only
 installation of an already-built binary. It is not the native setup artifact
-and does not create a release.
+and does not create a release. It refuses install, uninstall and rollback
+operations when the target already contains native versioned-install state;
+use the native setup or the versioned `seloryn` commands for that root.
 
 ## Experimental font package
 

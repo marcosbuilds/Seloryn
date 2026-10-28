@@ -6,7 +6,10 @@ mod json;
 use distribution::{DistributionError, InstalledVersion};
 use std::env;
 use std::ffi::OsString;
+use std::path::Path;
 use std::process::{Command, ExitCode};
+
+const LAUNCHER_HELP: &str = "Seloryn version launcher\n\nUsage:\n  seloryn versions\n  seloryn use <runtime-version>\n  seloryn uninstall <runtime-version>\n  seloryn --help\n\nOther arguments are forwarded to the selected runtime.\n";
 
 fn main() -> ExitCode {
     match run() {
@@ -25,7 +28,23 @@ fn run() -> Result<u8, DistributionError> {
         .next()
         .unwrap_or_else(|| OsString::from("seloryn"));
     let remaining: Vec<OsString> = arguments.collect();
+    let management_launcher = Path::new(&program)
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case("seloryn-launcher"));
     match remaining.as_slice() {
+        [] if management_launcher => {
+            print!("{LAUNCHER_HELP}");
+            Ok(0)
+        }
+        [argument] if management_launcher && (argument == "--help" || argument == "-h") => {
+            print!("{LAUNCHER_HELP}");
+            Ok(0)
+        }
+        [argument] if management_launcher && argument == "--version" => {
+            println!("seloryn-launcher package={}", env!("CARGO_PKG_VERSION"));
+            Ok(0)
+        }
         [command, version] if command == "use" => {
             distribution::set_default(
                 &root,
@@ -49,6 +68,10 @@ fn run() -> Result<u8, DistributionError> {
             Ok(0)
         }
         [command] if command == "versions" => print_versions(&root),
+        _ if management_launcher => Err(DistributionError::new(
+            "SEL-D018",
+            "invalid launcher command; run seloryn-launcher --help",
+        )),
         _ => {
             let requested = distribution::invoked_version(&program)?;
             let installed = distribution::resolve_version(&root, requested.as_deref())?;

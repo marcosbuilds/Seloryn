@@ -404,7 +404,7 @@ pub fn install_runtime(
                 "version is already installed with different bytes",
             ));
         }
-        ensure_launchers(root, &version, launcher_bytes)?;
+        ensure_launchers(root, &version, launcher_bytes, set_default)?;
         let mut state = read_state(root)?;
         if !state.versions.contains(&version) {
             state.versions.push(version.clone());
@@ -455,7 +455,7 @@ pub fn install_runtime(
         let _ = fs::remove_dir_all(&staging);
         return Err(error.into());
     }
-    ensure_launchers(root, &version, launcher_bytes)?;
+    ensure_launchers(root, &version, launcher_bytes, set_default)?;
     let mut state = read_state(root)?;
     if !state.versions.contains(&version) {
         state.versions.push(version.clone());
@@ -474,21 +474,37 @@ fn ensure_launchers(
     root: &Path,
     version: &str,
     launcher_bytes: &[u8],
+    replace_default: bool,
 ) -> Result<(), DistributionError> {
     let bin_dir = root.join("bin");
     fs::create_dir_all(&bin_dir)?;
     let expected_hash = sha256_bytes(launcher_bytes);
-    for path in [launcher_path(root), versioned_launcher_path(root, version)?] {
-        if path.exists() {
-            if sha256_file(&path)? != expected_hash {
-                return Err(DistributionError::new(
-                    "SEL-D009",
-                    format!("existing launcher bytes differ at {}", path.display()),
-                ));
-            }
-        } else {
-            atomic_write(&path, launcher_bytes)?;
+    let versioned = versioned_launcher_path(root, version)?;
+    if versioned.exists() {
+        if sha256_file(&versioned)? != expected_hash {
+            return Err(DistributionError::new(
+                "SEL-D009",
+                format!("existing launcher bytes differ at {}", versioned.display()),
+            ));
         }
+    } else {
+        atomic_write(&versioned, launcher_bytes)?;
+    }
+
+    let default = launcher_path(root);
+    if replace_default {
+        if !default.exists() || sha256_file(&default)? != expected_hash {
+            atomic_write(&default, launcher_bytes)?;
+        }
+    } else if default.exists() {
+        if sha256_file(&default)? != expected_hash {
+            return Err(DistributionError::new(
+                "SEL-D009",
+                format!("existing launcher bytes differ at {}", default.display()),
+            ));
+        }
+    } else {
+        atomic_write(&default, launcher_bytes)?;
     }
     Ok(())
 }
@@ -797,6 +813,29 @@ mod tests {
         .expect("clear default");
         super::uninstall(&root, "0.12.0").expect("selective uninstall");
         assert!(read_state(&root).expect("state").versions.is_empty());
+        std::fs::remove_dir_all(root).expect("remove test root");
+    }
+
+    #[test]
+    fn selecting_a_default_repairs_a_stale_default_launcher() {
+        let root =
+            std::env::temp_dir().join(format!("seloryn-distribution-repair-{}", timestamp_nanos()));
+        install_runtime(&root, "0.12.0", "0.12", b"runtime", b"launcher", false)
+            .expect("initial install");
+        std::fs::write(super::launcher_path(&root), b"legacy-launcher")
+            .expect("write stale default launcher");
+
+        install_runtime(&root, "0.12.0", "0.12", b"runtime", b"launcher", true)
+            .expect("repair default launcher");
+
+        assert_eq!(
+            std::fs::read(super::launcher_path(&root)).expect("default launcher"),
+            b"launcher"
+        );
+        assert_eq!(
+            read_state(&root).expect("state").default_version,
+            Some("0.12.0".to_owned())
+        );
         std::fs::remove_dir_all(root).expect("remove test root");
     }
 }

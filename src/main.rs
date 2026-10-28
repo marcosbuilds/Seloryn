@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::{
@@ -131,6 +131,20 @@ pub(crate) const EXIT_DATA: u8 = 65;
 pub(crate) const EXIT_IO: u8 = 74;
 
 const HELP_TEXT: &str = "Seloryn — native CLI\n\nUsage:\n  seloryn --help\n  seloryn --version\n  seloryn devices [--format=human|json]\n  seloryn gpu-probe [--format=human|json]\n  seloryn doctor [project] [--format=human|json]\n  seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]\n  seloryn check <file.sely|project> [--format=human|json] [--quiet]\n  seloryn inspect <file.sely|project> [--format=human|json]\n  seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]\n  seloryn build <project> --profile debug|release --output <directory>\n  seloryn exec <bundle.selyapp|directory>\n  seloryn lsp --stdio\n\n`check` validates UTF-8, layout, syntax and the supported semantic core.\n`run` executes bounded scalar, CPU tensor, reverse-mode, Seloryn-authored, CPU MLP and bounded GPU linear training profiles.\n`run --format=json` writes a stable `{stdout,value}` result envelope to stdout on success.\n`from json import read_stdin` accepts one bounded JSON document from stdin.\n`--log` is off by default; `human` and `json` preserve the v1 training stream, `json2` adds an identity-bearing hash-chained receipt, and `json2-signed` adds HMAC-SHA256 authentication using `SELORYN_RECEIPT_KEY`.\n`devices` enumerates the compiled hardware adapters without selecting one for training.\n`gpu-probe` submits a bounded compute shader and verifies readback on a physical non-fallback adapter.\n`doctor` performs read-only project validation and reports production blockers; it never executes project code.\n`init` creates a validated project skeleton without overwriting an existing path.\n`build` creates a deterministic `.selyapp` bundle; `exec` runs one.\n`inspect` emits compact project/source symbols, imports and diagnostics in the compatible `seloryn.analysis.v1` envelope; `--format=json` is intended for tools and agents.\n`lsp --stdio` provides bounded full-document diagnostics, completion, definition and document symbols backed by the parser.\nGPU training is explicit through `from training import gpu` (the compatible `train_linear_gpu` name remains accepted) in a `.sely` project; it requires a physical adapter and never silently falls back to CPU. Distributed execution remains unavailable.\n";
+
+const USAGE_HELP: &str = "run `seloryn --help` for the complete command list";
+const COLOR_HELP_TEXT: &str = "`--color=auto|always|never` controls ANSI colors for human diagnostics; JSON is always plain.\n";
+const CHECK_USAGE: &str =
+    "seloryn check <file.sely|project> [--format=human|json] [--color=auto|always|never] [--quiet]";
+const RUN_USAGE: &str = "seloryn run <file.sely|project> [--format=human|json] [--color=auto|always|never] [--log=off|human|json|json2|json2-signed]";
+const INSPECT_USAGE: &str = "seloryn inspect <file.sely|project> [--format=human|json]";
+const DOCTOR_USAGE: &str = "seloryn doctor [project] [--format=human|json]";
+const INIT_USAGE: &str = "seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]";
+const DEVICES_USAGE: &str = "seloryn devices|gpu-probe [--format=human|json]";
+const BUILD_USAGE: &str = "seloryn build <project> --profile debug|release --output <directory>";
+const EXEC_USAGE: &str = "seloryn exec <bundle.selyapp|directory>";
+const LSP_USAGE: &str = "seloryn lsp --stdio";
+const JOB_USAGE: &str = "seloryn job <create|status|list|transition|retry|claim|heartbeat|release|recover|preflight|run> ...";
 
 const JOB_HELP_TEXT: &str = "Jobs:\n  seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]\n  seloryn job status <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job list [--root=<directory>] [--format=human|json]\n  seloryn job transition <job-id> <status> [--root=<directory>] [--format=human|json]\n  seloryn job retry <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job claim <job-id> [--owner=<owner>] [--lease-id=<id>] [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job heartbeat <job-id> --lease-id=<id> [--ttl-seconds=<n>] [--root=<directory>] [--format=human|json]\n  seloryn job release <job-id> --lease-id=<id> [--root=<directory>] [--format=human|json]\n  seloryn job recover <job-id> [--root=<directory>] [--format=human|json]\n  seloryn job preflight <job-id> [--root=<directory>] [--format=human|json]\n";
 
@@ -297,7 +311,7 @@ fn main() -> ExitCode {
 fn run(args: &[OsString]) -> u8 {
     match classify(args) {
         Action::Help => write_stdout(&format!(
-            "{HELP_TEXT}{JOB_HELP_TEXT}{WORKER_HELP_TEXT}Source-owned workflows can emit structured audit events through `from audit import emit`; JSON2 includes them in the same hash-chained receipt.\nCPU training remains the verified path for the MLP;\n"
+            "{HELP_TEXT}{JOB_HELP_TEXT}{WORKER_HELP_TEXT}{COLOR_HELP_TEXT}Source-owned workflows can emit structured audit events through `from audit import emit`; JSON2 includes them in the same hash-chained receipt.\nCPU training remains the verified path for the MLP;\n"
         )),
         Action::Version => write_stdout(&format!(
             "seloryn {LANGUAGE_VERSION} package={PACKAGE_VERSION} build={DEVELOPMENT_BUILD_ID} status=verified-preview\n"
@@ -327,9 +341,7 @@ fn run(args: &[OsString]) -> u8 {
         Action::JobHelp => write_stdout(&format!("{JOB_HELP_TEXT}{WORKER_HELP_TEXT}")),
         Action::Job(action) => run_job(action),
         Action::Lsp => lsp::serve_stdio(),
-        Action::Unsupported(command) => write_stderr(&format!(
-            "SEL-C001 unsupported command or argument: {command}\n"
-        )),
+        Action::Unsupported(command) => write_stderr(&format!("SEL-C001 {command}\n")),
     }
 }
 
@@ -349,7 +361,7 @@ fn classify(args: &[OsString]) -> Action {
         [command, rest @ ..] if command == "exec" => parse_exec(rest),
         [command, rest @ ..] if command == "job" => parse_job(rest),
         [command, rest @ ..] if command == "lsp" => parse_lsp(rest),
-        _ => unsupported_arguments(args),
+        _ => usage_error(args, "seloryn --help"),
     }
 }
 
@@ -358,7 +370,7 @@ fn parse_job(args: &[OsString]) -> Action {
         return Action::JobHelp;
     }
     let Some(command) = args.first().and_then(|value| value.to_str()) else {
-        return unsupported_arguments(args);
+        return usage_error(args, JOB_USAGE);
     };
     let mut positionals = Vec::new();
     let mut id = None;
@@ -380,7 +392,7 @@ fn parse_job(args: &[OsString]) -> Action {
             || argument == "--format"
         {
             let Some(value) = args.get(index + 1) else {
-                return unsupported_arguments(args);
+                return usage_error(args, JOB_USAGE);
             };
             if argument == "--id" {
                 id = Some(value.clone());
@@ -391,7 +403,7 @@ fn parse_job(args: &[OsString]) -> Action {
             } else if argument == "--ttl-seconds" {
                 let Some(parsed) = value.to_str().and_then(|value| value.parse::<u64>().ok())
                 else {
-                    return unsupported_arguments(args);
+                    return usage_error(args, JOB_USAGE);
                 };
                 ttl_seconds = Some(parsed);
             } else if argument == "--binary" {
@@ -400,7 +412,7 @@ fn parse_job(args: &[OsString]) -> Action {
                 root = value.clone();
             } else {
                 let Some(parsed) = parse_format(value) else {
-                    return unsupported_arguments(args);
+                    return usage_error(args, JOB_USAGE);
                 };
                 format = parsed;
             }
@@ -425,7 +437,7 @@ fn parse_job(args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--ttl-seconds="))
         {
             let Some(parsed) = value.parse::<u64>().ok() else {
-                return unsupported_arguments(args);
+                return usage_error(args, JOB_USAGE);
             };
             ttl_seconds = Some(parsed);
         } else if let Some(value) = argument
@@ -443,21 +455,21 @@ fn parse_job(args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--format="))
         {
             let Some(parsed) = parse_format_text(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, JOB_USAGE);
             };
             format = parsed;
         } else if argument
             .to_str()
             .is_some_and(|value| value.starts_with('-'))
         {
-            return unsupported_arguments(args);
+            return usage_error(args, JOB_USAGE);
         } else {
             positionals.push(argument.clone());
         }
         index += 1;
     }
     if command != "run" && binary.is_some() {
-        return unsupported_arguments(args);
+        return usage_error(args, JOB_USAGE);
     }
     match command {
         "create"
@@ -595,7 +607,7 @@ fn parse_job(args: &[OsString]) -> Action {
                 format,
             })
         }
-        _ => unsupported_arguments(args),
+        _ => usage_error(args, JOB_USAGE),
     }
 }
 
@@ -607,10 +619,10 @@ fn parse_doctor(args: &[OsString]) -> Action {
         let argument = &args[index];
         if argument == "--format" {
             let Some(value) = args.get(index + 1) else {
-                return unsupported_arguments(args);
+                return usage_error(args, DOCTOR_USAGE);
             };
             let Some(parsed) = parse_format(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, DOCTOR_USAGE);
             };
             format = parsed;
             index += 1;
@@ -619,7 +631,7 @@ fn parse_doctor(args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--format="))
         {
             let Some(parsed) = parse_format_text(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, DOCTOR_USAGE);
             };
             format = parsed;
         } else if argument
@@ -627,7 +639,7 @@ fn parse_doctor(args: &[OsString]) -> Action {
             .is_some_and(|value| value.starts_with('-'))
             || path.replace(argument.clone()).is_some()
         {
-            return unsupported_arguments(args);
+            return usage_error(args, DOCTOR_USAGE);
         }
         index += 1;
     }
@@ -647,18 +659,18 @@ fn parse_init(args: &[OsString]) -> Action {
         let argument = &args[index];
         if argument == "--template" || argument == "--name" || argument == "--format" {
             let Some(value) = args.get(index + 1) else {
-                return unsupported_arguments(args);
+                return usage_error(args, INIT_USAGE);
             };
             if argument == "--template" {
                 let Some(parsed) = workspace::parse_template(value) else {
-                    return unsupported_arguments(args);
+                    return usage_error(args, INIT_USAGE);
                 };
                 template = parsed;
             } else if argument == "--name" {
                 name = Some(value.clone());
             } else {
                 let Some(parsed) = parse_format(value) else {
-                    return unsupported_arguments(args);
+                    return usage_error(args, INIT_USAGE);
                 };
                 format = parsed;
             }
@@ -668,7 +680,7 @@ fn parse_init(args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--template="))
         {
             let Some(parsed) = workspace::parse_template_text(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, INIT_USAGE);
             };
             template = parsed;
         } else if let Some(value) = argument
@@ -681,7 +693,7 @@ fn parse_init(args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--format="))
         {
             let Some(parsed) = parse_format_text(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, INIT_USAGE);
             };
             format = parsed;
         } else if argument
@@ -689,12 +701,12 @@ fn parse_init(args: &[OsString]) -> Action {
             .is_some_and(|value| value.starts_with('-'))
             || path.replace(argument.clone()).is_some()
         {
-            return unsupported_arguments(args);
+            return usage_error(args, INIT_USAGE);
         }
         index += 1;
     }
     let Some(path) = path else {
-        return unsupported_arguments(args);
+        return usage_error(args, INIT_USAGE);
     };
     Action::Init {
         path,
@@ -708,7 +720,7 @@ fn parse_lsp(args: &[OsString]) -> Action {
     if args.len() == 1 && args[0] == "--stdio" {
         Action::Lsp
     } else {
-        unsupported_arguments(args)
+        usage_error(args, LSP_USAGE)
     }
 }
 
@@ -719,10 +731,10 @@ fn parse_device_command(command: &str, args: &[OsString]) -> Action {
         let argument = &args[index];
         if argument == "--format" {
             let Some(value) = args.get(index + 1) else {
-                return unsupported_arguments(args);
+                return usage_error(args, DEVICES_USAGE);
             };
             let Some(parsed) = parse_format(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, DEVICES_USAGE);
             };
             format = parsed;
             index += 1;
@@ -731,11 +743,11 @@ fn parse_device_command(command: &str, args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--format="))
         {
             let Some(parsed) = parse_format_text(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, DEVICES_USAGE);
             };
             format = parsed;
         } else {
-            return unsupported_arguments(args);
+            return usage_error(args, DEVICES_USAGE);
         }
         index += 1;
     }
@@ -755,7 +767,7 @@ fn parse_build(args: &[OsString]) -> Action {
         let argument = &args[index];
         if argument == "--profile" || argument == "--output" {
             let Some(value) = args.get(index + 1) else {
-                return unsupported_arguments(args);
+                return usage_error(args, BUILD_USAGE);
             };
             if argument == "--profile" {
                 profile = Some(value.clone());
@@ -784,7 +796,7 @@ fn parse_build(args: &[OsString]) -> Action {
             .is_some_and(|value| value.starts_with('-'))
             || path.replace(argument.clone()).is_some()
         {
-            return unsupported_arguments(args);
+            return usage_error(args, BUILD_USAGE);
         }
         index += 1;
     }
@@ -794,7 +806,7 @@ fn parse_build(args: &[OsString]) -> Action {
             profile,
             output,
         },
-        _ => unsupported_arguments(args),
+        _ => usage_error(args, BUILD_USAGE),
     }
 }
 
@@ -804,7 +816,7 @@ fn parse_exec(args: &[OsString]) -> Action {
             path: args[0].clone(),
         }
     } else {
-        unsupported_arguments(args)
+        usage_error(args, EXEC_USAGE)
     }
 }
 
@@ -816,10 +828,10 @@ fn parse_inspect(args: &[OsString]) -> Action {
         let argument = &args[index];
         if argument == "--format" {
             let Some(value) = args.get(index + 1) else {
-                return unsupported_arguments(args);
+                return usage_error(args, INSPECT_USAGE);
             };
             let Some(parsed) = parse_format(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, INSPECT_USAGE);
             };
             format = parsed;
             index += 1;
@@ -828,7 +840,7 @@ fn parse_inspect(args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--format="))
         {
             let Some(parsed) = parse_format_text(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, INSPECT_USAGE);
             };
             format = parsed;
         } else if argument
@@ -836,17 +848,22 @@ fn parse_inspect(args: &[OsString]) -> Action {
             .is_some_and(|value| value.starts_with('-'))
             || path.replace(argument.clone()).is_some()
         {
-            return unsupported_arguments(args);
+            return usage_error(args, INSPECT_USAGE);
         }
         index += 1;
     }
     let Some(path) = path else {
-        return unsupported_arguments(args);
+        return usage_error(args, INSPECT_USAGE);
     };
     Action::Inspect { path, format }
 }
 
 fn parse_command(command: &str, args: &[OsString]) -> Action {
+    let usage = if command == "check" {
+        CHECK_USAGE
+    } else {
+        RUN_USAGE
+    };
     let mut options = Options::default();
     let mut path = None;
     let mut index = 0;
@@ -856,21 +873,21 @@ fn parse_command(command: &str, args: &[OsString]) -> Action {
             options.quiet = true;
         } else if argument == "--format" || argument == "--color" || argument == "--log" {
             let Some(value) = args.get(index + 1) else {
-                return unsupported_arguments(args);
+                return usage_error(args, usage);
             };
             if argument == "--format" {
                 let Some(format) = parse_format(value) else {
-                    return unsupported_arguments(args);
+                    return usage_error(args, usage);
                 };
                 options.format = format;
             } else if argument == "--color" {
                 let Some(color) = parse_color(value) else {
-                    return unsupported_arguments(args);
+                    return usage_error(args, usage);
                 };
                 options.color = color;
             } else {
                 let Some(log) = parse_log(value) else {
-                    return unsupported_arguments(args);
+                    return usage_error(args, usage);
                 };
                 options.log = log;
             }
@@ -880,7 +897,7 @@ fn parse_command(command: &str, args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--format="))
         {
             let Some(format) = parse_format_text(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, usage);
             };
             options.format = format;
         } else if let Some(value) = argument
@@ -888,7 +905,7 @@ fn parse_command(command: &str, args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--color="))
         {
             let Some(color) = parse_color_text(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, usage);
             };
             options.color = color;
         } else if let Some(value) = argument
@@ -896,7 +913,7 @@ fn parse_command(command: &str, args: &[OsString]) -> Action {
             .and_then(|value| value.strip_prefix("--log="))
         {
             let Some(log) = parse_log_text(value) else {
-                return unsupported_arguments(args);
+                return usage_error(args, usage);
             };
             options.log = log;
         } else if argument
@@ -904,12 +921,12 @@ fn parse_command(command: &str, args: &[OsString]) -> Action {
             .is_some_and(|value| value.starts_with('-'))
             || path.replace(argument.clone()).is_some()
         {
-            return unsupported_arguments(args);
+            return usage_error(args, usage);
         }
         index += 1;
     }
     let Some(path) = path else {
-        return unsupported_arguments(args);
+        return usage_error(args, usage);
     };
     match command {
         "check" => Action::Check { path, options },
@@ -918,13 +935,20 @@ fn parse_command(command: &str, args: &[OsString]) -> Action {
     }
 }
 
-fn unsupported_arguments(args: &[OsString]) -> Action {
-    Action::Unsupported(
-        args.iter()
-            .map(|argument| display_argument(argument))
-            .collect::<Vec<_>>()
-            .join(" "),
-    )
+fn usage_error(args: &[OsString], usage: &'static str) -> Action {
+    let received = args
+        .iter()
+        .map(|argument| display_argument(argument))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let received = if received.is_empty() {
+        "<none>".to_owned()
+    } else {
+        received
+    };
+    Action::Unsupported(format!(
+        "invalid command usage\n  received: {received}\n  usage: {usage}\n  help: {USAGE_HELP}"
+    ))
 }
 
 fn parse_format(argument: &OsString) -> Option<OutputFormat> {
@@ -2530,7 +2554,10 @@ fn check_path(path: PathBuf, options: Options) -> u8 {
         Err(error) => {
             let diagnostic = diagnostic::Diagnostic::new(
                 "SEL-C003",
-                format!("failed to read source `{label}`: {error}"),
+                format!(
+                    "failed to read source `{label}`: {}",
+                    diagnostic::stable_io_error(&error)
+                ),
                 diagnostic::Span::new(0, 0),
             );
             return write_diagnostics(&path, "", &[diagnostic], options);
@@ -2564,7 +2591,7 @@ fn check_path(path: PathBuf, options: Options) -> u8 {
             if options.quiet {
                 return EXIT_OK;
             }
-            return write_stdout(&format!("checked {label} (syntax + semantics)\n"));
+            return write_check_success(&label, options.format, true);
         }
         return write_diagnostics(&path, &source, &semantic_diagnostics, options);
     }
@@ -2585,7 +2612,10 @@ fn inspect_source_path(path: &std::path::Path, format: OutputFormat) -> u8 {
         Err(error) => {
             let diagnostic = diagnostic::Diagnostic::new(
                 "SEL-C003",
-                format!("failed to read source `{label}`: {error}"),
+                format!(
+                    "failed to read source `{label}`: {}",
+                    diagnostic::stable_io_error(&error)
+                ),
                 diagnostic::Span::new(0, 0),
             );
             return write_inspection(path, "", "source", &[], &[diagnostic], format);
@@ -3074,6 +3104,9 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
     if let Err(error) = install_cancellation_handler() {
         return write_io_error("cancellation handler", error);
     }
+    if let Some(status) = validate_log_options(options) {
+        return status;
+    }
     if path.is_dir() {
         return run_project_path(&path, options);
     }
@@ -3097,13 +3130,22 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
             if let Some(status) = finish_preflight_event(
                 &mut event_sink,
                 "SEL-C003",
-                &format!("failed to read source `{label}`: {error}"),
+                &format!(
+                    "failed to read source `{label}`: {}",
+                    diagnostic::stable_io_error(&error)
+                ),
             ) {
                 return status;
             }
-            return write_io_diagnostic(&format!(
-                "SEL-C003 failed to read source `{label}`: {error}\n"
-            ));
+            let diagnostic = diagnostic::Diagnostic::new(
+                "SEL-C003",
+                format!(
+                    "failed to read source `{label}`: {}",
+                    diagnostic::stable_io_error(&error)
+                ),
+                diagnostic::Span::new(0, 0),
+            );
+            return write_diagnostics_with_status(&path, "", &[diagnostic], options, EXIT_IO);
         }
     };
     event_sink.identity = Some(RunIdentity {
@@ -3213,7 +3255,10 @@ fn run_path(path: PathBuf, options: Options) -> u8 {
             }
             let diagnostic = error.diagnostic();
             if options.format == OutputFormat::Human {
-                let mut rendered = diagnostic::render(&path, &source, &diagnostic);
+                let mut rendered = colorize_diagnostics(
+                    diagnostic::render(&path, &source, &diagnostic),
+                    options.color,
+                );
                 if !error.stack.is_empty() {
                     rendered.push_str(&format!(
                         "{}: stack {}\n",
@@ -3462,7 +3507,10 @@ fn check_json_data_path(path: &std::path::Path, options: Options) -> u8 {
     if let Err(error) = std::fs::read(path) {
         let diagnostic = diagnostic::Diagnostic::new(
             "SEL-C003",
-            format!("failed to read source `{label}`: {error}"),
+            format!(
+                "failed to read source `{label}`: {}",
+                diagnostic::stable_io_error(&error)
+            ),
             diagnostic::Span::new(0, 0),
         );
         return write_diagnostics(path, "", &[diagnostic], options);
@@ -3470,7 +3518,7 @@ fn check_json_data_path(path: &std::path::Path, options: Options) -> u8 {
     if options.quiet {
         EXIT_OK
     } else {
-        write_stdout(&format!("checked {label}\n"))
+        write_check_success(&label, options.format, false)
     }
 }
 
@@ -3479,9 +3527,15 @@ fn run_json_data_path(path: &std::path::Path, options: Options) -> u8 {
     let source = match std::fs::read_to_string(path) {
         Ok(source) => source,
         Err(error) => {
-            return write_io_diagnostic(&format!(
-                "SEL-C003 failed to read source `{label}`: {error}\n"
-            ));
+            let diagnostic = diagnostic::Diagnostic::new(
+                "SEL-C003",
+                format!(
+                    "failed to read source `{label}`: {}",
+                    diagnostic::stable_io_error(&error)
+                ),
+                diagnostic::Span::new(0, 0),
+            );
+            return write_diagnostics_with_status(path, "", &[diagnostic], options, EXIT_IO);
         }
     };
     match json::parse(&source, 128, 4) {
@@ -3507,10 +3561,40 @@ fn check_project_path(path: &std::path::Path, options: Options) -> u8 {
         if options.quiet {
             EXIT_OK
         } else {
-            write_stdout(&format!("checked {}\n", loaded.label))
+            write_check_success(&loaded.label, options.format, false)
         }
     } else {
         write_diagnostics(path, &loaded.source, &semantic_diagnostics, options)
+    }
+}
+
+fn write_check_success(label: &str, format: OutputFormat, includes_semantics: bool) -> u8 {
+    match format {
+        OutputFormat::Human => {
+            let suffix = if includes_semantics {
+                " (syntax + semantics)"
+            } else {
+                ""
+            };
+            write_stdout(&format!("checked {label}{suffix}\n"))
+        }
+        OutputFormat::Json => {
+            let mut value = BTreeMap::new();
+            value.insert("checked".to_owned(), json::JsonValue::Bool(true));
+            value.insert("path".to_owned(), json::JsonValue::String(label.to_owned()));
+            value.insert(
+                "schema".to_owned(),
+                json::JsonValue::String("seloryn.check.v1".to_owned()),
+            );
+            value.insert(
+                "status".to_owned(),
+                json::JsonValue::String("ok".to_owned()),
+            );
+            write_stdout(&format!(
+                "{}\n",
+                json::encode(&json::JsonValue::Object(value))
+            ))
+        }
     }
 }
 
@@ -3523,6 +3607,9 @@ fn run_project_path_with_diagnostic_path(
     diagnostic_path: &std::path::Path,
     options: Options,
 ) -> u8 {
+    if let Some(status) = validate_log_options(options) {
+        return status;
+    }
     let mut event_sink = CliEventSink::new(
         options.log,
         Some(RunIdentity {
@@ -3619,7 +3706,10 @@ fn run_project_path_with_diagnostic_path(
             }
             let diagnostic = error.diagnostic();
             if options.format == OutputFormat::Human {
-                let mut rendered = diagnostic::render(diagnostic_path, &loaded.source, &diagnostic);
+                let mut rendered = colorize_diagnostics(
+                    diagnostic::render(diagnostic_path, &loaded.source, &diagnostic),
+                    options.color,
+                );
                 if !error.stack.is_empty() {
                     rendered.push_str(&format!(
                         "{}: stack {}\n",
@@ -3633,6 +3723,17 @@ fn run_project_path_with_diagnostic_path(
             }
         }
     }
+}
+
+fn validate_log_options(options: Options) -> Option<u8> {
+    if options.log == LogFormat::Json2Signed
+        && env::var_os("SELORYN_RECEIPT_KEY").is_none_or(|key| key.is_empty())
+    {
+        return Some(write_stderr(
+            "SEL-C006 json2-signed requires a non-empty SELORYN_RECEIPT_KEY environment variable\n",
+        ));
+    }
+    None
 }
 
 fn execution_output_sha256(output: &runtime::ExecutionOutput) -> String {
@@ -4212,15 +4313,60 @@ fn write_diagnostics(
     diagnostics: &[diagnostic::Diagnostic],
     options: Options,
 ) -> u8 {
-    let _ = options.color;
+    write_diagnostics_with_status(path, source, diagnostics, options, EXIT_DATA)
+}
+
+fn write_diagnostics_with_status(
+    path: &std::path::Path,
+    source: &str,
+    diagnostics: &[diagnostic::Diagnostic],
+    options: Options,
+    status: u8,
+) -> u8 {
     let rendered = match options.format {
-        OutputFormat::Human => diagnostics
-            .iter()
-            .map(|diagnostic| diagnostic::render(path, source, diagnostic))
-            .collect::<String>(),
+        OutputFormat::Human => colorize_diagnostics(
+            diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic::render(path, source, diagnostic))
+                .collect::<String>(),
+            options.color,
+        ),
         OutputFormat::Json => diagnostic::render_json(path, source, diagnostics),
     };
-    write_data_stderr(&rendered)
+    match io::stderr().write_all(rendered.as_bytes()) {
+        Ok(()) => status,
+        Err(error) => write_io_error("stderr", error),
+    }
+}
+
+fn colorize_diagnostics(rendered: String, mode: ColorMode) -> String {
+    let enabled = match mode {
+        ColorMode::Always => true,
+        ColorMode::Never => false,
+        ColorMode::Auto => io::stderr().is_terminal(),
+    };
+    if !enabled {
+        return rendered;
+    }
+    rendered
+        .lines()
+        .map(|line| {
+            let Some(start) = line.find("SEL-") else {
+                return line.to_owned();
+            };
+            let end = line[start..]
+                .find(|character: char| character.is_whitespace())
+                .map_or(line.len(), |offset| start + offset);
+            format!(
+                "{}\x1b[1;31m{}\x1b[0m{}",
+                &line[..start],
+                &line[start..end],
+                &line[end..]
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        + if rendered.ends_with('\n') { "\n" } else { "" }
 }
 
 fn write_io_diagnostic(message: &str) -> u8 {
@@ -4238,7 +4384,9 @@ fn write_io_error(stream: &str, error: io::Error) -> u8 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Action, classify, display_argument, redact_sensitive_json};
+    use super::{
+        Action, ColorMode, classify, colorize_diagnostics, display_argument, redact_sensitive_json,
+    };
     use crate::json::JsonValue;
     use std::collections::BTreeMap;
     use std::ffi::OsString;
@@ -4376,7 +4524,10 @@ mod tests {
     fn unsupported_unicode_argument_remains_visible() {
         let action = classify(&[OsString::from("入口")]);
         match action {
-            Action::Unsupported(message) => assert_eq!(message, "入口"),
+            Action::Unsupported(message) => {
+                assert!(message.contains("received: 入口"), "{message}");
+                assert!(message.contains("usage: seloryn --help"), "{message}");
+            }
             Action::Help | Action::Version | Action::Check { .. } | Action::Inspect { .. } => {
                 panic!("expected unsupported action")
             }
@@ -4400,6 +4551,16 @@ mod tests {
         assert_eq!(
             display_argument(OsString::from("a\n\u{1b}b").as_os_str()),
             r"a\n\u{1b}b"
+        );
+    }
+
+    #[test]
+    fn color_mode_is_explicit_and_never_colors_json_or_pipes() {
+        let human = "file.sely:1:1: SEL-C003 path not found\n".to_owned();
+        assert!(colorize_diagnostics(human.clone(), ColorMode::Always).contains("\u{1b}[1;31m"));
+        assert_eq!(
+            colorize_diagnostics(human, ColorMode::Never),
+            "file.sely:1:1: SEL-C003 path not found\n"
         );
     }
 }

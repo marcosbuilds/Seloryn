@@ -120,14 +120,15 @@ function Remove-User-PathEntry([string]$Entry) {
 Assert-SafeRoot $InstallRoot
 $root = FullPath $InstallRoot
 $manifest = ManifestPath $root
+$managedState = Join-Path $root 'state\installations.json'
+if ($Action -in @('Install', 'Uninstall', 'Rollback') -and
+    (Test-Path -LiteralPath $managedState -PathType Leaf)) {
+    Fail 'this root is managed by the native versioned installer; use SelorynSetup or the seloryn versions/use/uninstall commands'
+}
 
 switch ($Action) {
     'Install' {
         if (-not $BinaryPath) { Fail 'Install requires -BinaryPath' }
-        $managedState = Join-Path $root 'state\installations.json'
-        if (Test-Path -LiteralPath $managedState -PathType Leaf) {
-            Fail 'this root is managed by the native versioned installer; use SelorynSetup or seloryn use so the default launcher cannot be downgraded'
-        }
         $source = FullPath $BinaryPath
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { Fail "binary is missing: $source" }
         $hash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()

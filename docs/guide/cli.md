@@ -11,9 +11,9 @@ seloryn devices [--format=human|json]
 seloryn gpu-probe [--format=human|json]
 seloryn doctor [project] [--format=human|json]
 seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]
-seloryn check <file.sely|project> [--format=human|json] [--quiet]
+seloryn check <file.sely|project> [--format=human|json] [--color=auto|always|never] [--quiet]
 seloryn inspect <file.sely|project> [--format=human|json]
-seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]
+seloryn run <file.sely|project> [--format=human|json] [--color=auto|always|never] [--log=off|human|json|json2|json2-signed]
 seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
 seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]
@@ -45,6 +45,10 @@ Seloryn keeps one responsibility per stream:
   as `path not found` and `permission denied`, instead of leaking the local
   Windows language into automation.
 
+`--color=auto` colors stable error codes only when `stderr` is an interactive
+terminal; `always` forces ANSI color and `never` keeps diagnostics plain. JSON
+success and failure documents are never colorized.
+
 Invalid command lines identify the received arguments and print the exact
 usage for that command. For example, `seloryn lsp` explains that the required
 form is `seloryn lsp --stdio`; `seloryn build project` explains that both
@@ -61,10 +65,10 @@ events are produced.
 
 The versioned Windows launcher is the source of truth for the selected runtime.
 Use `seloryn versions` to inspect it and `seloryn use 0.12.0` to select the
-installed version. The native installer repairs the default launcher when a
-legacy binary has left it out of sync, while the development-only legacy
-installer refuses to overwrite a managed versioned installation. Restart a
-shell after changing `PATH`.
+installed version. Native default selection repairs a stale default launcher
+when the selected package payload is already present. The development-only
+legacy installer refuses to install, uninstall or roll back a managed versioned
+installation. Restart a shell after changing `PATH`.
 
 The local `job` contract canonicalizes a bounded JSON spec and stores an
 event-authoritative state snapshot under `.seloryn/jobs/<job-id>`. Public
