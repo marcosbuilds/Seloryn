@@ -125,6 +125,273 @@ impl Tensor {
         )
     }
 
+    /// Gather rows from a vocabulary table using a rank-2 I64 index tensor.
+    /// The output is `[batch, context, embedding_dim]` and never aliases the
+    /// table. Invalid IDs are rejected before any output allocation is kept.
+    pub fn embedding(indices: &Self, table: &Self) -> Result<Self, TensorError> {
+        if indices.dtype != TensorDtype::I64 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "I64",
+                actual: indices.dtype.name(),
+            });
+        }
+        if table.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: table.dtype.name(),
+            });
+        }
+        if indices.rank() != 2 || table.rank() != 2 {
+            return Err(TensorError::EmbeddingRank {
+                indices: indices.rank(),
+                table: table.rank(),
+            });
+        }
+        let vocabulary_size = table.shape[0];
+        let embedding_dim = table.shape[1];
+        if vocabulary_size == 0 || embedding_dim == 0 {
+            return Err(TensorError::EmbeddingShape {
+                indices: indices.shape.clone(),
+                table: table.shape.clone(),
+            });
+        }
+        for flat in 0..indices.element_count() {
+            let index = indices.i64_at_flat(flat);
+            let coordinate = usize::try_from(index).map_err(|_| TensorError::EmbeddingIndex {
+                index,
+                vocabulary_size,
+            })?;
+            if coordinate >= vocabulary_size {
+                return Err(TensorError::EmbeddingIndex {
+                    index,
+                    vocabulary_size,
+                });
+            }
+        }
+        let output_elements = indices
+            .element_count()
+            .checked_mul(embedding_dim)
+            .ok_or(TensorError::ShapeOverflow)?;
+        let output_allocation = reserve_output(TensorDtype::F32, output_elements)?;
+        let mut output = Vec::with_capacity(output_elements);
+        for flat in 0..indices.element_count() {
+            let index = usize::try_from(indices.i64_at_flat(flat)).map_err(|_| {
+                TensorError::EmbeddingIndex {
+                    index: indices.i64_at_flat(flat),
+                    vocabulary_size,
+                }
+            })?;
+            let table_offset = index
+                .checked_mul(embedding_dim)
+                .ok_or(TensorError::ShapeOverflow)?;
+            for dimension in 0..embedding_dim {
+                output.push(table.f32_at_flat(table_offset + dimension));
+            }
+        }
+        let mut output_shape = shape_from_usize(&indices.shape)?;
+        output_shape.push(i64::try_from(embedding_dim).map_err(|_| TensorError::ShapeOverflow)?);
+        let shape = checked_shape(&output_shape)?;
+        Self::with_allocation(
+            TensorDtype::F32,
+            TensorData::F32(Arc::new(output)),
+            shape,
+            super::DEFAULT_MEMORY_BUDGET_BYTES,
+            output_allocation,
+        )
+    }
+
+    /// Scatter-add an embedding output gradient back into a vocabulary table.
+    /// Repeated IDs intentionally accumulate rather than overwrite.
+    pub fn embedding_backward(
+        indices: &Self,
+        gradient: &Self,
+        table_shape: &[i64],
+    ) -> Result<Self, TensorError> {
+        if indices.dtype != TensorDtype::I64 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "I64",
+                actual: indices.dtype.name(),
+            });
+        }
+        if gradient.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: gradient.dtype.name(),
+            });
+        }
+        if indices.rank() != 2 || gradient.rank() != 3 {
+            return Err(TensorError::EmbeddingRank {
+                indices: indices.rank(),
+                table: gradient.rank().saturating_sub(1),
+            });
+        }
+        let checked_table_shape = checked_shape(table_shape)?;
+        if checked_table_shape.len() != 2
+            || gradient.shape[..2] != indices.shape[..2]
+            || gradient.shape[2] != checked_table_shape[1]
+        {
+            return Err(TensorError::EmbeddingShape {
+                indices: indices.shape.clone(),
+                table: checked_table_shape,
+            });
+        }
+        let vocabulary_size = checked_table_shape[0];
+        let embedding_dim = checked_table_shape[1];
+        if vocabulary_size == 0 || embedding_dim == 0 {
+            return Err(TensorError::EmbeddingShape {
+                indices: indices.shape.clone(),
+                table: checked_table_shape,
+            });
+        }
+        let output_elements = vocabulary_size
+            .checked_mul(embedding_dim)
+            .ok_or(TensorError::ShapeOverflow)?;
+        let mut output = vec![0.0f32; output_elements];
+        for flat in 0..indices.element_count() {
+            let index = indices.i64_at_flat(flat);
+            let row = usize::try_from(index).map_err(|_| TensorError::EmbeddingIndex {
+                index,
+                vocabulary_size,
+            })?;
+            if row >= vocabulary_size {
+                return Err(TensorError::EmbeddingIndex {
+                    index,
+                    vocabulary_size,
+                });
+            }
+            let gradient_offset = flat
+                .checked_mul(embedding_dim)
+                .ok_or(TensorError::ShapeOverflow)?;
+            let output_offset = row
+                .checked_mul(embedding_dim)
+                .ok_or(TensorError::ShapeOverflow)?;
+            for dimension in 0..embedding_dim {
+                let next = output[output_offset + dimension]
+                    + gradient.f32_at_flat(gradient_offset + dimension);
+                if !next.is_finite() {
+                    return Err(TensorError::NonFinite);
+                }
+                output[output_offset + dimension] = next;
+            }
+        }
+        Self::from_f32(output, table_shape)
+    }
+
+    /// Mean softmax cross-entropy for logits `[batch, classes]` and integer
+    /// class IDs `[batch]`. The returned cache contains row probabilities.
+    pub fn cross_entropy_ids(&self, targets: &Self) -> Result<Self, TensorError> {
+        let (loss, _) = self.cross_entropy_ids_with_cache(targets)?;
+        Ok(loss)
+    }
+
+    pub(crate) fn cross_entropy_ids_with_cache(
+        &self,
+        targets: &Self,
+    ) -> Result<(Self, Self), TensorError> {
+        if self.dtype != TensorDtype::F32 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "F32",
+                actual: self.dtype.name(),
+            });
+        }
+        if targets.dtype != TensorDtype::I64 {
+            return Err(TensorError::DtypeMismatch {
+                expected: "I64",
+                actual: targets.dtype.name(),
+            });
+        }
+        if self.rank() != 2 || targets.rank() != 1 || targets.shape[0] != self.shape[0] {
+            return Err(TensorError::EmbeddingShape {
+                indices: targets.shape.clone(),
+                table: self.shape.clone(),
+            });
+        }
+        let rows = self.shape[0];
+        let classes = self.shape[1];
+        if rows == 0 || classes == 0 {
+            return Err(TensorError::EmptyReduction {
+                operation: "cross_entropy_ids",
+            });
+        }
+        let mut probabilities = vec![0.0f32; self.element_count()];
+        let mut total_loss = 0.0f64;
+        for row in 0..rows {
+            let offset = row * classes;
+            let maximum = (0..classes)
+                .map(|class| self.f32_at_flat(offset + class))
+                .fold(f32::NEG_INFINITY, f32::max);
+            let normalizer = (0..classes).try_fold(0.0f64, |sum, class| {
+                let next =
+                    sum + (f64::from(self.f32_at_flat(offset + class)) - f64::from(maximum)).exp();
+                next.is_finite()
+                    .then_some(next)
+                    .ok_or(TensorError::NonFinite)
+            })?;
+            if !normalizer.is_finite() || normalizer <= 0.0 {
+                return Err(TensorError::NonFinite);
+            }
+            let target = targets.i64_at_flat(row);
+            let target_class =
+                usize::try_from(target).map_err(|_| TensorError::EmbeddingIndex {
+                    index: target,
+                    vocabulary_size: classes,
+                })?;
+            if target_class >= classes {
+                return Err(TensorError::EmbeddingIndex {
+                    index: target,
+                    vocabulary_size: classes,
+                });
+            }
+            let log_normalizer = f64::from(maximum) + normalizer.ln();
+            let target_log_probability =
+                f64::from(self.f32_at_flat(offset + target_class)) - log_normalizer;
+            total_loss -= target_log_probability;
+            for class in 0..classes {
+                let probability =
+                    (f64::from(self.f32_at_flat(offset + class)) - log_normalizer).exp();
+                if !probability.is_finite() {
+                    return Err(TensorError::NonFinite);
+                }
+                probabilities[offset + class] = probability as f32;
+            }
+        }
+        let loss = total_loss / rows as f64;
+        if !loss.is_finite() {
+            return Err(TensorError::NonFinite);
+        }
+        Ok((
+            Self::from_f32(vec![loss as f32], &[])?,
+            Self::from_f32(probabilities, &[rows as i64, classes as i64])?,
+        ))
+    }
+
+    /// Deterministic bounded F32 initializer used by the `.sely` model.
+    pub fn uniform_f32(shape: &[i64], seed: i64) -> Result<Self, TensorError> {
+        let shape = checked_shape(shape)?;
+        let elements = element_count(&shape)?;
+        let allocation = reserve_output(TensorDtype::F32, elements)?;
+        let mut state = seed as u64;
+        if state == 0 {
+            state = 0x9E37_79B9_7F4A_7C15;
+        }
+        let mut values = Vec::with_capacity(elements);
+        for _ in 0..elements {
+            state ^= state >> 12;
+            state ^= state << 25;
+            state ^= state >> 27;
+            let random = state.wrapping_mul(0x2545_F491_4F6C_DD1D);
+            let unit = (random as f64) / (u64::MAX as f64);
+            values.push(((unit * 2.0 - 1.0) * 0.1) as f32);
+        }
+        Self::with_allocation(
+            TensorDtype::F32,
+            TensorData::F32(Arc::new(values)),
+            shape,
+            super::DEFAULT_MEMORY_BUDGET_BYTES,
+            allocation,
+        )
+    }
+
     fn new(
         dtype: TensorDtype,
         data: TensorData,
@@ -1721,5 +1988,69 @@ mod tests {
                 assert_eq!(tensor.element_count(), count);
             }
         }
+    }
+
+    #[test]
+    fn gathers_embeddings_and_scatter_adds_repeated_ids() {
+        let ids = Tensor::from_i64(vec![2, 0, 2, 1], &[2, 2]).expect("ids");
+        let table = Tensor::from_f32(vec![0.1, 0.2, 1.0, 1.1, 2.0, 2.1], &[3, 2]).expect("table");
+        let output = Tensor::embedding(&ids, &table).expect("embedding");
+        assert_eq!(output.shape(), &[2, 2, 2]);
+        assert_eq!(
+            output.values_f32().expect("embedding values"),
+            vec![2.0, 2.1, 0.1, 0.2, 2.0, 2.1, 1.0, 1.1]
+        );
+        let upstream = Tensor::from_f32(vec![1.0; 8], &[2, 2, 2]).expect("upstream");
+        let gradient = Tensor::embedding_backward(&ids, &upstream, &[3, 2]).expect("gradient");
+        assert_eq!(
+            gradient.values_f32().expect("gradient values"),
+            vec![1.0, 1.0, 1.0, 1.0, 2.0, 2.0]
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_embedding_ids_and_shapes() {
+        let table = Tensor::from_f32(vec![0.0; 6], &[3, 2]).expect("table");
+        let negative = Tensor::from_i64(vec![-1], &[1, 1]).expect("negative id");
+        assert!(matches!(
+            Tensor::embedding(&negative, &table),
+            Err(TensorError::EmbeddingIndex { .. })
+        ));
+        let out_of_range = Tensor::from_i64(vec![3], &[1, 1]).expect("out of range id");
+        assert!(matches!(
+            Tensor::embedding(&out_of_range, &table),
+            Err(TensorError::EmbeddingIndex { .. })
+        ));
+        let wrong_rank = Tensor::from_i64(vec![0], &[1]).expect("wrong rank");
+        assert!(matches!(
+            Tensor::embedding(&wrong_rank, &table),
+            Err(TensorError::EmbeddingRank { .. })
+        ));
+    }
+
+    #[test]
+    fn computes_indexed_cross_entropy_and_deterministic_initializer() {
+        let logits = Tensor::from_f32(vec![0.0, 1.0, 2.0, 0.0], &[2, 2]).expect("logits");
+        let targets = Tensor::from_i64(vec![1, 0], &[2]).expect("targets");
+        let loss = logits
+            .cross_entropy_ids(&targets)
+            .expect("indexed cross entropy")
+            .scalar_f32()
+            .expect("loss scalar");
+        let expected =
+            ((1.0f64 + 1.0f64.exp()).ln() - 1.0 + (1.0f64 + 2.0f64.exp()).ln() - 2.0) / 2.0;
+        assert!((f64::from(loss) - expected).abs() < 1e-6);
+        let first = Tensor::uniform_f32(&[2, 3], 42).expect("first init");
+        let second = Tensor::uniform_f32(&[2, 3], 42).expect("second init");
+        let other = Tensor::uniform_f32(&[2, 3], 43).expect("other init");
+        assert_eq!(first, second);
+        assert_ne!(first, other);
+        assert!(
+            first
+                .values_f32()
+                .expect("init values")
+                .into_iter()
+                .all(|value| (-0.1..=0.1).contains(&value))
+        );
     }
 }

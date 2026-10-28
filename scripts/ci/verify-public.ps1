@@ -26,7 +26,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Benchmark evidence suite failed' }
     & python scripts/ci/conformance.py --run --suite hardware
     if ($LASTEXITCODE -ne 0) { throw 'Hardware conformance suite failed' }
-    & npm ci --prefix tooling/vscode --ignore-scripts --no-audit --no-fund
+    & npm ci --prefix packages/vscode --ignore-scripts --no-audit --no-fund
     if ($LASTEXITCODE -ne 0) { throw 'VS Code packaging dependencies failed to install' }
     & python scripts/ci/conformance.py --run --suite editor
     if ($LASTEXITCODE -ne 0) { throw 'Editor conformance suite failed' }

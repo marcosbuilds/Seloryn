@@ -25,7 +25,7 @@ The gate must print `Auditable local inference proof: PASS`. It checks static
 validation, source ownership, decreasing training loss, holdout evaluation,
 independent Python agreement, checkpoint reload, receipt verification, isolated
 replay and six negative boundary cases. See the
-[adoption proposal](../docs/project/next-gates.md) for the exact pass criteria
+[conformance matrix](../docs/project/conformance.md) for the exact pass criteria
 and limitations.
 
 For direct inspection after building a local binary:
@@ -48,7 +48,7 @@ examples/
   tensors/                            standalone bounded CPU tensor programs
   projects/auditable-local-inference first product-shaped, source-owned workflow
   projects/self-hosted-mlp            source-owned custom ReLU MLP proof
-  projects/self-hosted-language-model source-owned CPU bigram proof; one-token context
+  projects/self-hosted-language-model source-owned CPU contextual next-token proof; configurable one-hot context windows
   projects/source-contract-reuse  experimental shared optimizer contract proof
   projects/mlp-training               bounded native CPU MLP trainer and resume fixture
   projects/mlp-inference              bounded batch inference from an MLP checkpoint
@@ -59,12 +59,13 @@ examples/
   projects/checkpoint-validation      bounded checkpoint schema validation
   projects/evaluation-pipeline        local modules, JSON validation and tensor metrics
   projects/linear-training            narrow fixture-driven linear-training contract
+  external/python-bridge              external Python consumer of the JSON/stdio contract
 ```
 
 The map distinguishes evidence slices; it is not a feature roadmap. In
 particular, the GPU linear project does not make the tensor or MLP projects GPU
-capable, and the language-model project does not claim transformer, serving or
-long-context support.
+capable, and the language-model project does not claim embeddings, transformer,
+serving, subword tokenization or long-context support.
 
 ## Standalone examples
 

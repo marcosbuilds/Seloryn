@@ -77,7 +77,7 @@ This EBNF summarizes accepted design intent; production-ready conformance gramma
 | `Option` and `??` | Static checks plus E4 values/fallback | [`src/semantic.rs`](../../src/semantic.rs), runtime tests; nullable `T?` and `?.` remain reserved |
 | Local modules and standard imports | Experimental local-project subset | `seloryn.toml` resolves local modules and the bounded `json`/other standard fixtures; external packages, registry and lockfiles remain unavailable |
 | `Tensor[F32]` and `Tensor[I64]` | N1/N2 experimental | Runtime shapes and CPU kernels are checked by [`src/tensor`](../../src/tensor) and CLI tests; symbolic shape parameters remain unavailable |
-| Multiple tensor gradients and bounded `range` | Verified preview | `from autograd import gradients` returns one gradient per Tensor[F32] input; `from data import range` supports bounded `for` loops |
+| Multiple tensor gradients, bounded `range` and whitespace splitting | Verified preview | `from autograd import gradients` returns one gradient per Tensor[F32] input; `from data import range` supports bounded `for` loops and `from data import split_whitespace` returns bounded Unicode whitespace tokens |
 | List indexing, tensor element reads, `for` iteration and `var` assignment | E4 experimental | `List[T]` indexing, typed read-only tensor coordinates, bounded iteration, mutable bindings and list concatenation execute; slicing and tensor mutation remain unavailable |
 
 Status labels mean: **implemented** is present and tested in the checker; **partial** has explicit gaps; **reserved** produces a diagnostic rather than silently working; **designed** has no current implementation.

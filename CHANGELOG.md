@@ -7,6 +7,24 @@ not a promise that GitHub publication already happened.
 
 ## [Unreleased]
 
+- **Candidate:** the dependency-free Python bridge invokes an installed
+  Seloryn binary through the existing JSON/stdio `{stdout,value}` contract,
+  with typed diagnostic errors, timeout/input/output bounds and a copied
+  external-project proof. The bridge is process-per-request and does not claim
+  HTTP serving, retries, descendant fencing or a stable ABI.
+- **Candidate:** JSON strings now decode raw UTF-8 code points instead of
+  treating each non-ASCII byte as a separate character; the Python bridge
+  proof covers Portuguese Unicode input end to end.
+- **Candidate:** the local job worker now attaches each child to a POSIX
+  process group or Windows Job Object with kill-on-close semantics. A native
+  descendant probe proves timeout cleanup of the tree after fence installation;
+  checkpoint resume and supervisor-crash recovery remain outside the claim.
+- **Candidate:** `seloryn run --log=json2` now emits a bounded
+  `run.start` → `preflight.error` → `run.end` receipt for source-loading,
+  manifest-loading and static-check failures. The receipt preserves the
+  stable diagnostic code and a message fingerprint without exposing paths or
+  message text; dataset/checkpoint failures remain outside this preflight
+  contract.
 - **Candidate:** release staging now groups a runtime archive and VSIX on one
   language compatibility line, writes `release-manifest.json` and external
   `SHA256SUMS`, and refuses a mismatched version base.
@@ -25,9 +43,11 @@ not a promise that GitHub publication already happened.
 - **Candidate:** `seloryn job` now includes a bounded local worker for validated
   `seloryn-run.v1` sources. It snapshots the validated source, claims and
   fences a lease, applies timeout/cancellation cleanup, bounds stdout/stderr
-  evidence and commits an atomic result receipt. The slice does not supervise
-  descendant processes, provide process-group/job-object fencing, retry lost
-  jobs or distribute work remotely.
+  evidence and commits an atomic result receipt. `job retry` archives the
+  previous attempt, clears the active result, requeues the same canonical spec
+  and increments the next claimed attempt. The worker now fences descendants
+  through a POSIX process group or Windows Job Object; checkpoint resume,
+  supervisor-crash recovery and remote execution remain outside the slice.
 
 ## [0.9.4] — local runtime patch, 2026-10-16
 
@@ -109,5 +129,5 @@ not a promise that GitHub publication already happened.
 - `vscode-v0.4.0`, `vscode-v0.3.0`, `vscode-v0.2.0` and `vscode-v0.1.0`
   remain preserved as prerelease history. They are not relabeled to hide
   their earlier compatibility lines. The current local candidate is tracked
-  in `tooling/vscode/package.json`; historical tags are not candidates for the
+  in `packages/vscode/package.json`; historical tags are not candidates for the
   current `0.12` compatibility line.

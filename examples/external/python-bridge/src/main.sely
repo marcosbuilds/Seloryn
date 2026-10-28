@@ -1,0 +1,8 @@
+from json import as_text, from_i64, from_text, get, object, read_stdin
+from data import len
+
+fn main() -> Result[Json, JsonIoError]:
+    let document: Json = read_stdin()?
+    let name: Text = as_text(get(document, ["name"])?)?
+    let response: Json = object(["protocol", "name", "length"], [from_text("seloryn-json-stdio.v1"), from_text(name), from_i64(len(name))])?
+    return Ok(response)

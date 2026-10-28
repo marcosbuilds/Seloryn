@@ -659,6 +659,65 @@ fn check_json_reports_missing_source_as_structured_diagnostic() {
 }
 
 #[test]
+fn check_json_success_is_a_single_machine_readable_document() {
+    let path = temporary_source("json-success");
+    fs::write(&path, "fn main() -> Unit:\n    return\n").expect("write valid source");
+
+    let output = run_cli(&[
+        "check",
+        path.to_str().expect("temporary path is UTF-8"),
+        "--format=json",
+    ]);
+    let _ = fs::remove_file(&path);
+    assert!(output.status.success());
+    assert!(output.stderr.is_empty());
+    let stdout = String::from_utf8(output.stdout).expect("JSON success must be UTF-8");
+    assert_eq!(
+        stdout,
+        format!(
+            "{{\"checked\":true,\"path\":\"{}\",\"schema\":\"seloryn.check.v1\",\"status\":\"ok\"}}\n",
+            path.to_string_lossy()
+                .replace('\\', "\\\\")
+                .replace('"', "\\\"")
+        )
+    );
+}
+
+#[test]
+fn run_json_missing_source_keeps_the_io_exit_code_and_structured_error() {
+    let path = std::env::temp_dir().join(format!(
+        "seloryn-run-missing-json-{}-{}.sely",
+        std::process::id(),
+        std::thread::current().name().unwrap_or("test")
+    ));
+    let _ = fs::remove_file(&path);
+    let output = run_cli(&[
+        "run",
+        path.to_str().expect("temporary path is UTF-8"),
+        "--format=json",
+    ]);
+    assert_eq!(output.status.code(), Some(74));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("JSON diagnostic must be UTF-8");
+    assert!(stderr.starts_with(
+        "{\"schema\":\"seloryn.analysis.v1\",\"language_version\":\"0.12\",\"runtime_package\":\"0.12.0\",\"diagnostics\":["
+    ));
+    assert!(stderr.contains("\"code\":\"SEL-C003\""));
+    assert!(stderr.contains("path not found"));
+}
+
+#[test]
+fn invalid_command_usage_identifies_the_expected_invocation() {
+    let output = run_cli(&["lsp"]);
+    assert_eq!(output.status.code(), Some(64));
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8(output.stderr).expect("usage diagnostic must be UTF-8");
+    assert!(stderr.contains("SEL-C001 invalid command usage"));
+    assert!(stderr.contains("received: <none>"));
+    assert!(stderr.contains("usage: seloryn lsp --stdio"));
+}
+
+#[test]
 fn quiet_check_suppresses_success_line() {
     let path = temporary_source("quiet");
     fs::write(&path, "fn main() -> Unit:\n    return\n").expect("write quiet source");

@@ -71,6 +71,25 @@ pub fn render(path: &Path, source: &str, diagnostic: &Diagnostic) -> String {
     rendered
 }
 
+/// Render operating-system failures without leaking localized host text into
+/// the stable CLI contract. The original error is still available to callers
+/// that need private logging, but user-facing diagnostics stay portable across
+/// CMD, PowerShell and POSIX shells.
+pub fn stable_io_error(error: &std::io::Error) -> &'static str {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => "path not found",
+        std::io::ErrorKind::PermissionDenied => "permission denied",
+        std::io::ErrorKind::AlreadyExists => "path already exists",
+        std::io::ErrorKind::InvalidInput => "invalid input",
+        std::io::ErrorKind::InvalidData => "invalid data",
+        std::io::ErrorKind::TimedOut => "operation timed out",
+        std::io::ErrorKind::WouldBlock => "operation would block",
+        std::io::ErrorKind::BrokenPipe => "output pipe closed",
+        std::io::ErrorKind::Interrupted => "operation interrupted",
+        _ => "operating-system I/O failure",
+    }
+}
+
 pub fn render_json(path: &Path, source: &str, diagnostics: &[Diagnostic]) -> String {
     let mut rendered = format!(
         "{{\"schema\":\"{}\",\"language_version\":\"{}\",\"runtime_package\":\"{}\",\"diagnostics\":[",

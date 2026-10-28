@@ -1,13 +1,72 @@
-# Installation — experimental local tooling
+# Installation — Windows preview distribution
 
-There is no supported public runtime release or download yet. The repository
-includes local installers for an already-built binary. The validated Windows
-installer verifies SHA-256, the binary's canonical language/runtime version and
-supplied `seloryn.provenance.v1` metadata before copying, preserves one rollback
-copy, supports uninstall and can persist the install directory in the current
-user's `PATH`. It never changes the machine-wide PATH. The POSIX script has
-lifecycle commands, but its native binary and provenance path are not yet
-verified. Neither script downloads code or creates a release.
+There is no public `0.12.0` download or stable runtime release yet. The latest
+published runtime preview is [`0.7.0`](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07);
+the complete package map and official download URLs are in
+[`packages/catalog.toml`](../../packages/catalog.toml). The repository also
+contains a native Windows x64 setup executable build path for the local
+verified preview `0.12.0` runtime. The setup embeds the Rust runtime and native launcher,
+installs them into isolated per-version directories, writes a hash-bound
+manifest, supports an explicit default-version choice, and can update only the
+current user's `PATH`. It does not require Python, Rust, Cargo, Git, or a
+network connection after the executable has been built.
+
+The candidate artifact is produced by
+[`scripts/release/build-installer.ps1`](../../scripts/release/build-installer.ps1)
+as `SelorynSetup-0.12.0-windows-x64.exe`. The build gate executes that artifact
+against a fresh install root and verifies the installed runtime, manifest hash,
+versioned launcher, default launcher dispatch, and `seloryn versions`. This is
+local evidence for a preview artifact, not a public release or a code-signed
+distribution.
+
+The native setup UI defaults to the per-user install directory, adds the
+per-user `PATH` only when selected, and makes `0.12.0` the default only when
+selected. Existing version directories are never overwritten by a different
+payload. The native launcher validates the manifest and runtime hash before
+starting the selected executable. The UI is a fixed-size four-stage wizard:
+welcome, location, installation and completion. Installation runs off the UI
+thread and streams real stage messages into its log.
+
+The older PowerShell lifecycle script remains useful for development-only
+installation of an already-built binary. It is not the native setup artifact
+and does not create a release. It refuses install, uninstall and rollback
+operations when the target already contains native versioned-install state;
+use the native setup or the versioned `seloryn` commands for that root.
+
+## Experimental font package
+
+The supplied Seloryn Font v2.0 candidate is available at
+[`packages/fonts/seloryn-font/`](../../packages/fonts/seloryn-font/). Install the
+TTF files manually on a development machine; use the WOFF/WOFF2 files and
+`seloryn-font.css` for web previews. The package is proportional, covers
+English and Brazilian Portuguese, and is not a stable or published release.
+
+## Native setup build and verification
+
+Run this on Windows with the Rust development toolchain:
+
+```powershell
+.\scripts\release\build-installer.ps1
+```
+
+The generated installer is a self-contained Windows x64 executable. Run it
+from Explorer or a shell, choose the installation directory, select PATH and
+default-version behavior explicitly, and press **Install**. Open a new shell
+after a PATH change. The installed commands include:
+
+```powershell
+seloryn versions
+seloryn use 0.12.0
+seloryn --version
+seloryn0.12.0 --version
+```
+
+The current artifact installs one runtime version. The launcher and state
+layout are designed for side-by-side package versions, but two distinct public
+runtime artifacts and a clean-machine gate are still required before claiming
+full multiversion or supported-release status.
+
+## Development-only PowerShell lifecycle
 
 On the validated Windows x64 host:
 

@@ -244,6 +244,58 @@ def main() -> int:
         assert valid, message
         assert not list((broken_checkpoint_project / "checkpoints").glob(".model.json.tmp-*"))
 
+        invalid_source = root / "invalid.sely"
+        invalid_source.write_text(
+            "fn main() -> Unit:\n\treturn\n",
+            encoding="utf-8",
+        )
+        invalid = run_stream(invalid_source, "json2")
+        assert invalid.returncode == 65, invalid
+        invalid_lines = [line for line in invalid.stderr.splitlines() if line.startswith("{")]
+        invalid_events = [json.loads(line) for line in invalid_lines]
+        assert [event["kind"] for event in invalid_events] == [
+            "run.start",
+            "preflight.error",
+            "run.end",
+        ], invalid.stderr
+        assert invalid_events[1]["data"]["error_code"].startswith("SEL-"), invalid.stderr
+        assert "error_message_sha256" in invalid_events[1]["data"], invalid.stderr
+        assert invalid_events[-1]["data"]["status"] == "error", invalid.stderr
+        assert invalid_events[-1]["data"]["error_code"] == invalid_events[1]["data"]["error_code"]
+        assert all(str(invalid_source) not in line for line in invalid_lines), invalid.stderr
+        valid, message, count = verifier.verify(invalid_lines)
+        assert valid, message
+        assert count == 3
+
+        invalid_project = root / "invalid-project"
+        shutil.copytree(ROOT / "examples" / "projects" / "mlp-training", invalid_project)
+        invalid_manifest = invalid_project / "seloryn.toml"
+        invalid_manifest.write_text(
+            invalid_manifest.read_text(encoding="utf-8").replace(
+                'language = "0.02"', 'language = "0.99"'
+            ),
+            encoding="utf-8",
+        )
+        invalid_manifest_result = run_stream(invalid_project, "json2")
+        assert invalid_manifest_result.returncode == 65, invalid_manifest_result
+        manifest_lines = [
+            line
+            for line in invalid_manifest_result.stderr.splitlines()
+            if line.startswith("{")
+        ]
+        manifest_events = [json.loads(line) for line in manifest_lines]
+        assert [event["kind"] for event in manifest_events] == [
+            "run.start",
+            "preflight.error",
+            "run.end",
+        ], invalid_manifest_result.stderr
+        assert manifest_events[1]["data"]["error_code"].startswith("SEL-"), invalid_manifest_result.stderr
+        assert manifest_events[-1]["data"]["status"] == "error", invalid_manifest_result.stderr
+        assert all(str(invalid_project) not in line for line in manifest_lines), invalid_manifest_result.stderr
+        valid, message, count = verifier.verify(manifest_lines)
+        assert valid, message
+        assert count == 3
+
         stdout_failure_project = root / "stdout-failure"
         shutil.copytree(ROOT / "examples" / "projects" / "mlp-training", stdout_failure_project)
         stdout_failure_checkpoint = stdout_failure_project / "checkpoints" / "model.json"

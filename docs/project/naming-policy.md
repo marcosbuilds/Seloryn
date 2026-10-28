@@ -48,7 +48,7 @@ uma plataforma ou uma distinção necessária para descoberta automática.
 Branches de trabalho são curtas e temporárias:
 
 - `proof/tokens` para a prova pareada de tokenização;
-- `research/agent-runtime` para pesquisa do runtime de agentes;
+- `agent-runtime` para módulos públicos do runtime de agentes;
 - `feature/context` para uma capacidade de contexto;
 - `fix/job-lease` para uma correção reproduzida;
 - `release/0.12.0` somente durante uma preparação real de release.

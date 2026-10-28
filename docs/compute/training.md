@@ -122,6 +122,15 @@ hyperparameter mismatch fails with a diagnostic rather than silently
 restarting. The checkpoint is intentionally local and bounded; it is not a
 portable distributed format.
 
+When `seloryn job run` rejects a job during read-only preflight, it keeps the
+job in `accepted` or `queued` state and atomically writes
+`.seloryn/jobs/<id>/result.json` with `phase=preflight`,
+`status=preflight_failed`, the stable error code and an SHA-256 fingerprint of
+the diagnostic message. The receipt contains no diagnostic text or local path,
+and `lease_id` is absent because execution never started. This is an
+observability receipt, not a retry policy or a claim that malformed jobs are
+automatically repaired.
+
 ## Hardware evidence boundary
 
 `seloryn devices --format=json` enumerates adapters exposed by the compiled
@@ -186,12 +195,13 @@ For keyed authentication, `--log=json2-signed` requires a non-empty
 independent verifier checks it with `--hmac-key`. This authenticates the stream
 to parties that already possess the secret; it is not publisher authentication,
 non-repudiation or an Ed25519 signature.
-Only a profile that reaches `run.start` receives this envelope. Failures during
-manifest loading, static checking, capability resolution or dataset/checkpoint
-preflight remain ordinary CLI diagnostics because there is not yet a complete
-execution identity from which to construct a truthful receipt. A `training.step`
-is progress evidence; checkpoint persistence can still fail afterward and is
-represented by an error `run.end`.
+Source loading, manifest loading and static-check failures now receive a
+bounded preflight envelope as well: `run.start`, `preflight.error` and
+`run.end(status=error)`. The event carries the stable diagnostic code and a
+SHA-256 fingerprint of its message, not the source path or message text. This
+does not turn later dataset/checkpoint failures into a general telemetry
+system. A `training.step` is progress evidence; checkpoint persistence can
+still fail afterward and is represented by an error `run.end`.
 
 The independent verifier can run without the Seloryn binary:
 

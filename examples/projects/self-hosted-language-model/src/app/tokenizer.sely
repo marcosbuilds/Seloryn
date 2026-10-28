@@ -1,18 +1,29 @@
 module app.tokenizer
 
-from data import len
-from json import as_text_list, get, read_file
+from data import len, split_whitespace
+from json import as_text_list, get, read_file, sha256
 
 pub record Vocabulary:
     tokens: List[Text]
     size: I64
+    source_hash: Text
+
+fn contains_token(tokens: List[Text], needle: Text) -> Bool:
+    for token in tokens:
+        if token == needle:
+            return true
+    return false
 
 pub fn load_vocabulary(path: Text) -> Result[Vocabulary, JsonIoError]:
     let document: Json = read_file(path)?
     let tokens: List[Text] = as_text_list(get(document, ["tokens"])?)?
     let size: I64 = len(tokens)
     require size > 1 else JsonIoError("vocabulary must contain at least two tokens")
-    return Ok(Vocabulary(tokens, size))
+    var seen: List[Text] = []
+    for token in tokens:
+        require not contains_token(seen, token) else JsonIoError("vocabulary tokens must be unique")
+        seen = seen + [token]
+    return Ok(Vocabulary(tokens, size, sha256(document)))
 
 pub fn token_id(vocabulary: Vocabulary, token: Text) -> Result[I64, JsonIoError]:
     var index: I64 = 0
@@ -28,6 +39,11 @@ pub fn tokenize(vocabulary: Vocabulary, tokens: List[Text]) -> Result[List[I64],
         let id: I64 = token_id(vocabulary, token)?
         encoded = encoded + [id]
     return Ok(encoded)
+
+pub fn tokenize_text(vocabulary: Vocabulary, text: Text) -> Result[List[I64], JsonIoError]:
+    let tokens: List[Text] = split_whitespace(text)
+    require len(tokens) > 0 else JsonIoError("text prompt must contain at least one token")
+    return tokenize(vocabulary, tokens)
 
 pub fn token_text(vocabulary: Vocabulary, token: I64) -> Text:
     return vocabulary.tokens[token]

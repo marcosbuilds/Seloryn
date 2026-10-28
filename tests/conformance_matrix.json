@@ -133,7 +133,7 @@
       "suites": ["core"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary"],
-      "notes": "Runtime-sized source-owned CPU bigram training and inference."
+      "notes": "Runtime-sized source-owned CPU contextual training and inference with configurable one-hot windows."
     },
     {
       "id": "auditable-local-inference",
@@ -241,7 +241,25 @@
       "suites": ["core"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary", "local process"],
-      "notes": "Bounded direct-process worker, lease fencing, cancellation/timeout cleanup and committed result receipt."
+      "notes": "Bounded direct-process worker, lease fencing, cancellation/timeout cleanup, preflight receipt and archived terminal retry."
+    },
+    {
+      "id": "job-process-fence",
+      "path": "tests/process_fence_probe.py",
+      "command": ["python", "tests/process_fence_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "Rust compiler", "local process"],
+      "notes": "Timeout fence kills a native descendant created after the OS fence is installed."
+    },
+    {
+      "id": "python-bridge",
+      "path": "tests/python_bridge_probe.py",
+      "command": ["python", "tests/python_bridge_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "local process"],
+      "notes": "External process-per-request JSON/stdio bridge with typed failures, Unicode and bounded transport."
     },
     {
       "id": "language-model-comparison",
@@ -317,8 +335,8 @@
     },
     {
       "id": "vscode-package",
-      "path": "tooling/vscode/package.json",
-      "command": ["npm", "run", "package", "--prefix", "tooling/vscode"],
+      "path": "packages/vscode/package.json",
+      "command": ["npm", "run", "package", "--prefix", "packages/vscode"],
       "suites": ["editor"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Node.js", "npm dependencies"],
@@ -326,8 +344,8 @@
     },
     {
       "id": "vscode-tests",
-      "path": "tooling/vscode/package.json",
-      "command": ["npm", "test", "--prefix", "tooling/vscode"],
+      "path": "packages/vscode/package.json",
+      "command": ["npm", "test", "--prefix", "packages/vscode"],
       "suites": ["editor"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Node.js", "npm dependencies"],
@@ -335,8 +353,8 @@
     },
     {
       "id": "vscode-cli-integration",
-      "path": "tooling/vscode/package.json",
-      "command": ["npm", "run", "test:cli", "--prefix", "tooling/vscode"],
+      "path": "packages/vscode/package.json",
+      "command": ["npm", "run", "test:cli", "--prefix", "packages/vscode"],
       "suites": ["editor"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Node.js", "npm dependencies", "release binary"],
@@ -478,13 +496,13 @@
     {
       "id": "source-owned-language-model",
       "area": "language-model",
-      "claim": "A source-owned CPU bigram workflow with runtime-sized vocabulary/data, training, evaluation, checkpoint reload and inference.",
+      "claim": "A source-owned CPU contextual next-token workflow with runtime-sized vocabulary/data, configurable windows, training, evaluation, checkpoint reload and inference.",
       "status": "verified-preview",
       "implementation": ["examples/projects/self-hosted-language-model", "src/tensor_autograd.rs"],
       "positive_probes": ["self-hosted-language-model", "language-model-comparison"],
       "negative_probes": ["self-hosted-language-model"],
       "platforms": ["linux", "macos", "windows"],
-      "requirements": ["CPU", "single token context", "Python 3.12", "stdlib numerical reference"],
+      "requirements": ["CPU", "bounded context window", "Python 3.12", "stdlib numerical reference"],
       "documentation": ["docs/project/status.md", "docs/compute/language-model.md", "docs/compute/llms.md"],
       "limits": ["This is not transformer training, subword tokenization, HTTP serving or GPU training."]
     },
@@ -504,7 +522,7 @@
     {
       "id": "streaming-receipts",
       "area": "observability",
-      "claim": "Human/JSON/JSON2 streams with identity, hash chaining, replay, redaction and optional keyed authentication.",
+      "claim": "Human/JSON/JSON2 streams with identity, bounded source/manifest/static preflight error receipts, hash chaining, replay, redaction and optional keyed authentication.",
       "status": "verified-preview",
       "implementation": ["src/main.rs", "src/runtime.rs", "scripts/streaming/verify-event-chain.py", "scripts/streaming/replay-receipt.py"],
       "positive_probes": ["streaming-v2", "auditable-local-inference"],
@@ -512,7 +530,7 @@
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary"],
       "documentation": ["docs/project/status.md", "docs/compute/training.md", "docs/benchmarks/auditable-local-inference.md"],
-      "limits": ["This is not a public-key signature, async backpressure protocol or universal telemetry system."]
+      "limits": ["Preflight receipts cover source loading, manifest loading and static checking; this is not a public-key signature, async backpressure protocol or universal telemetry system."]
     },
     {
       "id": "json-array-ingestion",
@@ -563,8 +581,21 @@
       "negative_probes": ["job-lifecycle", "job-lease", "job-recovery", "job-concurrency", "job-preflight", "job-worker"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary", "local filesystem"],
-      "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
-      "limits": ["The worker is direct-process and bounded; no descendant process-group/job-object fencing, retry, remote execution or escaped-child recovery is claimed."]
+      "documentation": ["docs/project/status.md", "docs/project/conformance.md"],
+      "limits": ["The worker is direct-process and bounded; retry is explicit local requeue of the same canonical spec with archived receipts; checkpoint resume, remote execution or escaped-child recovery after supervisor death are not claimed."]
+    },
+    {
+      "id": "job-process-fencing",
+      "area": "operations",
+      "claim": "A local worker timeout fences a Seloryn child tree with an OS process group on POSIX or a Windows Job Object.",
+      "status": "verified-preview",
+      "implementation": ["src/job_worker.rs", "tests/fixtures/process_fence_helper.rs"],
+      "positive_probes": ["job-process-fence"],
+      "negative_probes": ["job-process-fence"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "Rust compiler", "local process"],
+      "documentation": ["docs/project/status.md", "docs/project/conformance.md"],
+      "limits": ["The proof covers a descendant created after fence installation; atomic process birth before attachment, supervisor crash recovery, remote execution and checkpoint resume remain outside the contract."]
     },
     {
       "id": "operational-reliability",
@@ -578,6 +609,19 @@
       "requirements": ["four concurrent processes", "Python 3.12", "release binary"],
       "documentation": ["docs/benchmarks/operational-reliability.md", "docs/project/status.md"],
       "limits": ["Forced termination is classified separately and does not become a graceful-cancellation claim."]
+    },
+    {
+      "id": "external-python-bridge",
+      "area": "integration",
+      "claim": "A dependency-free Python application can consume a local Seloryn project through the bridge wrapper and existing JSON/stdio CLI result contract.",
+      "status": "verified-preview",
+      "implementation": ["sdk/python", "src/main.rs", "src/json.rs", "examples/external/python-bridge"],
+      "positive_probes": ["python-bridge"],
+      "negative_probes": ["python-bridge"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary", "local process"],
+      "documentation": ["docs/systems/python-bridge.md", "docs/guide/cli.md", "docs/project/status.md"],
+      "limits": ["Process-per-request only; no HTTP provider, retry policy, descendant fencing, registry or stable ABI is claimed."]
     },
     {
       "id": "workspace-tools",
@@ -597,12 +641,12 @@
       "area": "developer-experience",
       "claim": "Bounded parser-backed LSP lifecycle plus VS Code package and CLI integration evidence.",
       "status": "verified-preview",
-      "implementation": ["src/lsp.rs", "tooling/vscode", "tests/lsp_probe.py"],
+      "implementation": ["src/lsp.rs", "packages/vscode", "tests/lsp_probe.py"],
       "positive_probes": ["lsp", "vscode-package", "vscode-tests", "vscode-cli-integration"],
       "negative_probes": ["lsp", "vscode-cli-integration"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "Node.js", "npm dependencies", "release binary"],
-      "documentation": ["docs/project/status.md", "docs/guide/editor.md", "tooling/vscode/README.md"],
+      "documentation": ["docs/project/status.md", "docs/guide/editor.md", "packages/vscode/README.md"],
       "limits": ["Indexed/incremental analysis, rename and Marketplace publication remain outside this proof."]
     },
     {
@@ -681,7 +725,7 @@
       "platforms": ["not-applicable"],
       "requirements": ["public boundary record"],
       "documentation": ["docs/project/status.md", "docs/compute/llms.md", "docs/systems/http.md"],
-      "limits": ["The verified language-model row is a one-token CPU bigram proof only."]
+      "limits": ["The verified language-model row is a bounded CPU one-hot linear proof; embeddings, subwords, transformer layers and HTTP serving remain unsupported."]
     },
     {
       "id": "distributed-boundary",
@@ -693,7 +737,7 @@
       "negative_probes": ["boundary-distributed"],
       "platforms": ["not-applicable"],
       "requirements": ["public boundary record"],
-      "documentation": ["docs/project/status.md", "docs/project/next-gates.md"],
+      "documentation": ["docs/project/status.md", "docs/project/conformance.md"],
       "limits": ["Local reservation leases do not prove live worker fencing or distributed recovery."]
     },
     {

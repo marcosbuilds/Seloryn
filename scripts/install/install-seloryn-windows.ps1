@@ -120,6 +120,11 @@ function Remove-User-PathEntry([string]$Entry) {
 Assert-SafeRoot $InstallRoot
 $root = FullPath $InstallRoot
 $manifest = ManifestPath $root
+$managedState = Join-Path $root 'state\installations.json'
+if ($Action -in @('Install', 'Uninstall', 'Rollback') -and
+    (Test-Path -LiteralPath $managedState -PathType Leaf)) {
+    Fail 'this root is managed by the native versioned installer; use SelorynSetup or the seloryn versions/use/uninstall commands'
+}
 
 switch ($Action) {
     'Install' {

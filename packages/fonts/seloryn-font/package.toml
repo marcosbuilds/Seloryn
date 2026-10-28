@@ -1,0 +1,14 @@
+schema = "seloryn.package.v1"
+name = "seloryn-font"
+version = "2.0.0"
+channel = "experimental"
+status = "local-candidate"
+license = "MIT"
+language_compatibility = "0.12"
+coverage_characters = 138
+weights = [300, 700]
+formats = ["ttf", "woff", "woff2"]
+css = "seloryn-font.css"
+preview = "index.html"
+source_archive_sha256 = "4031aa2cc86a4218cbb4c13b8dc1adf7e55982db0b59c560cd09ef5278f37cb5"
+source_rebuild = "validated with fontTools 4.65.0 and Shapely 2.1.2; supplied binaries are retained because byte identity varies across dependency versions"

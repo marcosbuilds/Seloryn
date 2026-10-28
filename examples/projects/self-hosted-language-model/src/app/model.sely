@@ -3,6 +3,18 @@ module app.model
 pub record LanguageModel:
     weights: Tensor[F32]
     vocabulary_size: I64
+    context_size: I64
+
+pub record EmbeddingModel:
+    embedding: Tensor[F32]
+    first_weights: Tensor[F32]
+    first_bias: Tensor[F32]
+    second_weights: Tensor[F32]
+    second_bias: Tensor[F32]
+    vocabulary_size: I64
+    context_size: I64
+    embedding_dim: I64
+    hidden_size: I64
 
 pub fn objective(inputs: Tensor[F32], weights: Tensor[F32], targets: Tensor[F32]) -> Tensor[F32]:
     let logits: Tensor[F32] = matmul(inputs, weights)
@@ -10,3 +22,22 @@ pub fn objective(inputs: Tensor[F32], weights: Tensor[F32], targets: Tensor[F32]
 
 pub fn probabilities(inputs: Tensor[F32], model: LanguageModel) -> Tensor[F32]:
     return tensor_softmax(matmul(inputs, model.weights), 1)
+
+pub fn embedding_logits(ids: Tensor[I64], embedding: Tensor[F32], first_weights: Tensor[F32], first_bias: Tensor[F32], second_weights: Tensor[F32], second_bias: Tensor[F32]) -> Tensor[F32]:
+    let embedded: Tensor[F32] = tensor_embedding(ids, embedding)
+    let ids_shape: List[I64] = tensor_shape(ids)
+    let embedding_shape: List[I64] = tensor_shape(embedding)
+    let rows: I64 = ids_shape[0]
+    let context_size: I64 = ids_shape[1]
+    let embedding_dim: I64 = embedding_shape[1]
+    let flattened: Tensor[F32] = reshape(embedded, [rows, context_size * embedding_dim])
+    let hidden_pre_activation: Tensor[F32] = matmul(flattened, first_weights) + first_bias
+    let hidden: Tensor[F32] = tensor_relu(hidden_pre_activation)
+    return matmul(hidden, second_weights) + second_bias
+
+pub fn embedding_objective(ids: Tensor[I64], embedding: Tensor[F32], first_weights: Tensor[F32], first_bias: Tensor[F32], second_weights: Tensor[F32], second_bias: Tensor[F32], targets: Tensor[I64]) -> Tensor[F32]:
+    let logits: Tensor[F32] = embedding_logits(ids, embedding, first_weights, first_bias, second_weights, second_bias)
+    return tensor_cross_entropy_ids(logits, targets)
+
+pub fn embedding_probabilities(ids: Tensor[I64], model: EmbeddingModel) -> Tensor[F32]:
+    return tensor_softmax(embedding_logits(ids, model.embedding, model.first_weights, model.first_bias, model.second_weights, model.second_bias), 1)

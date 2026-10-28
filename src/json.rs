@@ -209,7 +209,16 @@ impl<'a> Parser<'a> {
                         "JSON strings cannot contain control bytes",
                     ));
                 }
-                character => result.push(character as char),
+                _character => {
+                    let start = self.cursor - 1;
+                    let tail = &self.source.as_bytes()[start..];
+                    let decoded = std::str::from_utf8(tail)
+                        .ok()
+                        .and_then(|text| text.chars().next())
+                        .ok_or_else(|| error("SEL-J001", "invalid UTF-8 JSON string"))?;
+                    self.cursor = start + decoded.len_utf8();
+                    result.push(decoded);
+                }
             }
         }
         Err(error("SEL-J001", "unterminated JSON string"))
@@ -317,6 +326,8 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::{JsonValue, encode, parse};
 
     #[test]
@@ -342,6 +353,12 @@ mod tests {
     #[test]
     fn preserves_unicode_text() {
         let value = parse(r#"{"text":"Santarém — café ☕"}"#, 128, 4).expect("valid JSON");
-        assert!(matches!(value, JsonValue::Object(_)));
+        assert_eq!(
+            value,
+            JsonValue::Object(BTreeMap::from([(
+                "text".to_owned(),
+                JsonValue::String("Santarém — café ☕".to_owned()),
+            )]))
+        );
     }
 }

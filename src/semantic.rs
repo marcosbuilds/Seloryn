@@ -1204,7 +1204,11 @@ impl<'a> Checker<'a> {
     fn type_of_builtin_call(&mut self, builtin: Builtin, arguments: &[Expr], span: Span) -> Type {
         let name = builtin_name(builtin);
         let expected_arguments = match builtin {
-            Builtin::TensorF32 | Builtin::TensorI64 | Builtin::Reshape => 2,
+            Builtin::TensorF32
+            | Builtin::TensorI64
+            | Builtin::TensorEmbedding
+            | Builtin::UniformF32
+            | Builtin::Reshape => 2,
             Builtin::ZerosF32 | Builtin::ZerosI64 => 1,
             Builtin::TensorShape
             | Builtin::TensorRank
@@ -1217,6 +1221,7 @@ impl<'a> Checker<'a> {
             Builtin::Sum | Builtin::Mean => 0,
             Builtin::Matmul | Builtin::Softmax | Builtin::LogSumExp | Builtin::SumToShape => 2,
             Builtin::CrossEntropy => 3,
+            Builtin::CrossEntropyIds => 2,
             Builtin::Transpose | Builtin::Relu | Builtin::Exp | Builtin::Log => 1,
         };
         let valid_arity = if matches!(builtin, Builtin::Sum | Builtin::Mean) {
@@ -1271,6 +1276,28 @@ impl<'a> Checker<'a> {
                     "tensor_i64 shape",
                 );
                 Type::Tensor(TensorDtype::I64)
+            }
+            Builtin::TensorEmbedding => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::Tensor(TensorDtype::I64),
+                    "tensor_embedding indices",
+                );
+                self.ensure_expr_assignable(
+                    &arguments[1],
+                    &Type::Tensor(TensorDtype::F32),
+                    "tensor_embedding table",
+                );
+                Type::Tensor(TensorDtype::F32)
+            }
+            Builtin::UniformF32 => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::List(Box::new(Type::I64)),
+                    "tensor_uniform_f32 shape",
+                );
+                self.ensure_expr_assignable(&arguments[1], &Type::I64, "tensor_uniform_f32 seed");
+                Type::Tensor(TensorDtype::F32)
             }
             Builtin::ZerosF32 => {
                 self.ensure_expr_assignable(
@@ -1411,6 +1438,19 @@ impl<'a> Checker<'a> {
                     "cross_entropy targets",
                 );
                 self.ensure_expr_assignable(&arguments[2], &Type::I64, "cross_entropy axis");
+                Type::Tensor(TensorDtype::F32)
+            }
+            Builtin::CrossEntropyIds => {
+                self.ensure_expr_assignable(
+                    &arguments[0],
+                    &Type::Tensor(TensorDtype::F32),
+                    "cross_entropy_ids logits",
+                );
+                self.ensure_expr_assignable(
+                    &arguments[1],
+                    &Type::Tensor(TensorDtype::I64),
+                    "cross_entropy_ids targets",
+                );
                 Type::Tensor(TensorDtype::F32)
             }
             Builtin::SumToShape => {
@@ -1727,12 +1767,70 @@ impl<'a> Checker<'a> {
                 }
                 Type::List(Box::new(Type::Tensor(TensorDtype::F32)))
             }
+            "gradients_with_constants" => {
+                if arguments.len() < 2 {
+                    self.error(
+                        "SEL-T005",
+                        "standard function `gradients_with_constants` expects a callable and at least one tensor input",
+                        span,
+                    );
+                    return Type::Error;
+                }
+                let function_type = self.type_of_expr(&arguments[0]);
+                match function_type {
+                    Type::Function(parameters, return_type)
+                        if parameters.len() == arguments.len() - 1
+                            && parameters.iter().all(|parameter| {
+                                matches!(
+                                    parameter,
+                                    Type::Tensor(TensorDtype::F32)
+                                        | Type::Tensor(TensorDtype::I64)
+                                )
+                            })
+                            && *return_type == Type::Tensor(TensorDtype::F32) => {}
+                    Type::Unknown | Type::Error => {}
+                    Type::Function(_, _) => self.error(
+                        "SEL-M002",
+                        "gradient callable must take Tensor[F32]/Tensor[I64] parameters and return Tensor[F32]",
+                        span,
+                    ),
+                    _ => self.error(
+                        "SEL-M002",
+                        "gradients_with_constants expects a named tensor callable",
+                        span,
+                    ),
+                }
+                for input in arguments.iter().skip(1) {
+                    let input_type = self.type_of_expr(input);
+                    if !matches!(
+                        input_type,
+                        Type::Tensor(TensorDtype::F32)
+                            | Type::Tensor(TensorDtype::I64)
+                            | Type::Unknown
+                            | Type::Error
+                    ) {
+                        self.error(
+                            "SEL-M002",
+                            "gradient input must be Tensor[F32] or Tensor[I64]",
+                            input.span(),
+                        );
+                    }
+                }
+                Type::List(Box::new(Type::Tensor(TensorDtype::F32)))
+            }
             "range" => {
                 self.check_standard_arity(name, arguments, 1, span);
                 if let Some(stop) = arguments.first() {
                     self.ensure_expr_assignable(stop, &Type::I64, "range stop");
                 }
                 Type::List(Box::new(Type::I64))
+            }
+            "split_whitespace" => {
+                self.check_standard_arity(name, arguments, 1, span);
+                if let Some(value) = arguments.first() {
+                    self.ensure_expr_assignable(value, &Type::Text, "split_whitespace text");
+                }
+                Type::List(Box::new(Type::Text))
             }
             "train_linear" | "train_linear_gpu" | "gpu" => {
                 self.check_standard_arity(name, arguments, 4, span);
@@ -2175,8 +2273,14 @@ fn is_supported_standard_directive(text: &str) -> bool {
             "slow_fixture_provider",
         ]
         .as_slice(),
-        "autograd" => ["backward", "gradcheck", "gradients"].as_slice(),
-        "data" => ["range", "len", "to_f64"].as_slice(),
+        "autograd" => [
+            "backward",
+            "gradcheck",
+            "gradients",
+            "gradients_with_constants",
+        ]
+        .as_slice(),
+        "data" => ["range", "len", "to_f64", "split_whitespace"].as_slice(),
         "training" => [
             "train_linear",
             "train_linear_gpu",
@@ -2253,6 +2357,8 @@ fn builtin_name(builtin: Builtin) -> &'static str {
     match builtin {
         Builtin::TensorF32 => "tensor_f32",
         Builtin::TensorI64 => "tensor_i64",
+        Builtin::TensorEmbedding => "tensor_embedding",
+        Builtin::UniformF32 => "tensor_uniform_f32",
         Builtin::ZerosF32 => "tensor_zeros_f32",
         Builtin::ZerosI64 => "tensor_zeros_i64",
         Builtin::TensorShape => "tensor_shape",
@@ -2275,6 +2381,7 @@ fn builtin_name(builtin: Builtin) -> &'static str {
         Builtin::Softmax => "tensor_softmax",
         Builtin::LogSumExp => "tensor_logsumexp",
         Builtin::CrossEntropy => "tensor_cross_entropy",
+        Builtin::CrossEntropyIds => "tensor_cross_entropy_ids",
         Builtin::SumToShape => "tensor_sum_to_shape",
     }
 }
@@ -2358,6 +2465,14 @@ mod tests {
             invalid_index.contains(&"SEL-T002".to_owned()),
             "{invalid_index:?}"
         );
+        assert!(diagnostics(
+            "from data import split_whitespace\nfn main() -> List[Text]:\n    return split_whitespace(\"ola  mundo\")\n"
+        )
+        .is_empty());
+        assert!(diagnostics(
+            "from data import split_whitespace\nfn main() -> List[Text]:\n    return split_whitespace(1)\n"
+        )
+        .contains(&"SEL-T002".to_owned()));
     }
 
     #[test]

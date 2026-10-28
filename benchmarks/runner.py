@@ -231,7 +231,7 @@ def candidate_process(case_id: str, binary: Path, timeout: float) -> tuple[dict[
 
             shutil.copytree(ROOT / "examples" / "projects" / "self-hosted-language-model", project)
             command = [str(binary), "run", str(project), "--format=json", "--log=off"]
-            return run_process(command, stdin='{"mode":"train"}', timeout=timeout), [str(binary), "run", "<temporary-project>", "--format=json", "--log=off"]
+            return run_process(command, stdin='{"mode":"train","context_size":4,"steps":160}', timeout=timeout), [str(binary), "run", "<temporary-project>", "--format=json", "--log=off"]
     if case_id == "BENCH-06":
         fixture = BENCHMARKS / "fixtures" / "bench-06-error-handling.sely"
         command = [str(binary), "run", str(fixture)]

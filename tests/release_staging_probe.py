@@ -20,7 +20,7 @@ def digest(path: Path) -> str:
 
 def main() -> int:
     binary = ROOT / "target" / "release" / "seloryn.exe"
-    extension = ROOT / "tooling" / "vscode" / "seloryn-language-0.12.0.vsix"
+    extension = ROOT / "packages" / "vscode" / "seloryn-language-0.12.0.vsix"
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
     ).strip()

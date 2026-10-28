@@ -462,3 +462,52 @@ fn rejects_n2_static_and_runtime_failures_without_execution() {
     assert!(shape.stdout.is_empty());
     assert!(String::from_utf8_lossy(&shape.stderr).contains("SEL-R204"));
 }
+
+#[test]
+fn runs_embedding_indexed_loss_and_mixed_autograd_end_to_end() {
+    let example = Command::new(env!("CARGO_BIN_EXE_seloryn"))
+        .args(["run", "examples/tensors/tensor-embedding.sely"])
+        .output()
+        .expect("start embedding example");
+    assert!(
+        example.status.success(),
+        "{}",
+        String::from_utf8_lossy(&example.stderr)
+    );
+
+    let embedding = run_source(
+        "embedding-forward",
+        "fn main() -> Tensor[F32]:\n    let ids: Tensor[I64] = tensor_i64([2, 0, 2, 1], [2, 2])\n    let table: Tensor[F32] = tensor_f32([0.1, 0.2, 1.0, 1.1, 2.0, 2.1], [3, 2])\n    return tensor_embedding(ids, table)\n",
+    );
+    assert!(
+        embedding.status.success(),
+        "{}",
+        String::from_utf8_lossy(&embedding.stderr)
+    );
+    assert_eq!(
+        embedding.stdout,
+        b"Tensor[F32, shape=[2, 2, 2], values=[2.0, 2.1, 0.1, 0.2, 2.0, 2.1, 1.0, 1.1]]\n"
+    );
+
+    let loss = run_source(
+        "embedding-loss",
+        "fn main() -> Tensor[F32]:\n    let logits: Tensor[F32] = tensor_f32([0.0, 1.0, 2.0, 0.0], [2, 2])\n    let targets: Tensor[I64] = tensor_i64([1, 0], [2])\n    return tensor_cross_entropy_ids(logits, targets)\n",
+    );
+    assert!(
+        loss.status.success(),
+        "{}",
+        String::from_utf8_lossy(&loss.stderr)
+    );
+    assert!(String::from_utf8_lossy(&loss.stdout).starts_with("Tensor[F32, shape=[], values=["));
+
+    let gradients = run_source(
+        "embedding-gradients",
+        "from autograd import gradients_with_constants\nfn objective(ids: Tensor[I64], table: Tensor[F32]) -> Tensor[F32]:\n    return tensor_sum(tensor_embedding(ids, table))\nfn main() -> List[Tensor[F32]]:\n    let ids: Tensor[I64] = tensor_i64([2, 0, 2, 1], [2, 2])\n    let table: Tensor[F32] = tensor_f32([0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [3, 2])\n    return gradients_with_constants(objective, ids, table)\n",
+    );
+    assert!(
+        gradients.status.success(),
+        "{}",
+        String::from_utf8_lossy(&gradients.stderr)
+    );
+    assert!(String::from_utf8_lossy(&gradients.stdout).contains("2.0"));
+}

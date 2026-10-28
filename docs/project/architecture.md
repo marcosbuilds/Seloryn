@@ -1,6 +1,6 @@
 # Architecture
 
-![Language pipeline](../../assets/architecture-flow.png)
+![Language pipeline](../../assets/diagrams/architecture-flow.png)
 
 The architecture is defined by owned language semantics from UTF-8 source to deterministic results. **Today the front-end checker, deterministic core IR, bounded pure interpreter, N1/N2 CPU tensor runtime, Seloryn-authored optimization loop and bounded MLP trainer are implemented experimentally/verified as marked in the status table.** The runtime also has a separate hardware-adapter and compute/readback gate. The first implementation uses a native systems-language host, but `.sely` is not a wrapper or source-to-source alias for any host language. Verified, established system libraries may be called through constrained interfaces; security-sensitive protocols and cryptography must not be casually reimplemented. [Status](status.md) is the current evidence boundary.
 
@@ -46,4 +46,4 @@ Legend: **✓ implemented** means the checker/interpreter has source and tests; 
 
 ### Capability sequencing
 
-The public syntactic API of a future feature is only *accepted* once the underlying behavior is implemented, tested and versioned. Language syntax cannot be considered an alternative for working matrix multiplication, reverse-mode autodiff or performant kernels. The current training profile is intentionally concrete; the next numerical dependencies after it are reusable optimizer/data APIs, a device-neutral tensor contract and then [LLMs](../compute/llms.md).
+The public syntactic API of a feature is only *accepted* once the underlying behavior is implemented, tested and versioned. Language syntax cannot be considered an alternative for working matrix multiplication, reverse-mode autodiff or performant kernels. The current training profile is intentionally concrete; the language-model capability boundary is recorded in [LLMs](../compute/llms.md).

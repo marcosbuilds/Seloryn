@@ -136,6 +136,7 @@ enum Operation {
     Create,
     Status,
     Transition,
+    Retry,
     Claim,
     Heartbeat,
     Release,
@@ -149,6 +150,7 @@ impl Operation {
             Self::Create => "create",
             Self::Status => "status",
             Self::Transition => "transition",
+            Self::Retry => "retry",
             Self::Claim => "claim",
             Self::Heartbeat => "heartbeat",
             Self::Release => "release",
@@ -429,6 +431,7 @@ pub(crate) struct WorkerInput {
     pub(crate) source: PathBuf,
     pub(crate) timeout: Duration,
     pub(crate) spec_sha256: String,
+    pub(crate) attempt: u64,
 }
 
 fn read_preflight_input(
@@ -550,6 +553,7 @@ pub(crate) fn worker_input(
         source: snapshot,
         timeout: Duration::from_millis(input.spec.timeout_ms),
         spec_sha256: record.state.spec_sha256,
+        attempt: record.state.attempt,
     })
 }
 
@@ -776,6 +780,73 @@ pub(crate) fn transition(
         &record,
         None,
         Some(next),
+    ))
+}
+
+/// Move one terminal attempt back to the queue without changing its
+/// canonical spec. The old result is archived before the append-only retry
+/// event is committed, so a retry cannot erase the evidence that motivated it.
+pub(crate) fn retry(root: &Path, job_id: &str) -> Result<JsonValue, JobError> {
+    validate_job_id(job_id)?;
+    let directory = job_directory(root, job_id);
+    ensure_store_contained(
+        root,
+        directory.parent().expect("job directory has a parent"),
+    )?;
+    ensure_job_contained(root, &directory)?;
+    let _lock = JobLock::acquire(&directory)?;
+    let mut record = load_record_unlocked(&directory)?;
+    if !matches!(
+        record.state.status,
+        Status::Lost | Status::Cancelled | Status::Failed
+    ) {
+        return Err(JobError::new(
+            "SEL-J015",
+            format!(
+                "job {job_id} can only be retried from lost, cancelled or failed state, not {}",
+                record.state.status.as_str()
+            ),
+        ));
+    }
+    archive_result(
+        &directory,
+        record.state.attempt,
+        &record.state.spec_sha256,
+        matches!(record.state.status, Status::Failed | Status::Cancelled),
+    )?;
+    let result_path = directory.join("result.json");
+    match fs::remove_file(&result_path) {
+        Ok(()) => sync_directory(&directory),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(JobError::io(
+                "SEL-J010",
+                "failed to clear the active job result",
+                error,
+            ));
+        }
+    }
+    let event = Event {
+        sequence: record.state.sequence.saturating_add(1),
+        job_id: job_id.to_owned(),
+        from: Some(record.state.status),
+        to: Status::Queued,
+        at: unix_seconds(),
+        spec_sha256: record.state.spec_sha256.clone(),
+        attempt: Some(record.state.attempt),
+        kind: "retry".to_owned(),
+        owner: None,
+        attempt_id: None,
+        claimed_at: None,
+        lease_id: None,
+        lease_expires_at: None,
+    };
+    let record = commit_event(&directory, &mut record, event)?;
+    Ok(result_json(
+        Operation::Retry,
+        &record,
+        Some(false),
+        Some(Status::Queued),
     ))
 }
 
@@ -1717,7 +1788,6 @@ fn validate_event(state: &JobState, event: &Event) -> Result<(), JobError> {
                 "attempt id",
             )?;
             validate_lease_id(event.lease_id.as_deref().unwrap_or_default())?;
-            validate_transition(state.status, event.to)?;
         }
         "heartbeat" => {
             if !matches!(
@@ -1774,6 +1844,24 @@ fn validate_event(state: &JobState, event: &Event) -> Result<(), JobError> {
                 ));
             }
             validate_transition(state.status, event.to)?;
+        }
+        "retry" => {
+            if !matches!(
+                state.status,
+                Status::Lost | Status::Cancelled | Status::Failed
+            ) || event.to != Status::Queued
+                || event.attempt != Some(state.attempt)
+                || event.owner.is_some()
+                || event.attempt_id.is_some()
+                || event.claimed_at.is_some()
+                || event.lease_id.is_some()
+                || event.lease_expires_at.is_some()
+            {
+                return Err(JobError::new(
+                    "SEL-J007",
+                    "retry event did not clear the terminal attempt identity",
+                ));
+            }
         }
         "release" => {
             if state.status != Status::Starting
@@ -2559,6 +2647,80 @@ fn job_summary(record: &Record) -> JsonValue {
         );
     }
     JsonValue::Object(summary)
+}
+
+fn archive_result(
+    directory: &Path,
+    attempt: u64,
+    spec_sha256: &str,
+    require_committed: bool,
+) -> Result<(), JobError> {
+    let source = directory.join("result.json");
+    reject_symlink(&source)?;
+    let bytes = match fs::read(&source) {
+        Ok(bytes) => bytes,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {
+            if require_committed {
+                return Err(JobError::new(
+                    "SEL-J019",
+                    "terminal job has no committed result receipt",
+                ));
+            }
+            return Ok(());
+        }
+        Err(error) => {
+            return Err(JobError::io(
+                "SEL-J010",
+                "failed to read the previous job result",
+                error,
+            ));
+        }
+    };
+    if bytes.len() > MAX_RESULT_BYTES {
+        return Err(JobError::new(
+            "SEL-J002",
+            "job result receipt exceeds the byte limit",
+        ));
+    }
+    let source_text = String::from_utf8(bytes.clone())
+        .map_err(|_| JobError::new("SEL-J007", "job result receipt must be UTF-8 JSON"))?;
+    let value = json::parse(&source_text, MAX_RESULT_BYTES, MAX_JSON_DEPTH).map_err(|error| {
+        JobError::new("SEL-J007", format!("invalid job result: {}", error.message))
+    })?;
+    let object = object(value, "job result")?;
+    if object_string_from(&object, "schema")? != "seloryn.job-result.v1"
+        || object_string_from(&object, "spec_sha256")? != spec_sha256
+        || object_u64(&object, "attempt")? != attempt
+    {
+        return Err(JobError::new(
+            "SEL-J019",
+            "job result receipt does not match the terminal attempt",
+        ));
+    }
+    let committed = matches!(object.get("committed"), Some(JsonValue::Bool(true)));
+    if require_committed && !committed {
+        return Err(JobError::new(
+            "SEL-J019",
+            "terminal job result receipt is not committed",
+        ));
+    }
+    let attempts = directory.join("attempts");
+    ensure_directory(&attempts, "job attempt archive")?;
+    let destination = attempts.join(format!("attempt-{attempt}.json"));
+    reject_symlink(&destination)?;
+    match fs::read(&destination) {
+        Ok(existing) if existing == bytes => Ok(()),
+        Ok(_) => Err(JobError::new(
+            "SEL-J019",
+            "job attempt archive already contains different receipt bytes",
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => atomic_write(&destination, &bytes),
+        Err(error) => Err(JobError::io(
+            "SEL-J010",
+            "failed to inspect the previous job attempt archive",
+            error,
+        )),
+    }
 }
 
 fn result_json(

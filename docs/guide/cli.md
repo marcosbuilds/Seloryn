@@ -11,9 +11,9 @@ seloryn devices [--format=human|json]
 seloryn gpu-probe [--format=human|json]
 seloryn doctor [project] [--format=human|json]
 seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]
-seloryn check <file.sely|project> [--format=human|json] [--quiet]
+seloryn check <file.sely|project> [--format=human|json] [--color=auto|always|never] [--quiet]
 seloryn inspect <file.sely|project> [--format=human|json]
-seloryn run <file.sely|project> [--format=human|json] [--log=off|human|json|json2|json2-signed]
+seloryn run <file.sely|project> [--format=human|json] [--color=auto|always|never] [--log=off|human|json|json2|json2-signed]
 seloryn build <project> --profile debug|release --output <directory>
 seloryn exec <bundle.selyapp|directory>
 seloryn job create <spec.json> [--id=<job-id>] [--root=<directory>] [--format=human|json]
@@ -28,6 +28,47 @@ seloryn job preflight <job-id> [--root=<directory>] [--format=human|json]
 seloryn job run <job-id> [--owner=<owner>] [--binary=<seloryn>] [--root=<directory>] [--format=human|json]
 seloryn lsp --stdio
 ```
+
+### Terminal output and diagnostics
+
+Seloryn keeps one responsibility per stream:
+
+- `stdout` contains the command result and is safe to pipe to another tool.
+- `stderr` contains diagnostics and opt-in training events; it never changes a
+  successful program result.
+- `--format=json` is a complete machine-readable contract for success and
+  failure. A successful `check` returns one `seloryn.check.v1` envelope on
+  `stdout`; a failed check returns one `seloryn.analysis.v1` envelope on
+  `stderr` and no partial result.
+- Human diagnostics include a stable `SEL-*` code, source location, message and
+  help text. Operating-system failures are normalized to portable phrases such
+  as `path not found` and `permission denied`, instead of leaking the local
+  Windows language into automation.
+
+`--color=auto` colors stable error codes only when `stderr` is an interactive
+terminal; `always` forces ANSI color and `never` keeps diagnostics plain. JSON
+success and failure documents are never colorized.
+
+Invalid command lines identify the received arguments and print the exact
+usage for that command. For example, `seloryn lsp` explains that the required
+form is `seloryn lsp --stdio`; `seloryn build project` explains that both
+`--profile` and `--output` are required. `seloryn --help` remains the complete
+command index.
+
+`json2-signed` validates `SELORYN_RECEIPT_KEY` before starting execution. A
+missing or empty key fails immediately with `SEL-C006`; no training or
+checkpoint work is started. For redirected processes, consumers should drain
+`stdout` and `stderr` concurrently because the training stream is flushed as
+events are produced.
+
+### Installation consistency
+
+The versioned Windows launcher is the source of truth for the selected runtime.
+Use `seloryn versions` to inspect it and `seloryn use 0.12.0` to select the
+installed version. Native default selection repairs a stale default launcher
+when the selected package payload is already present. The development-only
+legacy installer refuses to install, uninstall or roll back a managed versioned
+installation. Restart a shell after changing `PATH`.
 
 The local `job` contract canonicalizes a bounded JSON spec and stores an
 event-authoritative state snapshot under `.seloryn/jobs/<job-id>`. Public
@@ -87,7 +128,8 @@ failures, the same flag keeps one JSON diagnostic document on stderr, with
 source byte spans, Unicode-aware locations, help and runtime stack.
 `from autograd import gradients` returns one gradient tensor for each of
 multiple Tensor[F32] inputs, while `from data import range` creates a bounded
-I64 sequence for Seloryn `for` loops. `--quiet` suppresses the successful `check`
+I64 sequence for Seloryn `for` loops and `from data import split_whitespace`
+returns bounded Unicode whitespace tokens. `--quiet` suppresses the successful `check`
 line. `--log=human`, `--log=json`, `--log=json2` or `--log=json2-signed` is opt-in and streams the
 active training lifecycle to stderr; it never changes program stdout. Human
 logs are concise, `json` is schema-v1 compatibility output, and `json2` is a
@@ -105,6 +147,16 @@ behavior is covered by the CLI tests in
 [`tests/tensor_cpu.rs`](../../tests/tensor_cpu.rs), with independent N2 numeric
 references in [`tests/n2_probe.py`](../../tests/n2_probe.py). Public project
 examples are grouped under [`examples/projects`](../../examples/projects/README.md).
+
+### Python bridge
+
+An external Python application can invoke the same JSON/stdio contract through
+the dependency-free SDK in [`sdk/python`](../../sdk/python). It starts one
+binary process per request, never invokes a shell, and exposes typed
+`BridgeError` values for non-zero Seloryn exits. The bridge is bounded by
+input/output limits and a timeout; it is not a server, queue, retry layer or
+OS sandbox. The complete external-consumer proof is documented in
+[`systems/python-bridge.md`](../systems/python-bridge.md).
 
 `lsp --stdio` speaks a bounded JSON-RPC Language Server Protocol surface. It
 supports full-text `didOpen`/`didChange`/`didSave`, parser-backed diagnostics,
@@ -175,11 +227,13 @@ receipt. The behavior is exercised by
 [`tests/job_worker_probe.py`](../../tests/job_worker_probe.py) and the Rust
 worker tests.
 
-This is a direct-process worker, not a general scheduler. It does not claim
-descendant process-group/job-object fencing, retries, quotas, remote
-execution, a public registry or recovery of a child that escaped the worker.
-Those are separate next gates. `run` remains the backward-compatible direct
-source execution command.
+This is a direct-process worker, not a general scheduler. Each child is
+attached to a POSIX process group or Windows Job Object, and timeout/cancel
+terminates that fence. The native descendant proof is
+[`tests/process_fence_probe.py`](../../tests/process_fence_probe.py). The
+worker still does not claim checkpoint resume, quotas, remote execution, a
+public registry or recovery after the supervisor itself escapes or crashes.
+`run` remains the backward-compatible direct source execution command.
 
 ## Future commands
 
@@ -216,7 +270,10 @@ This contract applies only to the bounded fixture, not to general telemetry.
 `--log=json2` begins with `run.start`, emits the v1 training events as chained
 records and closes with `run.end`. The start identity covers program, manifest,
 datasets and the checkpoint before training; the end identity covers the result
-and checkpoint after training. Structured path fields are redacted. The helper
+and checkpoint after training. Structured path fields are redacted. Source,
+manifest and static-check failures emit `run.start`, `preflight.error` and
+`run.end(status=error)`; the error event includes only its stable code and a
+message fingerprint. The helper
 [`scripts/streaming/replay-receipt.py`](../../scripts/streaming/replay-receipt.py)
 re-executes successful bounded native or source-owned training receipts in an isolated copy. The external verifier at
 [`scripts/streaming/verify-event-chain.py`](../../scripts/streaming/verify-event-chain.py)
@@ -226,9 +283,9 @@ with a shared HMAC key, but is not a public-key signature. Source-owned training
 replay is accepted only when the receipt contains its explicit dataset hashes,
 recorded `{"mode":"train"}` request and checkpoint completion event. The stream does not
 replay arbitrary executions or imply GPU,
-distributed, serving or general runtime telemetry support. Preflight failures
-before `run.start` remain normal CLI diagnostics and do not claim to have a
-JSON2 receipt.
+distributed, serving or general runtime telemetry support. Later
+dataset/checkpoint failures remain bounded runtime errors and do not claim a
+general telemetry or replay contract.
 
 `inspect` is the compact, non-executing context path for tools and agents. It
 reuses the parser, project loader, semantic checker and the same

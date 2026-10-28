@@ -1,6 +1,6 @@
-# Language models: roadmap contract
+# Language-model capability boundary
 
-The long-range goal is **real foundation-model and LLM training/inference**, through a capable runtime and dedicated tensor/NN abstractions. Seloryn now has a separate, bounded next-token baseline in [`language-model.md`](language-model.md); it is a verified proof of the end-to-end path, not a claim of transformer or foundation-model capability.
+Seloryn has a bounded contextual next-token baseline in [`language-model.md`](language-model.md). It is a verified proof of the end-to-end path, not a claim of transformer, foundation-model or production-serving capability.
 
 ### Technical layers
 
@@ -16,15 +16,16 @@ The long-range goal is **real foundation-model and LLM training/inference**, thr
 | Multi-device | Explicit devices, collectives, fault recovery, sharding and profiling |
 | Deployment | Token-stream services, cancellation, timeouts, quotas, audit and isolation |
 
-### Reference model trajectory
+### Current verified boundary
 
-1. Scalar autodiff and matrix tests.
-2. CPU multilayer perceptron training on real data.
-3. Bounded runtime-sized bigram next-token baseline on CPU — **verified preview**.
-4. Minimal next-token transformer (small vocabulary, short context) on CPU.
-5. Efficient accelerator kernels and correct mixed precision.
-6. Save/resume checkpoints and interoperable model I/O.
-7. Practical multi-device training and user-facing inference serving, proven by workloads and metrics.
+- Scalar autodiff, matrix kernels and CPU MLP training are verified previews.
+- The contextual language-model proof uses a bounded one-hot linear model, a
+  configurable short context window, source-owned training and hash-bound JSON
+  checkpoints.
+- Embeddings, subword tokenization, attention, transformer layers, GPU tensor
+  training, distributed execution and HTTP serving are unsupported boundaries.
+- A new capability is accepted only with an independent numerical reference,
+  negative tests and published environment-specific evidence.
 
 ### No false platform claims
 
