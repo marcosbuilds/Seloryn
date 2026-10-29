@@ -34,6 +34,10 @@ jobs:
           python --version
       - name: Release script dependencies
         run: python -m pip install --disable-pip-version-check --quiet -r scripts/release/requirements.txt
+      - name: Public source boundary
+        run: python scripts/ci/public_boundary.py
+      - name: Public documentation boundary
+        run: python scripts/ci/check-docs.py
       - name: Verify earned version comparison
         run: python scripts/release/verify-version.py
       - name: Format
