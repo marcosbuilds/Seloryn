@@ -1,0 +1,19 @@
+from data import len, range
+from json import as_f64_list, get, read_file
+
+fn transform(values: List[F64]) -> F64:
+    var total: F64 = 0.0
+    for pass_index in range(50000):
+        for index in range(len(values)):
+            let value: F64 = values[index]
+            if value > 0.0:
+                total = total + value * value
+            else:
+                total = total - value
+    return total
+
+fn main() -> Result[F64, JsonIoError]:
+    let document: Json = read_file("data/p0-numeric.json")?
+    let raw: Json = get(document, ["values"])?
+    let values: List[F64] = as_f64_list(raw)?
+    return Ok(transform(values))

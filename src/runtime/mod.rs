@@ -571,6 +571,22 @@ enum Control {
 
 type Eval<T> = Result<T, Control>;
 
+enum LoopValues {
+    Owned(std::vec::IntoIter<Value>),
+    Range(std::ops::Range<i64>),
+}
+
+impl Iterator for LoopValues {
+    type Item = Value;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Owned(values) => values.next(),
+            Self::Range(values) => values.next().map(Value::I64),
+        }
+    }
+}
+
 struct Interpreter<'a, 'event> {
     program: &'a Program,
     functions: HashMap<String, Function>,
@@ -812,10 +828,25 @@ impl<'a, 'event> Interpreter<'a, 'event> {
     fn eval_if(&mut self, branches: &[IfBranch], otherwise: Option<&[Statement]>) -> Eval<()> {
         for branch in branches {
             if self.eval_bool(&branch.condition)? {
-                return self.eval_scoped(&branch.body);
+                return self.eval_branch_body(&branch.body);
             }
         }
-        otherwise.map_or(Ok(()), |body| self.eval_scoped(body))
+        otherwise.map_or(Ok(()), |body| self.eval_branch_body(body))
+    }
+
+    fn eval_branch_body(&mut self, statements: &[Statement]) -> Eval<()> {
+        // A branch without a direct binding has no local state to isolate.
+        // Avoiding a short-lived empty scope is significant in numeric loops;
+        // nested `if`, `match` and `for` statements still establish their own
+        // scopes through their respective evaluators.
+        if statements
+            .iter()
+            .any(|statement| matches!(statement, Statement::Binding(_)))
+        {
+            self.eval_scoped(statements)
+        } else {
+            self.eval_statements(statements)
+        }
     }
 
     fn eval_match(&mut self, statement: &crate::language::ir::MatchStatement) -> Eval<()> {
@@ -868,31 +899,96 @@ impl<'a, 'event> Interpreter<'a, 'event> {
         body: &[Statement],
         span: Span,
     ) -> Eval<()> {
-        let value = self.eval_expr(iterable)?;
-        let Value::List(values) = value else {
+        let streamed_range = match iterable {
+            Expr::Call {
+                callee, arguments, ..
+            } if matches!(callee.as_ref(), Expr::Name { name, .. } if name == "range")
+                && arguments.len() == 1
+                && self.stdlib_imports.iter().any(|import| import == "range") =>
+            {
+                let stop = self.eval_expr(&arguments[0])?;
+                Some(self.checked_range_stop(stop, span)?)
+            }
+            _ => None,
+        };
+        let body_has_bindings = body
+            .iter()
+            .any(|statement| matches!(statement, Statement::Binding(_)));
+        let values = if let Some(stop) = streamed_range {
+            LoopValues::Range(0..stop)
+        } else {
+            let value = self.eval_expr(iterable)?;
+            let Value::List(values) = value else {
+                return Err(Control::Runtime(self.runtime(
+                    "SEL-R128",
+                    "for iteration requires a List value",
+                    span,
+                )));
+            };
+            if values.len() > MAX_LOOP_ITERATIONS {
+                return Err(Control::Runtime(self.runtime(
+                    "SEL-R131",
+                    format!(
+                        "for loop has {} iterations; maximum is {MAX_LOOP_ITERATIONS}",
+                        values.len()
+                    ),
+                    span,
+                )));
+            }
+            LoopValues::Owned(values.into_iter())
+        };
+        // A fresh HashMap for every iteration is prohibitively expensive for
+        // numeric programs: the loop variable is rebound in the same lexical
+        // scope, while body-local bindings are discarded at the end of each
+        // iteration. Reuse the frame's allocation and clear only its entries;
+        // this preserves the observable scope boundary without changing the
+        // binding/assignment semantics.
+        let loop_name = name.to_owned();
+        let mut iteration_scope = HashMap::with_capacity(1);
+        iteration_scope.insert(loop_name.clone(), Value::Unit);
+        self.scopes.push(iteration_scope);
+        for value in values {
+            let Some(scope) = self.scopes.last_mut() else {
+                return Err(Control::Runtime(self.runtime(
+                    "SEL-R127",
+                    "interpreter lost the loop scope",
+                    span,
+                )));
+            };
+            if body_has_bindings {
+                scope.retain(|binding, _| binding == &loop_name);
+            }
+            if let Some(binding) = scope.get_mut(&loop_name) {
+                *binding = value;
+            } else {
+                scope.insert(loop_name.clone(), value);
+            }
+            let result = self.eval_statements(body);
+            if let Err(control) = result {
+                self.scopes.pop();
+                return Err(control);
+            }
+        }
+        self.scopes.pop();
+        Ok(())
+    }
+
+    fn checked_range_stop(&self, value: Value, span: Span) -> Eval<i64> {
+        let Value::I64(stop) = value else {
             return Err(Control::Runtime(self.runtime(
-                "SEL-R128",
-                "for iteration requires a List value",
+                "SEL-R203",
+                "range stop must be I64",
                 span,
             )));
         };
-        if values.len() > MAX_LOOP_ITERATIONS {
+        if !(0..=1_000_000).contains(&stop) {
             return Err(Control::Runtime(self.runtime(
-                "SEL-R131",
-                format!(
-                    "for loop has {} iterations; maximum is {MAX_LOOP_ITERATIONS}",
-                    values.len()
-                ),
+                "SEL-R203",
+                "range stop must be between 0 and 1000000",
                 span,
             )));
         }
-        for value in values {
-            self.scopes.push(HashMap::from([(name.to_owned(), value)]));
-            let result = self.eval_statements(body);
-            self.scopes.pop();
-            result?;
-        }
-        Ok(())
+        Ok(stop)
     }
 
     fn pattern_matches(
@@ -1148,6 +1244,16 @@ impl<'a, 'event> Interpreter<'a, 'event> {
             return self.call_named(name, vec![input], right.span());
         }
 
+        if matches!(operator, "+" | "-" | "*" | "/" | "%" | "**") {
+            if let Some(value) = self.try_eval_i64_binary(left, operator, right, span) {
+                return value.map(Value::I64);
+            }
+        } else if matches!(operator, "==" | "!=" | "<" | "<=" | ">" | ">=")
+            && let Some(value) = self.try_eval_integer_comparison(left, operator, right, span)
+        {
+            return value;
+        }
+
         let left = self.eval_expr(left)?;
         if operator == "and" || operator == "or" {
             let left = self.expect_bool(left, span)?;
@@ -1184,6 +1290,122 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 span,
             ))),
         }
+    }
+
+    fn try_eval_i64_binary(
+        &mut self,
+        left: &Expr,
+        operator: &str,
+        right: &Expr,
+        span: Span,
+    ) -> Option<Eval<i64>> {
+        let left = self.try_eval_i64(left)?;
+        let right = self.try_eval_i64(right)?;
+        Some(match (left, right) {
+            (Ok(left), Ok(right)) => self.apply_i64_operator(operator, left, right, span),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+        })
+    }
+
+    fn try_eval_i64(&mut self, expression: &Expr) -> Option<Eval<i64>> {
+        match expression {
+            Expr::Integer { text, span } => Some(self.parse_i64(text, *span)),
+            Expr::Group { value, .. } => self.try_eval_i64(value),
+            Expr::Name { name, .. } => match self.lookup(name) {
+                Some(Value::I64(value)) => Some(Ok(value)),
+                Some(_) | None => None,
+            },
+            Expr::Unary {
+                operator,
+                value,
+                span,
+            } if operator == "-" => {
+                let value = self.try_eval_i64(value)?;
+                Some(value.and_then(|value| {
+                    value.checked_neg().ok_or_else(|| {
+                        Control::Runtime(self.runtime(
+                            "SEL-R106",
+                            "integer negation overflowed",
+                            *span,
+                        ))
+                    })
+                }))
+            }
+            Expr::Binary {
+                left,
+                operator,
+                right,
+                span,
+            } if matches!(operator.as_str(), "+" | "-" | "*" | "/" | "%" | "**") => {
+                self.try_eval_i64_binary(left, operator, right, *span)
+            }
+            _ => None,
+        }
+    }
+
+    fn apply_i64_operator(&self, operator: &str, left: i64, right: i64, span: Span) -> Eval<i64> {
+        let value = match operator {
+            "+" => left.checked_add(right),
+            "-" => left.checked_sub(right),
+            "*" => left.checked_mul(right),
+            "/" => {
+                if right == 0 {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R118",
+                        "integer division by zero",
+                        span,
+                    )));
+                }
+                left.checked_div(right)
+            }
+            "%" => {
+                if right == 0 {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R119",
+                        "integer remainder by zero",
+                        span,
+                    )));
+                }
+                left.checked_rem(right)
+            }
+            "**" => {
+                if right < 0 || right > u32::MAX as i64 {
+                    return Err(Control::Runtime(self.runtime(
+                        "SEL-R120",
+                        "integer exponent must be between zero and u32::MAX",
+                        span,
+                    )));
+                }
+                left.checked_pow(right as u32)
+            }
+            _ => None,
+        };
+        value.ok_or_else(|| {
+            Control::Runtime(self.runtime("SEL-R106", "integer arithmetic overflowed", span))
+        })
+    }
+
+    fn try_eval_integer_comparison(
+        &mut self,
+        left: &Expr,
+        operator: &str,
+        right: &Expr,
+        _span: Span,
+    ) -> Option<Eval<Value>> {
+        let left = self.try_eval_i64(left)?;
+        let right = self.try_eval_i64(right)?;
+        Some(match (left, right) {
+            (Ok(left), Ok(right)) => Ok(Value::Bool(match operator {
+                "==" => left == right,
+                "!=" => left != right,
+                "<" => left < right,
+                "<=" => left <= right,
+                ">" => left > right,
+                ">=" => left >= right,
+                _ => unreachable!("integer comparison was prefiltered"),
+            })),
+            (Err(error), _) | (_, Err(error)) => Err(error),
+        })
     }
 
     fn eval_call(&mut self, callee: &Expr, arguments: &[Expr], span: Span) -> Eval<Value> {
@@ -1881,21 +2103,15 @@ impl<'a, 'event> Interpreter<'a, 'event> {
                 ))
             }
             "range" => {
-                let Some(Value::I64(stop)) = values.first() else {
+                let Some(value) = values.first() else {
                     return Err(Control::Runtime(self.runtime(
                         "SEL-R203",
                         "range stop must be I64",
                         span,
                     )));
                 };
-                if *stop < 0 || *stop > 1_000_000 {
-                    return Err(Control::Runtime(self.runtime(
-                        "SEL-R203",
-                        "range stop must be between 0 and 1000000",
-                        span,
-                    )));
-                }
-                Ok(Value::List((0..*stop).map(Value::I64).collect()))
+                let stop = self.checked_range_stop(value.clone(), span)?;
+                Ok(Value::List((0..stop).map(Value::I64).collect()))
             }
             "split_whitespace" => {
                 let Some(Value::Text(text)) = values.first() else {
@@ -2774,13 +2990,13 @@ impl<'a, 'event> Interpreter<'a, 'event> {
 
     fn assign(&mut self, name: &str, value: Value, span: Span) -> Eval<()> {
         for scope in self.scopes.iter_mut().rev() {
-            if scope.contains_key(name) {
-                scope.insert(name.to_owned(), value);
+            if let Some(binding) = scope.get_mut(name) {
+                *binding = value;
                 return Ok(());
             }
         }
-        if self.globals.contains_key(name) {
-            self.globals.insert(name.to_owned(), value);
+        if let Some(binding) = self.globals.get_mut(name) {
+            *binding = value;
             return Ok(());
         }
         Err(Control::Runtime(self.runtime(
@@ -2984,7 +3200,26 @@ impl<'a, 'event> Interpreter<'a, 'event> {
     }
 
     fn parse_i64(&self, text: &str, span: Span) -> Eval<i64> {
-        text.replace('_', "").parse::<i64>().map_err(|_| {
+        match text {
+            "0" => return Ok(0),
+            "1" => return Ok(1),
+            "2" => return Ok(2),
+            "3" => return Ok(3),
+            "4" => return Ok(4),
+            "5" => return Ok(5),
+            "6" => return Ok(6),
+            "7" => return Ok(7),
+            "8" => return Ok(8),
+            "9" => return Ok(9),
+            "10" => return Ok(10),
+            _ => {}
+        }
+        let parsed = if text.as_bytes().contains(&b'_') {
+            text.replace('_', "").parse::<i64>()
+        } else {
+            text.parse::<i64>()
+        };
+        parsed.map_err(|_| {
             Control::Runtime(self.runtime(
                 "SEL-R124",
                 format!("integer literal `{text}` is outside I64 range"),
@@ -2994,7 +3229,18 @@ impl<'a, 'event> Interpreter<'a, 'event> {
     }
 
     fn parse_f64(&self, text: &str, span: Span) -> Eval<f64> {
-        let value = text.replace('_', "").parse::<f64>().map_err(|_| {
+        match text {
+            "0.0" => return Ok(0.0),
+            "1.0" => return Ok(1.0),
+            "2.0" => return Ok(2.0),
+            _ => {}
+        }
+        let parsed = if text.as_bytes().contains(&b'_') {
+            text.replace('_', "").parse::<f64>()
+        } else {
+            text.parse::<f64>()
+        };
+        let value = parsed.map_err(|_| {
             Control::Runtime(self.runtime(
                 "SEL-R125",
                 format!("invalid F64 literal `{text}`"),
@@ -3384,6 +3630,19 @@ fn main() -> List[Text]:
 "#)
         .expect("whitespace tokenization should execute");
         assert_eq!(tokens.render(), "[\"Seloryn\", \"entende\", \"texto\"]");
+    }
+
+    #[test]
+    fn streamed_range_keeps_list_contract_and_executes_each_iteration() {
+        let range = run("from data import range\nfn main() -> List[I64]:\n    return range(3)\n")
+            .expect("range should remain a materialized List outside a for loop");
+        assert_eq!(range.render(), "[0, 1, 2]");
+
+        let value = run(
+            "from data import range\nfn main() -> I64:\n    var total: I64 = 0\n    for item in range(3):\n        total = total + item\n    return total\n",
+        )
+        .expect("streamed range should execute");
+        assert_eq!(value, Value::I64(3));
     }
 
     #[test]

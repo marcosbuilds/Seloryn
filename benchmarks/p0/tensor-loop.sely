@@ -1,0 +1,10 @@
+from data import range
+
+fn main() -> F32:
+    let left: Tensor[F32] = tensor_uniform_f32([32, 32], 20261029)
+    let right: Tensor[F32] = tensor_uniform_f32([32, 32], 20261030)
+    var checksum: F32 = 0.0
+    for step in range(250):
+        let product: Tensor[F32] = matmul(left, right)
+        checksum = checksum + tensor_item_f32(tensor_sum(product))
+    return checksum

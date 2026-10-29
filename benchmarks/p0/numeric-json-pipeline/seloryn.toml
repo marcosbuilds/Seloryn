@@ -1,0 +1,8 @@
+[package]
+name = "p0-numeric-json-pipeline"
+language = "0.00"
+source_root = "src"
+entry = "numeric-json-pipeline-entry.sely"
+
+[capabilities]
+read = ["data"]

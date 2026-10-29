@@ -1,0 +1,12 @@
+from data import range
+
+fn aggregate(values: List[I64]) -> I64:
+    var total: I64 = 0
+    for value in values:
+        if value % 3 == 0:
+            total = total + value * value
+    return total
+
+fn main() -> I64:
+    let values: List[I64] = range(750000)
+    return aggregate(values)
