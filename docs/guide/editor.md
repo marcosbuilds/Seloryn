@@ -7,8 +7,8 @@ package.
 
 The verified-preview VS Code client is distributed as a release asset, not as
 source in this repository. Install the exact
-[`seloryn-language-0.12.0.vsix`](https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.12.0)
-asset and verify the SHA-256 from the release's `SHA256SUMS` file.
+`seloryn-language-0.12.0.vsix` asset from the [GitHub Releases page](https://github.com/marcosbuilds/Seloryn/releases)
+and verify the SHA-256 from the release's `SHA256SUMS` file or the [download index](../downloads.md).
 
 The package is compatible with the language `0.12` line and remains preview
 software. Indexed/incremental analysis, rename, Marketplace publication and a

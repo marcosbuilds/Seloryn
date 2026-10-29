@@ -1,9 +1,9 @@
 //! Bounded Language Server Protocol support backed by the Seloryn parser.
 
-use crate::analysis;
 use crate::diagnostic::Diagnostic;
 use crate::json::{self, JsonValue};
-use crate::parser::Program;
+use crate::language::analysis;
+use crate::language::parser::Program;
 use std::collections::BTreeMap;
 use std::io::{self, BufRead, BufReader, Write};
 
@@ -232,9 +232,9 @@ fn initialize_result() -> JsonValue {
 }
 
 fn publish_diagnostics<W: Write>(writer: &mut W, uri: &str, source: &str) -> io::Result<()> {
-    let parsed = crate::parser::parse(source);
+    let parsed = crate::language::parser::parse(source);
     let diagnostics = match parsed.program {
-        Some(program) => crate::semantic::check(&program),
+        Some(program) => crate::language::semantic::check(&program),
         None => parsed.diagnostics,
     };
     publish_diagnostics_values(
@@ -320,7 +320,7 @@ fn completion_result(source: &str) -> JsonValue {
             ("detail", JsonValue::String("Seloryn builtin".to_owned())),
         ]));
     }
-    if let Some(program) = crate::parser::parse(source).program {
+    if let Some(program) = crate::language::parser::parse(source).program {
         append_program_items(&mut items, &program);
     }
     object([
@@ -346,7 +346,7 @@ fn append_program_items(items: &mut Vec<JsonValue>, program: &Program) {
 }
 
 fn document_symbols(source: &str) -> JsonValue {
-    let Some(program) = crate::parser::parse(source).program else {
+    let Some(program) = crate::language::parser::parse(source).program else {
         return JsonValue::Array(Vec::new());
     };
     JsonValue::Array(

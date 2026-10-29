@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+python3 scripts/ci/public_boundary.py
+python3 scripts/ci/check-docs.py
 python3 -m pip install --disable-pip-version-check --quiet -r scripts/release/requirements.txt
 python3 scripts/release/verify-version.py
 python3 tests/versioning_probe.py

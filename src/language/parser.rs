@@ -1,5 +1,5 @@
 use crate::diagnostic::{Diagnostic, Span};
-use crate::lexer::{Keyword, Symbol, Token, TokenKind, lex};
+use crate::language::lexer::{Keyword, Symbol, Token, TokenKind, lex};
 
 pub struct ParseResult {
     pub program: Option<Program>,

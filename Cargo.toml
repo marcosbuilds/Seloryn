@@ -25,4 +25,4 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphic
 
 [[bin]]
 name = "seloryn"
-path = "src/main.rs"
+path = "src/bin/seloryn.rs"

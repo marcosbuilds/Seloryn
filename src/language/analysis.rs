@@ -1,5 +1,5 @@
 use crate::diagnostic::Span;
-use crate::parser::{Directive, Item, Program};
+use crate::language::parser::{Directive, Item, Program};
 use std::path::Path;
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -445,7 +445,7 @@ mod tests {
         symbols,
     };
     use crate::diagnostic::Span;
-    use crate::parser::parse;
+    use crate::language::parser::parse;
 
     #[test]
     fn extracts_top_level_symbols_and_imports_from_one_program() {

@@ -212,8 +212,8 @@ def validate(root: Path = ROOT) -> None:
     if not cargo_language or cargo_language.group(1) != current_language:
         fail("Cargo language metadata does not match VERSION.toml")
 
-    main = (root / "src" / "main.rs").read_text(encoding="utf-8")
-    cli_language = re.search(r'^(?:pub\(crate\) )?const LANGUAGE_VERSION: &str = "([^"]+)";', main, re.MULTILINE)
+    cli = (root / "src" / "cli" / "mod.rs").read_text(encoding="utf-8")
+    cli_language = re.search(r'^(?:pub\(crate\) )?const LANGUAGE_VERSION: &str = "([^"]+)";', cli, re.MULTILINE)
     if not cli_language or cli_language.group(1) != current_language:
         fail("CLI language version does not match VERSION.toml")
 

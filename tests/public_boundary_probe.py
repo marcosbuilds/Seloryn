@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -44,6 +45,12 @@ def forbidden(path: str) -> bool:
 
 
 def main() -> int:
+    guard = ROOT / "scripts" / "ci" / "public_boundary.py"
+    result = subprocess.run(
+        [sys.executable, str(guard)], cwd=ROOT, capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+
     paths = tracked_paths()
     violations = [path for path in paths if forbidden(path)]
     assert not violations, f"private distribution source returned to public tree: {violations}"
@@ -60,9 +67,23 @@ def main() -> int:
 
     assert forbidden("packages/vscode/extension.js")
     assert forbidden("src/setup.rs")
-    assert not forbidden("src/runtime.rs")
+    assert not forbidden("src/runtime/mod.rs")
+
+    with tempfile.TemporaryDirectory(prefix="seloryn-public-boundary-") as temporary:
+        planted = Path(temporary) / "packages" / "vscode" / "extension.js"
+        planted.parent.mkdir(parents=True)
+        planted.write_text("private extension source", encoding="utf-8")
+        negative = subprocess.run(
+            [sys.executable, str(guard), "--root", temporary],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert negative.returncode != 0, "guard accepted a planted private path"
+
     print("public boundary passed: language/runtime source retained; distribution source absent")
-    print("negative=editor-source, font-source, installer-source, operator-policy")
+    print("negative=editor-source, font-source, installer-source, hidden-binary, operator-policy")
     return 0
 
 

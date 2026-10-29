@@ -27,6 +27,7 @@ use super::{
     JobError, JsonValue, Status, WorkerInput, atomic_write, ensure_job_contained,
     executor_transition, heartbeat, job_directory, preflight, worker_input,
 };
+use crate::data::sha256_hex;
 
 const POLL_STEP: Duration = Duration::from_millis(10);
 const MIN_LEASE_SECONDS: u64 = 5;
@@ -453,7 +454,7 @@ fn execute_child(
                 })? {
                     break Ok(status);
                 }
-                if config.cancel.load(Ordering::Acquire) || crate::cancellation_requested() {
+                if config.cancel.load(Ordering::Acquire) || crate::runtime::control::requested() {
                     termination = Some(WorkerStatus::Cancelled);
                     cancelled = true;
                     break terminate_child(root, job_id, lease_id, &mut child);
@@ -555,7 +556,7 @@ fn capture<R: Read>(mut reader: R) -> Result<Capture, io::Error> {
     }
     Ok(Capture {
         bytes: total,
-        sha256: crate::sha256_hex(&captured),
+        sha256: sha256_hex(&captured),
         truncated,
     })
 }
@@ -675,7 +676,7 @@ fn write_failure_receipt(
         ),
         (
             "error_sha256".to_owned(),
-            JsonValue::String(crate::sha256_hex(error.message.as_bytes())),
+            JsonValue::String(sha256_hex(error.message.as_bytes())),
         ),
         ("job_id".to_owned(), JsonValue::String(job_id.to_owned())),
         (
@@ -719,7 +720,7 @@ fn write_preflight_failure_receipt(
         ),
         (
             "error_sha256".to_owned(),
-            JsonValue::String(crate::sha256_hex(error.message.as_bytes())),
+            JsonValue::String(sha256_hex(error.message.as_bytes())),
         ),
         ("job_id".to_owned(), JsonValue::String(job_id.to_owned())),
         (
@@ -787,7 +788,7 @@ impl Capture {
     fn empty() -> Self {
         Self {
             bytes: 0,
-            sha256: crate::sha256_hex(&[]),
+            sha256: sha256_hex(&[]),
             truncated: false,
         }
     }
@@ -796,7 +797,7 @@ impl Capture {
         let bytes = error.message.as_bytes();
         Self {
             bytes: bytes.len(),
-            sha256: crate::sha256_hex(bytes),
+            sha256: sha256_hex(bytes),
             truncated: false,
         }
     }
@@ -854,7 +855,7 @@ mod tests {
         let root = temp_root("lease");
         let source = root.join("main.sely");
         fs::write(&source, "fn main() -> Unit:\n    return\n").expect("source");
-        let source_hash = crate::sha256_hex(&fs::read(&source).expect("read source"));
+        let source_hash = sha256_hex(&fs::read(&source).expect("read source"));
         let spec = root.join("spec.json");
         fs::write(
             &spec,

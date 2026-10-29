@@ -1,6 +1,6 @@
-use crate::diagnostic::RUNTIME_PACKAGE;
+use super::{EXIT_DATA, EXIT_IO, EXIT_OK, OutputFormat};
+use crate::diagnostic::{LANGUAGE_VERSION, RUNTIME_PACKAGE};
 use crate::json::{self, JsonValue};
-use crate::{EXIT_DATA, EXIT_IO, EXIT_OK, LANGUAGE_VERSION, OutputFormat};
 use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
@@ -73,9 +73,9 @@ pub(crate) fn doctor(path: &Path, format: OutputFormat) -> u8 {
         OutputFormat::Json => format!("{}\n", json::encode(&doctor_json(&report))),
     };
     if exit == EXIT_OK {
-        crate::write_stdout(&output)
+        super::write_stdout(&output)
     } else {
-        crate::write_data_stderr(&output)
+        super::write_data_stderr(&output)
     }
 }
 
@@ -116,7 +116,7 @@ fn doctor_report(path: &Path) -> DoctorReport {
                 detail: "manifest, source root, entrypoint and declared capabilities are readable"
                     .to_owned(),
             });
-            let diagnostics = crate::semantic::check(&loaded.program);
+            let diagnostics = crate::language::semantic::check(&loaded.program);
             if diagnostics.is_empty() {
                 report.checks.push(DoctorCheck {
                     name: "semantics",
@@ -288,7 +288,7 @@ pub(crate) fn init(
                 OutputFormat::Human => render_init_human(&result),
                 OutputFormat::Json => format!("{}\n", json::encode(&init_json(&result))),
             };
-            crate::write_stdout(&output)
+            super::write_stdout(&output)
         }
         Err(failure) => {
             let output = match format {
@@ -311,9 +311,9 @@ pub(crate) fn init(
                 ),
             };
             if failure.exit == EXIT_IO {
-                crate::write_io_diagnostic(&output)
+                super::write_io_diagnostic(&output)
             } else {
-                crate::write_data_stderr(&output)
+                super::write_data_stderr(&output)
             }
         }
     }
@@ -411,7 +411,7 @@ fn init_project(
     }
 
     let validation = crate::project::load(&staging).and_then(|loaded| {
-        let diagnostics = crate::semantic::check(&loaded.program);
+        let diagnostics = crate::language::semantic::check(&loaded.program);
         diagnostics.into_iter().next().map_or(Ok(()), Err)
     });
     if let Err(diagnostic) = validation {

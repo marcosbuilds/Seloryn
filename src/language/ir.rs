@@ -7,7 +7,7 @@
 //! the type gate before lowering.
 
 use crate::diagnostic::Span;
-use crate::parser;
+use crate::language::parser;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Program {
@@ -546,7 +546,7 @@ impl Expr {
 #[cfg(test)]
 mod tests {
     use super::lower;
-    use crate::parser;
+    use crate::language::parser;
 
     #[test]
     fn lowering_preserves_order_and_spans_without_parser_nodes() {

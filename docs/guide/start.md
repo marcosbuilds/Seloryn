@@ -63,7 +63,7 @@ seloryn build project-directory --profile debug --output artifact-directory
 seloryn exec artifact-directory
 ```
 
-`check` validates UTF-8, four-space layout, the implemented parser subset and selected semantic rules: local names and scopes, scalar types, typed list indexing and iteration, mutable `var` assignment, function calls and returns, records, enums, `Result`, `Option`, `require`, postfix `?`, pipelines and exhaustive `match`. It emits a structured source diagnostic and nonzero exit code for invalid input. The command path is implemented in [`src/main.rs`](../../src/main.rs) and exercised by [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs).
+`check` validates UTF-8, four-space layout, the implemented parser subset and selected semantic rules: local names and scopes, scalar types, typed list indexing and iteration, mutable `var` assignment, function calls and returns, records, enums, `Result`, `Option`, `require`, postfix `?`, pipelines and exhaustive `match`. It emits a structured source diagnostic and nonzero exit code for invalid input. The command path is implemented in [`src/cli/mod.rs`](../../src/cli/mod.rs) and exercised by [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs).
 
 `run` executes the same bounded constructs after all front-end diagnostics
 pass. A standalone source run has no filesystem, network, process or

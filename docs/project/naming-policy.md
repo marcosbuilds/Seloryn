@@ -101,7 +101,7 @@ Quando um comando precisar ser substituído, a sequência é:
 
 ## Builtins da gramática
 
-O código atual confirma, em `src/tensor_autograd.rs`, as operações
+O código atual confirma, em `src/compute/tensor_autograd.rs`, as operações
 `tensor_sum`/`sum`, `tensor_mean`, `matmul`, `transpose`, `tensor_relu`,
 `tensor_exp`, `tensor_log`, `tensor_softmax`, `tensor_logsumexp`,
 `tensor_cross_entropy`, `tensor_sum_to_shape`, `reshape`, `tensor_f32` e

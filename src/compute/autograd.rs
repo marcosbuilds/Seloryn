@@ -8,7 +8,7 @@
 //! explicitly for unsupported constructs. It is used by `autograd.backward`
 //! and cross-checked by the finite-difference `gradcheck` builtin.
 
-use crate::ir::{Expr, Function, IfBranch, Item, Program, Statement};
+use crate::language::ir::{Expr, Function, IfBranch, Item, Program, Statement};
 use std::collections::HashMap;
 
 const MAX_CALL_DEPTH: usize = 32;
@@ -487,8 +487,8 @@ pub fn differentiate_scalar(
 #[cfg(test)]
 mod tests {
     use super::differentiate_scalar;
-    use crate::ir;
-    use crate::parser;
+    use crate::language::ir;
+    use crate::language::parser;
 
     fn gradient(source: &str) -> Result<f64, String> {
         let parsed = parser::parse(source);

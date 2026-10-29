@@ -7,12 +7,13 @@ and published as GitHub Release assets.
 
 | Distribution | Current release | Download |
 |---|---|---|
-| Runtime, Windows x64 | `0.12.0`, verified-preview | [GitHub Release](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.12) |
-| VS Code extension | `0.12.0`, verified-preview | [GitHub Release](https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.12.0) |
-| Windows installer | `0.12.0`, unsigned verified-preview | [GitHub Release](https://github.com/marcosbuilds/Seloryn/releases/tag/installer-v0.12.0) |
-| Seloryn Font | `2.0.0`, experimental binary distribution | [GitHub Release](https://github.com/marcosbuilds/Seloryn/releases/tag/fonts-v2.0.0) |
+| Runtime, Windows x64 | `0.12.0`, verified-preview | [Release assets](https://github.com/marcosbuilds/Seloryn/releases) |
+| VS Code extension | `0.12.0`, verified-preview | [Release assets](https://github.com/marcosbuilds/Seloryn/releases) |
+| Windows installer | `0.12.0`, unsigned verified-preview | [Release assets](https://github.com/marcosbuilds/Seloryn/releases) |
+| Seloryn Font | `2.0.0`, experimental binary distribution | [Release assets](https://github.com/marcosbuilds/Seloryn/releases) |
 
-Use the exact asset URL and SHA-256 recorded in [`catalog.toml`](catalog.toml).
+Use the exact asset URL and SHA-256 recorded in [`catalog.toml`](catalog.toml)
+and the human-readable [download index](../docs/downloads.md).
 The catalog deliberately does not contain source paths, local build scripts or
 claims of support for platforms whose assets are not published. A downloaded
 VSIX is executable extension content and can be inspected by its consumer; the

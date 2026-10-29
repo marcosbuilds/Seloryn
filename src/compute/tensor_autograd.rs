@@ -8,8 +8,8 @@
 //! input in parameter order.
 //! Every rule is explicit and the graph has a hard node limit.
 
-use crate::ir::{Expr, Function, IfBranch, Item, Program, Statement};
-use crate::tensor::{Tensor, TensorDtype, TensorError};
+use crate::compute::tensor::{Tensor, TensorDtype, TensorError};
+use crate::language::ir::{Expr, Function, IfBranch, Item, Program, Statement};
 use std::collections::HashMap;
 
 const MAX_TAPE_NODES: usize = 100_000;
@@ -1347,7 +1347,10 @@ mod tests {
         TENSOR_ALIASES, TENSOR_BUILTINS, canonical_tensor_name, differentiate_tensor,
         differentiate_tensors, differentiate_tensors_with_constants,
     };
-    use crate::{ir, parser, tensor::Tensor};
+    use crate::{
+        compute::tensor::Tensor,
+        language::{ir, parser},
+    };
 
     fn gradient(source: &str, values: Vec<f32>, shape: &[i64]) -> Tensor {
         let parsed = parser::parse(source);

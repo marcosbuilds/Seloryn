@@ -8,7 +8,7 @@ assets and are published through their dedicated GitHub Releases.
 |---|---|
 | Language identity | [`assets/brand/`](../../assets/brand) |
 | Documentation diagrams | [`assets/diagrams/`](../../assets/diagrams) |
-| Installer artwork | [`installer-v0.12.0`](https://github.com/marcosbuilds/Seloryn/releases/tag/installer-v0.12.0) |
-| Font binaries | [`fonts-v2.0.0`](https://github.com/marcosbuilds/Seloryn/releases/tag/fonts-v2.0.0) |
+| Installer artwork | [GitHub Releases](https://github.com/marcosbuilds/Seloryn/releases) |
+| Font binaries | [GitHub Releases](https://github.com/marcosbuilds/Seloryn/releases) |
 
 The release catalog records the exact asset names, sizes and SHA-256 values.

@@ -3,6 +3,10 @@ Set-StrictMode -Version Latest
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Push-Location $root
 try {
+    & python scripts/ci/public_boundary.py
+    if ($LASTEXITCODE -ne 0) { throw 'Public source boundary failed' }
+    & python scripts/ci/check-docs.py
+    if ($LASTEXITCODE -ne 0) { throw 'Public documentation checks failed' }
     & python -m pip install --disable-pip-version-check --quiet -r scripts/release/requirements.txt
     if ($LASTEXITCODE -ne 0) { throw 'Release script dependencies failed to install' }
     & python scripts/release/verify-version.py

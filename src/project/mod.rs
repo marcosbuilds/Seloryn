@@ -1,9 +1,10 @@
 #![allow(clippy::result_large_err)]
 
-use crate::analysis::{self, ImportKind};
+use crate::data::sha256_hex;
 use crate::diagnostic::{Diagnostic, Span};
-use crate::parser::{Directive, IfBranch, MatchCase, MatchStatement, Pattern};
-use crate::parser::{Expr, Item, Program, Statement};
+use crate::language::analysis::{self, ImportKind};
+use crate::language::parser::{Directive, IfBranch, MatchCase, MatchStatement, Pattern};
+use crate::language::parser::{Expr, Item, Program, Statement};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -232,11 +233,6 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
         manifest_sha256,
         program_sha256,
     })
-}
-
-fn sha256_hex(bytes: &[u8]) -> String {
-    let digest = Sha256::digest(bytes);
-    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 pub fn encode_bundle(path: &Path, profile: &str) -> Result<Vec<u8>, Diagnostic> {
@@ -561,7 +557,7 @@ impl Loader {
                 Span::new(0, 0),
             )
         })?;
-        let parsed = crate::parser::parse(&source);
+        let parsed = crate::language::parser::parse(&source);
         if let Some(diagnostic) = parsed.diagnostics.first() {
             return Err(diagnostic.clone());
         }
@@ -833,7 +829,9 @@ fn validate_language_version(manifest: &toml::Value) -> Result<(), Diagnostic> {
         major.parse::<u64>().unwrap_or(u64::MAX),
         minor.parse::<u64>().unwrap_or(u64::MAX),
     );
-    let Some((supported_major, supported_minor)) = crate::LANGUAGE_VERSION.split_once('.') else {
+    let Some((supported_major, supported_minor)) =
+        crate::diagnostic::LANGUAGE_VERSION.split_once('.')
+    else {
         return Err(Diagnostic::new(
             "SEL-M001",
             "runtime language version is invalid",
@@ -849,7 +847,7 @@ fn validate_language_version(manifest: &toml::Value) -> Result<(), Diagnostic> {
             "SEL-M001",
             format!(
                 "project language version `{language}` requires a newer Seloryn runtime (supported: {})",
-                crate::LANGUAGE_VERSION
+                crate::diagnostic::LANGUAGE_VERSION
             ),
             Span::new(0, 0),
         ));
