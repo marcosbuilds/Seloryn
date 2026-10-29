@@ -1,6 +1,6 @@
 [package]
 name = "structured-inspection"
-language = "0.12"
+language = "0.00"
 source_root = "src"
 entry = "inspection-entry.sely"
 

@@ -19,7 +19,7 @@ fn predict(prompt: Text) -> Result[Text, ModelError]:
 The general model example above remains a design target. The runnable
 inference slice today is the bounded CPU MLP checkpoint path described in the
 [training reference](training.md#batch-inference-from-a-checkpoint): it
-validates a `seloryn.training.checkpoint.v2` payload and evaluates a bounded
+validates a `seloryn.training.checkpoint.v3` payload and evaluates a bounded
 JSON batch without executing embedded code.
 
 Required: deterministic input validation, bounded tokens/context and cache, cancellation, acceptable numerical parity, streaming decoder state, correct EOS behavior and resource cleanup. Loading a file must never execute arbitrary embedded code. Distinguish model metadata, operators, weights and tokenizer artifacts and validate compatibility and sizes before allocation.

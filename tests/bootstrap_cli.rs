@@ -4,6 +4,23 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
 
+fn current_version(key: &str) -> String {
+    let document: toml::Table =
+        toml::from_str(include_str!("../VERSION.toml")).expect("VERSION.toml must be valid TOML");
+    document["current"][key]
+        .as_str()
+        .expect("current version field must be a string")
+        .to_owned()
+}
+
+fn analysis_json_prefix() -> String {
+    format!(
+        "{{\"schema\":\"seloryn.analysis.v1\",\"language_version\":\"{}\",\"runtime_package\":\"{}\",\"diagnostics\":[",
+        current_version("language"),
+        current_version("runtime_package")
+    )
+}
+
 fn run_cli(arguments: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_seloryn"))
         .args(arguments)
@@ -65,7 +82,11 @@ fn version_reports_earned_language_and_package_versions_without_claiming_runtime
     let stdout = String::from_utf8(output.stdout).expect("version must be UTF-8");
     assert_eq!(
         stdout,
-        "seloryn 0.12 package=0.12.0 build=local-development status=verified-preview\n"
+        format!(
+            "seloryn {} package={} build=local-development status=verified-preview\n",
+            current_version("language"),
+            current_version("runtime_package")
+        )
     );
 }
 
@@ -107,7 +128,10 @@ fn build_and_exec_reproduce_a_project_bundle() {
         fs::read_to_string(first_output.join("seloryn-build.json")).expect("build metadata");
     assert!(build_metadata.contains("\"schema\":\"seloryn.build.v1\""));
     assert!(build_metadata.contains("\"bundle_format\":\"seloryn.bundle.v1\""));
-    assert!(build_metadata.contains("\"runtime_package\":\"0.12.0\""));
+    assert!(build_metadata.contains(&format!(
+        "\"runtime_package\":\"{}\"",
+        current_version("runtime_package")
+    )));
     assert_eq!(
         std::fs::read(&first_artifact).expect("first artifact"),
         std::fs::read(&second_artifact).expect("second artifact")
@@ -629,7 +653,7 @@ fn check_json_has_one_structured_document_and_no_stdout() {
     assert_eq!(output.status.code(), Some(65));
     assert!(output.stdout.is_empty());
     let stderr = String::from_utf8(output.stderr).expect("JSON diagnostics must be UTF-8");
-    assert!(stderr.starts_with("{\"schema\":\"seloryn.analysis.v1\",\"language_version\":\"0.12\",\"runtime_package\":\"0.12.0\",\"diagnostics\":["));
+    assert!(stderr.starts_with(&analysis_json_prefix()));
     assert!(stderr.contains("\"code\":\"SEL-T004\""));
     assert!(stderr.contains("\"start\":{\"line\":2"));
     assert!(stderr.ends_with("]}\n"));
@@ -651,7 +675,7 @@ fn check_json_reports_missing_source_as_structured_diagnostic() {
     assert_eq!(output.status.code(), Some(65));
     assert!(output.stdout.is_empty());
     let stderr = String::from_utf8(output.stderr).expect("JSON diagnostics must be UTF-8");
-    assert!(stderr.starts_with("{\"schema\":\"seloryn.analysis.v1\",\"language_version\":\"0.12\",\"runtime_package\":\"0.12.0\",\"diagnostics\":["));
+    assert!(stderr.starts_with(&analysis_json_prefix()));
     assert!(stderr.contains("\"code\":\"SEL-C003\""));
     assert!(stderr.contains("\"file\":"));
     assert!(stderr.contains("\"start\":{\"line\":1"));
@@ -699,9 +723,7 @@ fn run_json_missing_source_keeps_the_io_exit_code_and_structured_error() {
     assert_eq!(output.status.code(), Some(74));
     assert!(output.stdout.is_empty());
     let stderr = String::from_utf8(output.stderr).expect("JSON diagnostic must be UTF-8");
-    assert!(stderr.starts_with(
-        "{\"schema\":\"seloryn.analysis.v1\",\"language_version\":\"0.12\",\"runtime_package\":\"0.12.0\",\"diagnostics\":["
-    ));
+    assert!(stderr.starts_with(&analysis_json_prefix()));
     assert!(stderr.contains("\"code\":\"SEL-C003\""));
     assert!(stderr.contains("path not found"));
 }
@@ -908,7 +930,7 @@ fn run_returns_nonzero_for_a_typed_result_error() {
     assert_eq!(json_output.status.code(), Some(65));
     assert!(json_output.stdout.is_empty());
     let json_stderr = String::from_utf8(json_output.stderr).expect("JSON must be UTF-8");
-    assert!(json_stderr.starts_with("{\"schema\":\"seloryn.analysis.v1\",\"language_version\":\"0.12\",\"runtime_package\":\"0.12.0\",\"diagnostics\":["));
+    assert!(json_stderr.starts_with(&analysis_json_prefix()));
     assert!(json_stderr.contains("\"code\":\"SEL-R127\""));
 }
 

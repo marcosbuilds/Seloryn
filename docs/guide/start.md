@@ -4,6 +4,46 @@
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 
+## One reproducible first run
+
+Use one of the scripts below from the repository root. Each run checks the
+required tools, builds `target/release`, runs the read-only project doctor,
+checks and runs a tracked CPU tensor example, and finishes with the portable
+core conformance suite.
+
+```sh
+bash scripts/quickstart/first-run-posix.sh
+```
+
+```powershell
+pwsh -NoProfile -File .\scripts\quickstart\first-run-powershell.ps1
+```
+
+The expected tensor line is:
+
+```text
+Tensor[F32, shape=[2, 2], values=[19.0, 22.0, 43.0, 50.0]]
+```
+
+The project doctor reports a warning and exits successfully because the local
+runtime is `verified-preview` with an unstable ABI; that warning is expected
+and is not a production-readiness claim. The scripts are safe to repeat: they
+reuse the tracked examples and the release build directory, and do not create
+or overwrite a user project.
+
+Required tools are the Rust toolchain pinned in `rust-toolchain.toml` and
+Python 3.10+ for the conformance runner. Node.js/npm are not required for this
+CLI path; install them only for the separate VS Code/editor checks. If a
+required tool is missing, the prerequisite doctor stops before build and names
+the command to verify after installation. The dedicated regression probe is:
+
+```text
+python tests/first_run_probe.py
+```
+
+It covers the successful path, a repeat run, the missing-Python diagnostic and
+the existing nonzero `run` failure contract.
+
 ## What you can do today (E3 checker and E4 interpreter)
 
 When built from the repository, the native CLI accepts:
@@ -23,7 +63,7 @@ seloryn build project-directory --profile debug --output artifact-directory
 seloryn exec artifact-directory
 ```
 
-`check` validates UTF-8, four-space layout, the implemented parser subset and selected semantic rules: local names and scopes, scalar types, typed list indexing and iteration, mutable `var` assignment, function calls and returns, records, enums, `Result`, `Option`, `require`, postfix `?`, pipelines and exhaustive `match`. It emits a structured source diagnostic and nonzero exit code for invalid input. The command path is implemented in [`src/main.rs`](../../src/main.rs) and exercised by [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs).
+`check` validates UTF-8, four-space layout, the implemented parser subset and selected semantic rules: local names and scopes, scalar types, typed list indexing and iteration, mutable `var` assignment, function calls and returns, records, enums, `Result`, `Option`, `require`, postfix `?`, pipelines and exhaustive `match`. It emits a structured source diagnostic and nonzero exit code for invalid input. The command path is implemented in [`src/cli/mod.rs`](../../src/cli/mod.rs) and exercised by [`tests/bootstrap_cli.rs`](../../tests/bootstrap_cli.rs).
 
 `run` executes the same bounded constructs after all front-end diagnostics
 pass. A standalone source run has no filesystem, network, process or
@@ -54,23 +94,21 @@ capability and source-root rules; it refuses to overwrite an existing path.
 
 ## Development run
 
-From a built development binary, the current evidence path is:
-
-1. Clone the development repository; its `rust-toolchain.toml` pins the
-   development Rust toolchain and the required `rustfmt`/`clippy` components.
-2. Run `cargo test --all-targets --locked` from the checkout.
-3. Save a UTF-8 `.sely` source file and use `cargo run -- check`, followed by `cargo run -- run`.
-4. Use the documented CPU tensor/training subset; run `devices` and `gpu-probe` to inspect hardware evidence without assuming GPU training support.
-
-The broader commands remain planned; the currently executable subset is:
+From a built development binary, the current evidence path is the quickstart
+above or the equivalent commands below. The commands intentionally use the
+release binary produced by the local build:
 
 ```text
-seloryn --version
-seloryn check hello.sely
-seloryn run hello.sely
-seloryn build project-directory --profile debug --output artifact-directory
-seloryn exec artifact-directory
+cargo build --release --locked
+./target/release/seloryn doctor examples/projects/json-config --format=json
+./target/release/seloryn check examples/tensors/tensor-matmul.sely
+./target/release/seloryn run examples/tensors/tensor-matmul.sely
+python3 scripts/ci/conformance.py --run --suite core
 ```
+
+On Windows PowerShell, use `target\release\seloryn.exe` and `python` in the
+same sequence. The quickstart scripts select the platform binary and preserve
+the native exit code of every step.
 
 ## Runnable pure hello-world source
 

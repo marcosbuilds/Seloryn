@@ -16,6 +16,9 @@ ZERO_HASH = "sha256:" + "0" * 64
 HASH_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 REQUIRED = ("schema", "run", "seq", "kind", "phase", "data", "prev", "hash")
 RUN_PATTERN = re.compile(r"^r_[0-9a-f]{64}$")
+MAX_LINE_BYTES = 1_048_576
+MAX_STREAM_BYTES = 8_388_608
+MAX_NESTING = 128
 
 
 class RawNumber(str):
@@ -26,6 +29,10 @@ class DuplicateKeyError(ValueError):
     pass
 
 
+class NonFiniteNumberError(ValueError):
+    pass
+
+
 def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
     result: dict[str, object] = {}
     for key, value in pairs:
@@ -33,6 +40,47 @@ def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
             raise DuplicateKeyError(f"duplicate key {key!r}")
         result[key] = value
     return result
+
+
+def reject_non_finite(value: str) -> None:
+    raise NonFiniteNumberError(value)
+
+
+def exceeds_nesting(raw: str) -> bool:
+    depth = 0
+    maximum = 0
+    in_string = False
+    escaped = False
+    for character in raw:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character in "[{":
+            depth += 1
+            maximum = max(maximum, depth)
+        elif character in "]}":
+            depth -= 1
+    return maximum > MAX_NESTING
+
+
+def contains_surrogate(value: object) -> bool:
+    if isinstance(value, str):
+        return any(0xD800 <= ord(character) <= 0xDFFF for character in value)
+    if isinstance(value, list):
+        return any(contains_surrogate(item) for item in value)
+    if isinstance(value, dict):
+        return any(
+            contains_surrogate(key) or contains_surrogate(item)
+            for key, item in value.items()
+        )
+    return False
 
 
 def _canonical(value: object) -> str:
@@ -71,8 +119,17 @@ def verify(lines: Iterable[str], hmac_key: bytes | None = None) -> tuple[bool, s
     count = 0
     first_kind: str | None = None
     last_kind: str | None = None
+    stream_bytes = 0
 
     for line_number, raw in enumerate(lines, 1):
+        line_bytes = len(raw.encode("utf-8"))
+        stream_bytes += line_bytes
+        if line_bytes > MAX_LINE_BYTES:
+            return False, f"line {line_number}: input line exceeds {MAX_LINE_BYTES} bytes", count
+        if stream_bytes > MAX_STREAM_BYTES:
+            return False, f"stream exceeds {MAX_STREAM_BYTES} bytes", count
+        if exceeds_nesting(raw):
+            return False, f"line {line_number}: JSON nesting exceeds {MAX_NESTING} levels", count
         if not raw.strip():
             continue
         try:
@@ -81,13 +138,20 @@ def verify(lines: Iterable[str], hmac_key: bytes | None = None) -> tuple[bool, s
                 object_pairs_hook=reject_duplicate_keys,
                 parse_int=RawNumber,
                 parse_float=RawNumber,
+                parse_constant=reject_non_finite,
             )
-        except DuplicateKeyError as error:
-            return False, f"line {line_number}: duplicate key ({error})", count
-        except json.JSONDecodeError as error:
-            return False, f"line {line_number}: invalid JSON ({error})", count
+        except DuplicateKeyError:
+            return False, f"line {line_number}: duplicate key", count
+        except NonFiniteNumberError:
+            return False, f"line {line_number}: non-finite JSON number", count
+        except json.JSONDecodeError:
+            return False, f"line {line_number}: invalid JSON", count
+        except RecursionError:
+            return False, f"line {line_number}: JSON nesting exceeds {MAX_NESTING} levels", count
         if not isinstance(parsed, dict):
             return False, f"line {line_number}: event is not an object", count
+        if contains_surrogate(parsed):
+            return False, f"line {line_number}: invalid Unicode scalar", count
         missing = [key for key in REQUIRED if key not in parsed]
         if missing:
             return False, f"line {line_number}: missing fields {missing}", count
@@ -117,7 +181,10 @@ def verify(lines: Iterable[str], hmac_key: bytes | None = None) -> tuple[bool, s
         content = dict(parsed)
         del content["hash"]
         signature = content.pop("signature", None)
-        actual = digest(content)
+        try:
+            actual = digest(content)
+        except (TypeError, UnicodeEncodeError):
+            return False, f"line {line_number}: unsupported JSON value", count
         if actual != claimed:
             return False, f"line {line_number}: hash mismatch", count
         if signature is not None:
@@ -175,8 +242,11 @@ def main(argv: list[str]) -> int:
     try:
         with open(argv[1], "r", encoding="utf-8") as handle:
             ok, message, _ = verify(handle, hmac_key)
-    except OSError as error:
-        print(f"stream verification failed: {error}", file=sys.stderr)
+    except UnicodeDecodeError:
+        print("stream verification failed: invalid UTF-8 input", file=sys.stderr)
+        return 1
+    except OSError:
+        print("stream verification failed: cannot read input", file=sys.stderr)
         return 1
     print(message)
     return 0 if ok else 1

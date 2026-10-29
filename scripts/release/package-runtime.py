@@ -3,18 +3,23 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
-import re
 import subprocess
 import zipfile
 from pathlib import Path
 
+from release_metadata import (
+    PLATFORMS,
+    UNSTABLE_ABI,
+    binary_name,
+    current_metadata,
+    sha256_bytes,
+    sha256_file,
+    validate_release_binary,
+)
+
 
 ROOT = Path(__file__).resolve().parents[2]
-PLATFORMS = {"windows-x64", "linux-x64", "macos-arm64"}
-PACKAGE_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
-LANGUAGE_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{2}\Z")
 
 
 def arguments() -> argparse.Namespace:
@@ -22,15 +27,10 @@ def arguments() -> argparse.Namespace:
     parser.add_argument("--binary", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--platform", choices=sorted(PLATFORMS), required=True)
-    parser.add_argument("--runtime-version", required=True)
-    parser.add_argument("--language-version", required=True)
+    parser.add_argument("--runtime-version")
+    parser.add_argument("--language-version")
     parser.add_argument("--commit", required=True)
     return parser.parse_args()
-
-
-def validate_version(value: str, pattern: re.Pattern[str], label: str) -> None:
-    if not pattern.fullmatch(value):
-        raise SystemExit(f"{label} has an invalid canonical value: {value}")
 
 
 def deterministic_entry(name: str, content: bytes) -> zipfile.ZipInfo:
@@ -40,14 +40,6 @@ def deterministic_entry(name: str, content: bytes) -> zipfile.ZipInfo:
     entry.create_system = 3
     entry.file_size = len(content)
     return entry
-
-
-def sha256_bytes(content: bytes) -> str:
-    return hashlib.sha256(content).hexdigest()
-
-
-def sha256_file(path: Path) -> str:
-    return sha256_bytes(path.read_bytes())
 
 
 def source_tree_sha256(commit: str) -> str:
@@ -61,44 +53,48 @@ def source_tree_sha256(commit: str) -> str:
 
 def main() -> int:
     options = arguments()
-    validate_version(options.runtime_version, PACKAGE_PATTERN, "runtime package")
-    validate_version(options.language_version, LANGUAGE_PATTERN, "language")
+    metadata = current_metadata(ROOT)
+    if options.runtime_version and options.runtime_version != metadata["runtime_package"]:
+        raise SystemExit("runtime package must be read from VERSION.toml")
+    if options.language_version and options.language_version != metadata["language"]:
+        raise SystemExit("language version must be read from VERSION.toml")
     if not options.commit or any(character.isspace() for character in options.commit):
         raise SystemExit("commit must be a non-empty SHA/ref without whitespace")
-    binary = options.binary.resolve()
-    if not binary.is_file():
-        raise SystemExit(f"runtime binary does not exist: {binary}")
+    binary = validate_release_binary(options.binary, options.platform, ROOT)
     license_path = ROOT / "LICENSE"
     if not license_path.is_file():
         raise SystemExit(f"license does not exist: {license_path}")
 
     options.output_dir.mkdir(parents=True, exist_ok=True)
-    archive_name = f"seloryn-runtime-{options.runtime_version}-{options.platform}.zip"
+    archive_name = f"seloryn-runtime-{metadata['runtime_package']}-{options.platform}.zip"
     archive_path = options.output_dir / archive_name
-    binary_name = "seloryn.exe" if options.platform == "windows-x64" else "seloryn"
-    binary_sha256 = sha256_file(binary)
+    packaged_binary_name = binary_name(options.platform)
+    binary_bytes = binary.read_bytes()
+    binary_sha256 = sha256_bytes(binary_bytes)
     cargo_lock_sha256 = sha256_file(ROOT / "Cargo.lock")
     toolchain_sha256 = sha256_file(ROOT / "rust-toolchain.toml")
     manifest = {
         "artifact": archive_name,
-        "abi": "unstable",
+        "abi": UNSTABLE_ABI,
         "binary_sha256": binary_sha256,
+        "binary_bytes": len(binary_bytes),
+        "binary_name": packaged_binary_name,
         "build_profile": "release",
         "cargo_lock_sha256": cargo_lock_sha256,
-        "channel": "verified-preview",
+        "channel": metadata["channel"],
         "commit": options.commit,
         "gpu_tensor_training": False,
-        "language_version": options.language_version,
+        "language_version": metadata["language"],
         "platform": options.platform,
         "provenance_schema": "seloryn.provenance.v1",
-        "runtime_package": options.runtime_version,
+        "runtime_package": metadata["runtime_package"],
         "rust_toolchain_sha256": toolchain_sha256,
         "source_tree_sha256": source_tree_sha256(options.commit),
     }
     manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode("utf-8")
     with zipfile.ZipFile(archive_path, "w") as archive:
         for name, content in (
-            (binary_name, binary.read_bytes()),
+            (packaged_binary_name, binary_bytes),
             ("LICENSE", license_path.read_bytes()),
             ("runtime-manifest.json", manifest_bytes),
         ):

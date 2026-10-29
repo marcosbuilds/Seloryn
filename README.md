@@ -4,9 +4,9 @@
   <p>A documented original programming language design for reliable AI systems.</p>
 </div>
 
-> **Current local candidate: language 0.12 / runtime package 0.12.0, verified-preview CPU training, a complete source-owned `.sely` contextual next-token workflow and an auditable local-inference workflow with explicit data/model/run contracts, hash-bound checkpoints and inference audit events.** The release also retains identity-bearing replay receipts, typed JSON-array ingestion, an explicit device-resident GPU linear-training profile, hardened checkpoints, strict project manifests, Seloryn-authored tensor optimization, bounded tensors, autodiff, projects and deterministic bundles. Transformer training, GPU tensor/MLP training, distributed, registry, stable ABI and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md), [auditable proof](docs/benchmarks/auditable-local-inference.md), [language-model proof](docs/compute/language-model.md) and [training reference](docs/compute/training.md).
+> **Latest verified preview: language 0.12 / runtime package 0.12.0. No stable release exists yet.** The verified release assets currently cover Windows x64 runtime and installer, a VS Code preview and an experimental binary-font package. The language evidence includes CPU training, a complete source-owned `.sely` contextual next-token workflow and an auditable local-inference workflow with explicit data/model/run contracts, hash-bound checkpoints and inference audit events. Transformer training, GPU tensor/MLP training, distributed, registry, stable ABI and stable runtime claims remain outside the evidence. See the [current status](docs/project/status.md), [download index](docs/downloads.md), [distribution catalog](packages/catalog.toml), [auditable proof](docs/benchmarks/auditable-local-inference.md), [language-model proof](docs/compute/language-model.md) and [training reference](docs/compute/training.md).
 
-> **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Local preview artifacts are generated and validated, but they carry the exact platform, version and boundary claims documented below; GitHub publication remains explicit and separate. The executable [public conformance and evidence matrix](docs/project/conformance.md) maps each claim to source paths, positive/negative probes, platform requirements and limits.
+> **No performance claims, compatibility badges or training benchmarks are published without independent measurement.** Release assets carry exact platform, version and SHA-256 boundaries; the executable [public conformance and evidence matrix](docs/project/conformance.md) maps language claims to source paths, positive/negative probes, platform requirements and limits.
 
 The first reviewed comparative result for the intended CPU-first tabular niche
 is documented in [the production-niche benchmark](docs/benchmarks/production-niche-v2.md).
@@ -15,12 +15,46 @@ local-inference benchmark](docs/benchmarks/auditable-local-inference.md).
 
 ## Public preview artifacts
 
-- [Seloryn runtime 0.7.0 / language 0.07](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07): the last published runtime line.
-- [Seloryn VS Code extension package 0.12.0](packages/vscode): local candidate with syntax highlighting, parser-backed LSP diagnostics/completion/definition, source-owned MLP and language-model completions, CLI fallback and `.sely` file icons on the language `0.12` line. Marketplace publication is pending.
+- The exact runtime, VSIX, installer and font asset links and checksums are in the [download index](docs/downloads.md), whose primary browser is the [GitHub Releases page](https://github.com/marcosbuilds/Seloryn/releases).
+- The runtime release currently has only a Windows x64 asset; Linux x64 and macOS arm64 are not claimed on the 0.12.0 line.
+- The installer is unsigned, and all four products are previews rather than stable distributions.
 
 These are verified previews, not a stable ABI or a claim of GPU tensor/MLP
 training, distributed execution, package registry, HTTP runtime or a general
 model framework.
+
+## First run from a clone
+
+The shortest verified CLI path is provided by the idempotent quickstart scripts.
+They build the release binary, run read-only `doctor` on the tracked JSON
+project, check and run the tracked tensor example, then execute the portable
+core conformance suite. The scripts use only repository examples and do not
+create or overwrite user project files.
+
+On POSIX shells:
+
+```sh
+bash scripts/quickstart/first-run-posix.sh
+```
+
+On PowerShell 5.1 or 7+:
+
+```powershell
+pwsh -NoProfile -File .\scripts\quickstart\first-run-powershell.ps1
+```
+
+The observable tensor result is:
+
+```text
+Tensor[F32, shape=[2, 2], values=[19.0, 22.0, 43.0, 50.0]]
+```
+
+The prerequisite doctor requires the Rust toolchain pinned by
+`rust-toolchain.toml` and Python 3.10+ for the conformance tooling. Node.js/npm
+are not required for this CLI path. Missing required tools produce an
+installation-oriented error before build or source execution. The runtime
+remains a verified preview with an unstable ABI; this path does not promote a
+stable release.
 
 ![Seloryn architecture](assets/diagrams/architecture-flow.png)
 
@@ -40,17 +74,17 @@ instead of gaining features by default.
 
 | Capability | Availability in 0.12 | Evidence or boundary |
 |:--|:--|:--|
-| UTF-8 lexer, layout and parser subset | Implemented and tested | [`src/parser.rs`](src/parser.rs), parser tests |
-| Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | [`src/semantic.rs`](src/semantic.rs), semantic tests |
-| `seloryn check <file.sely or project>` diagnostics | Implemented in the development CLI | [`src/main.rs`](src/main.rs), [`tests/bootstrap_cli.rs`](tests/bootstrap_cli.rs), [`tests/project_manifest_probe.py`](tests/project_manifest_probe.py) |
-| `seloryn inspect <file.sely or project>` compact agent context | Verified bounded inspection slice | [`src/main.rs`](src/main.rs), [`src/analysis.rs`](src/analysis.rs), [`tests/structured_inspection_probe.py`](tests/structured_inspection_probe.py); `seloryn.analysis.v1` preserves symbols/imports/diagnostics and adds bounded redacted `seloryn.context.v1` agent metadata |
-| Pure scalar/list interpreter and `seloryn run` | Experimental E4 implementation | [`src/runtime.rs`](src/runtime.rs), runtime and CLI tests; no effects |
-| CPU `Tensor[F32]` / `Tensor[I64]` buffers and N1/N2 operations | Experimental N1/N2 implementation | [`src/tensor`](src/tensor), tensor unit and CLI tests; CPU only |
+| UTF-8 lexer, layout and parser subset | Implemented and tested | [`src/language/parser.rs`](src/language/parser.rs), parser tests |
+| Names, scalar types, records, enums, `Result`, `Option` and `match` checks | Experimental partial checker | [`src/language/semantic/checker.rs`](src/language/semantic/checker.rs), semantic tests |
+| `seloryn check <file.sely or project>` diagnostics | Implemented in the development CLI | [`src/cli/mod.rs`](src/cli/mod.rs), [`tests/bootstrap_cli.rs`](tests/bootstrap_cli.rs), [`tests/project_manifest_probe.py`](tests/project_manifest_probe.py) |
+| `seloryn inspect <file.sely or project>` compact agent context | Verified bounded inspection slice | [`src/cli/mod.rs`](src/cli/mod.rs), [`src/language/analysis.rs`](src/language/analysis.rs), [`tests/structured_inspection_probe.py`](tests/structured_inspection_probe.py); `seloryn.analysis.v1` preserves symbols/imports/diagnostics and adds bounded redacted `seloryn.context.v1` agent metadata |
+| Pure scalar/list interpreter and `seloryn run` | Experimental E4 implementation | [`src/runtime/mod.rs`](src/runtime/mod.rs), runtime and CLI tests; no effects |
+| CPU `Tensor[F32]` / `Tensor[I64]` buffers and N1/N2 operations | Experimental N1/N2 implementation | [`src/compute/tensor`](src/compute/tensor), tensor unit and CLI tests; CPU only |
 | Typed tensor reads and lossless dtype conversion | Experimental N1 implementation | `tensor_get_f32` / `tensor_get_i64`, `tensor_to_f32` / `tensor_to_i64`, bounds and dtype regressions in [`tests/tensor_cpu.rs`](tests/tensor_cpu.rs) |
-| Deterministic core IR and execution boundary | Experimental implemented | `src/ir.rs`, runtime parity tests; bounded subset only |
+| Deterministic core IR and execution boundary | Experimental implemented | `src/language/ir.rs`, runtime parity tests; bounded subset only |
 | Local modules and strict project manifests | Experimental implemented | Public project fixtures, real TOML parsing and future-language rejection; no registry or external package resolver |
-| VS Code syntax highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and optional `.sely` file icons | Verified editor preview | [`packages/vscode`](packages/vscode); headless transport/controller tests, real CLI fixture and reproducible local VSIX; Explorer rendering remains environment-dependent |
-| `seloryn lsp --stdio` diagnostics, completion, definition and document symbols | Initial LSP v1 verified locally and wired to VS Code | [`src/lsp.rs`](src/lsp.rs), [`packages/vscode/lsp-client.js`](packages/vscode/lsp-client.js), [`tests/lsp_probe.py`](tests/lsp_probe.py); indexed analysis, incremental parsing and rename remain future |
+| VS Code syntax highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and optional `.sely` file icons | Verified editor preview release asset | [`docs/guide/editor.md`](docs/guide/editor.md), [`packages/catalog.toml`](packages/catalog.toml); the VSIX builder is outside this public source tree |
+| `seloryn lsp --stdio` diagnostics, completion, definition and document symbols | Initial LSP v1 verified locally | [`src/protocols/lsp.rs`](src/protocols/lsp.rs), [`tests/lsp_probe.py`](tests/lsp_probe.py); indexed analysis, incremental parsing and rename remain future |
 | JSON read/parse/encode/get and bounded file capability | Experimental implemented | JSON project fixtures; paths remain root-confined |
 | Typed JSON number-array ingestion into `List[I64]` / `List[F64]` | **Verified language gain** | [`examples/projects/json-array-pipeline`](examples/projects/json-array-pipeline), [`tests/json_array_probe.py`](tests/json_array_probe.py); bounded by runtime list limits |
 | Hash-validated bounded CPU MLP checkpoint batch inference | **Verified language gain** | [`examples/projects/mlp-inference`](examples/projects/mlp-inference), [`tests/mlp_inference_probe.py`](tests/mlp_inference_probe.py); CPU-only, bounded inputs, no serving ABI |
@@ -61,11 +95,11 @@ instead of gaining features by default.
 | Custom `.sely` ReLU MLP with own dataset, training, holdout evaluation, atomic JSON checkpoint, reload and inference | **Verified preview** | [`examples/projects/self-hosted-mlp`](examples/projects/self-hosted-mlp), [`tests/self_hosted_mlp_probe.py`](tests/self_hosted_mlp_probe.py); no `train_mlp` call and real JSON2 progress stream |
 | Complete source-owned `.sely` contextual next-token model with whitespace tokenizer, runtime-sized vocabulary/dataset, configurable context windows, reusable parameters/SGD, perplexity, held-out evaluation, hash-bound checkpoint reload and text inference | **Verified preview** | [`examples/projects/self-hosted-language-model`](examples/projects/self-hosted-language-model), [`tests/self_hosted_language_model_probe.py`](tests/self_hosted_language_model_probe.py), [`docs/compute/language-model.md`](docs/compute/language-model.md); CPU-only, linear one-hot model |
 | Source-owned auditable local-inference workflow with explicit data/model/run contracts, hash-bound checkpoint, separate inference and structured audit event | **Verified preview** | [`examples/projects/auditable-local-inference`](examples/projects/auditable-local-inference), [`tests/auditable_local_inference_probe.py`](tests/auditable_local_inference_probe.py), [`docs/benchmarks/auditable-local-inference.md`](docs/benchmarks/auditable-local-inference.md); bounded CPU fixture, no stable ABI |
-| Local `job` spec/state/event contract with read-only preflight, leases and bounded worker | Experimental implemented; direct-process execution slice | [`src/job.rs`](src/job.rs), [`src/job_worker.rs`](src/job_worker.rs), [`tests/job_worker_probe.py`](tests/job_worker_probe.py); `job run` snapshots only the validated Seloryn source, uses lease fencing, timeout, cancellation, bounded output hashes and a committed atomic result receipt; no arbitrary commands, descendants or remote workers |
-| Physical hardware inventory, non-fallback GPU compute/readback probe and explicit GPU linear training | Verified preview on the declared host; capability-aware elsewhere | [`src/gpu.rs`](src/gpu.rs), [`tests/gpu_probe.py`](tests/gpu_probe.py), [`tests/gpu_training_probe.py`](tests/gpu_training_probe.py); the GPU trainer is scalar F32 linear only, device-resident parameters, one final readback, no silent CPU fallback |
+| Local `job` spec/state/event contract with read-only preflight, leases and bounded worker | Experimental implemented; direct-process execution slice | [`src/jobs/mod.rs`](src/jobs/mod.rs), [`src/jobs/job_worker.rs`](src/jobs/job_worker.rs), [`tests/job_worker_probe.py`](tests/job_worker_probe.py); `job run` snapshots only the validated Seloryn source, uses lease fencing, timeout, cancellation, bounded output hashes and a committed atomic result receipt; no arbitrary commands, descendants or remote workers |
+| Physical hardware inventory, non-fallback GPU compute/readback probe and explicit GPU linear training | Verified preview on the declared host; capability-aware elsewhere | [`src/compute/gpu.rs`](src/compute/gpu.rs), [`tests/gpu_probe.py`](tests/gpu_probe.py), [`tests/gpu_training_probe.py`](tests/gpu_training_probe.py); the GPU trainer is scalar F32 linear only, device-resident parameters, one final readback, no silent CPU fallback |
 | `build`/`exec` `.selyapp` bundle path | Experimental | Deterministic bundle and clean terminal fixtures; not an installer |
 | Transformer/LLM-scale training, embeddings, subword tokenizers, HTTP serving, general GPU tensor/MLP training, packages and distributed execution | Not implemented or verified | The language-model project is a bounded CPU contextual linear proof, and `train_linear_gpu` is a closed scalar profile, not a general backend |
-| Native Windows setup and local installer scripts | Experimental; Windows x64 native setup is locally verified for one `0.12.0` runtime | No public download, signing, clean-machine validation or verified multiplatform installer lifecycle |
+| Native Windows setup and installer | Verified-preview release asset; unsigned | [`packages/catalog.toml`](packages/catalog.toml), [`docs/guide/install.md`](docs/guide/install.md); clean-machine support and signing are not claimed |
 
 | AI development | AI integration | AI serving | Evidence |
 |:--|:--|:--|:--|
@@ -88,7 +122,7 @@ The function above is intentionally illustrative beyond the current callable API
 
 ## Read next
 
-[Getting started](docs/guide/start.md) · [Editor support](docs/guide/editor.md) · [Conformance matrix](docs/project/conformance.md) · [Evidence Lab](docs/project/evidence-lab.md) · [Architecture](docs/project/architecture.md) · [Grammar](docs/reference/grammar.md) · [Types](docs/reference/types.md) · [Errors](docs/reference/errors.md) · [Tensors](docs/compute/tensors.md) · [Training](docs/compute/training.md) · [Executable language model](docs/compute/language-model.md) · [LLM boundary](docs/compute/llms.md) · [Servers](docs/systems/http.md) · [Platform support](docs/guide/platforms.md) · [Releases](docs/project/versions.md) · [License](docs/project/licensing.md)
+[Getting started](docs/guide/start.md) · [Editor support](docs/guide/editor.md) · [Conformance matrix](docs/project/conformance.md) · [Evidence Lab](docs/project/evidence-lab.md) · [Architecture](docs/project/architecture.md) · [Rust source map](src/README.md) · [Downloads](docs/downloads.md) · [Grammar](docs/reference/grammar.md) · [Types](docs/reference/types.md) · [Errors](docs/reference/errors.md) · [Tensors](docs/compute/tensors.md) · [Training](docs/compute/training.md) · [Executable language model](docs/compute/language-model.md) · [LLM boundary](docs/compute/llms.md) · [Servers](docs/systems/http.md) · [Platform support](docs/guide/platforms.md) · [Releases](docs/project/versions.md) · [License](docs/project/licensing.md)
 
 ## References and visuals
 

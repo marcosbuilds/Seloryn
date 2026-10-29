@@ -70,13 +70,13 @@ This EBNF summarizes accepted design intent; production-ready conformance gramma
 
 | Feature | Current status | Evidence and limit |
 |---|---|---|
-| `record` declarations | Implemented parser, nominal field checks and E4 construction/member access | [`src/parser.rs`](../../src/parser.rs), [`src/semantic.rs`](../../src/semantic.rs); named-field construction is not implemented |
-| `enum` declarations and variants | Implemented parser, constructor checks and E4 values/matching | [`src/parser.rs`](../../src/parser.rs), [`src/semantic.rs`](../../src/semantic.rs); structural patterns remain outside |
-| `match` statements | Partial checker plus E4 execution | [`src/parser.rs`](../../src/parser.rs), [`src/semantic.rs`](../../src/semantic.rs), [`src/runtime.rs`](../../src/runtime.rs); Bool/Option/Result/enum coverage and constructor cases execute, but structural patterns are absent |
-| `Result` and postfix `?` | Static checks plus E4 propagation | [`src/semantic.rs`](../../src/semantic.rs), runtime tests; `?` returns a compatible `Err` from the current function |
-| `Option` and `??` | Static checks plus E4 values/fallback | [`src/semantic.rs`](../../src/semantic.rs), runtime tests; nullable `T?` and `?.` remain reserved |
+| `record` declarations | Implemented parser, nominal field checks and E4 construction/member access | [`src/language/parser.rs`](../../src/language/parser.rs), [`src/language/semantic/checker.rs`](../../src/language/semantic/checker.rs); named-field construction is not implemented |
+| `enum` declarations and variants | Implemented parser, constructor checks and E4 values/matching | [`src/language/parser.rs`](../../src/language/parser.rs), [`src/language/semantic/checker.rs`](../../src/language/semantic/checker.rs); structural patterns remain outside |
+| `match` statements | Partial checker plus E4 execution | [`src/language/parser.rs`](../../src/language/parser.rs), [`src/language/semantic/checker.rs`](../../src/language/semantic/checker.rs), [`src/runtime/mod.rs`](../../src/runtime/mod.rs); Bool/Option/Result/enum coverage and constructor cases execute, but structural patterns are absent |
+| `Result` and postfix `?` | Static checks plus E4 propagation | [`src/language/semantic/checker.rs`](../../src/language/semantic/checker.rs), runtime tests; `?` returns a compatible `Err` from the current function |
+| `Option` and `??` | Static checks plus E4 values/fallback | [`src/language/semantic/checker.rs`](../../src/language/semantic/checker.rs), runtime tests; nullable `T?` and `?.` remain reserved |
 | Local modules and standard imports | Experimental local-project subset | `seloryn.toml` resolves local modules and the bounded `json`/other standard fixtures; external packages, registry and lockfiles remain unavailable |
-| `Tensor[F32]` and `Tensor[I64]` | N1/N2 experimental | Runtime shapes and CPU kernels are checked by [`src/tensor`](../../src/tensor) and CLI tests; symbolic shape parameters remain unavailable |
+| `Tensor[F32]` and `Tensor[I64]` | N1/N2 experimental | Runtime shapes and CPU kernels are checked by [`src/compute/tensor`](../../src/compute/tensor) and CLI tests; symbolic shape parameters remain unavailable |
 | Multiple tensor gradients, bounded `range` and whitespace splitting | Verified preview | `from autograd import gradients` returns one gradient per Tensor[F32] input; `from data import range` supports bounded `for` loops and `from data import split_whitespace` returns bounded Unicode whitespace tokens |
 | List indexing, tensor element reads, `for` iteration and `var` assignment | E4 experimental | `List[T]` indexing, typed read-only tensor coordinates, bounded iteration, mutable bindings and list concatenation execute; slicing and tensor mutation remain unavailable |
 

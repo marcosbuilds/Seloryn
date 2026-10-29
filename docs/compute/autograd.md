@@ -46,8 +46,8 @@ fn main() -> F32:
 
 `seloryn run` returns `9.0` for this source. `backward(f, 4.0)` returns the
 same analytic derivative without the finite-difference comparison. The tape
-implementation is in [`src/autograd.rs`](../../src/autograd.rs), the runtime
-bridge is in [`src/runtime.rs`](../../src/runtime.rs), and the independent
+implementation is in [`src/compute/autograd.rs`](../../src/compute/autograd.rs), the runtime
+bridge is in [`src/runtime/mod.rs`](../../src/runtime/mod.rs), and the independent
 black-box proof is [`tests/n3_probe.py`](../../tests/n3_probe.py). Tensor
 `backward` now builds and executes a real bounded reverse tape. The
 [`tensor-gradient.sely`](../../examples/autograd/tensor-gradient.sely) example

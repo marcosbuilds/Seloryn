@@ -212,8 +212,8 @@ def validate(root: Path = ROOT) -> None:
     if not cargo_language or cargo_language.group(1) != current_language:
         fail("Cargo language metadata does not match VERSION.toml")
 
-    main = (root / "src" / "main.rs").read_text(encoding="utf-8")
-    cli_language = re.search(r'^(?:pub\(crate\) )?const LANGUAGE_VERSION: &str = "([^"]+)";', main, re.MULTILINE)
+    cli = (root / "src" / "cli" / "mod.rs").read_text(encoding="utf-8")
+    cli_language = re.search(r'^(?:pub\(crate\) )?const LANGUAGE_VERSION: &str = "([^"]+)";', cli, re.MULTILINE)
     if not cli_language or cli_language.group(1) != current_language:
         fail("CLI language version does not match VERSION.toml")
 
@@ -224,18 +224,38 @@ def validate(root: Path = ROOT) -> None:
     if not diagnostic_language or diagnostic_language.group(1) != current_language:
         fail("diagnostic/LSP language version does not match VERSION.toml")
 
-    extension = json.loads((root / "packages" / "vscode" / "package.json").read_text(encoding="utf-8"))
-    if extension["version"] != extension_package:
-        fail("VS Code package version does not match VERSION.toml")
+    try:
+        catalog = tomllib.loads((root / "packages" / "catalog.toml").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        fail(f"cannot read public package catalog: {error}")
+    if not isinstance(catalog, dict):
+        fail("public package catalog must be a TOML table")
+    for key, package_version, tag_prefix in (
+        ("runtime", runtime_package, "seloryn-v"),
+        ("vscode", extension_package, "vscode-v"),
+    ):
+        record = catalog.get(key)
+        if not isinstance(record, dict):
+            fail(f"public package catalog is missing [{key}]")
+        if record.get("current_package") != package_version:
+            fail(f"public catalog {key} package does not match VERSION.toml")
+        if record.get("current_status") != "published":
+            fail(f"public catalog {key} is not published")
+        if record.get("latest_published_package") != package_version:
+            fail(f"public catalog {key} latest package does not match VERSION.toml")
+        expected_tag = f"{tag_prefix}{current_language if key == 'runtime' else package_version}"
+        if record.get("latest_published_tag") != expected_tag:
+            fail(f"public catalog {key} tag does not match the package line")
+        release_url = record.get("latest_published_release")
+        if not isinstance(release_url, str) or not release_url.startswith(
+            "https://github.com/marcosbuilds/Seloryn/releases/tag/"
+        ):
+            fail(f"public catalog {key} release URL is not canonical")
 
     lock = (root / "Cargo.lock").read_text(encoding="utf-8")
     lock_block = lock.split('name = "seloryn"', 1)[1].split("\n\n", 1)[0]
     if f'version = "{runtime_package}"' not in lock_block:
         fail("Cargo.lock does not match VERSION.toml")
-
-    npm_lock = json.loads((root / "packages" / "vscode" / "package-lock.json").read_text(encoding="utf-8"))
-    if npm_lock["version"] != extension_package or npm_lock["packages"][""]["version"] != extension_package:
-        fail("package-lock.json does not match VERSION.toml")
 
     print(
         f"Seloryn version comparison: {previous_language} -> {current_language}; "

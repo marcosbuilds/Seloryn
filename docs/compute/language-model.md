@@ -84,8 +84,8 @@ overhead, not a speed claim.
 
 | implementation | initial loss | final loss | held-out loss | perplexity | accuracy | generation | wall time |
 |---|---:|---:|---:|---:|---:|---|---:|
-| Python stdlib | 2.639057330 | 0.181598135 | 1.088078311 | 2.96856393 | 0.666667 | `in in park <eos>` | `0.3610 s` latest probe |
-| Seloryn `.sely` | 2.639057398 | 0.181598127 | 1.088078260 | 2.96856380 | 0.666667 | `in in park <eos>` | `1.0625 s` latest probe |
+| Python stdlib | 2.639057330 | 0.181598135 | 1.088078311 | 2.96856393 | 0.666667 | `in in park <eos>` | `0.259984 s` median of 3 local samples |
+| Seloryn `.sely` | 2.639057398 | 0.181598127 | 1.088078260 | 2.96856380 | 0.666667 | `in in park <eos>` | `0.878805 s` median of 3 local samples |
 
 The exact wall time varies by machine. The acceptance invariant is numerical:
 final-loss and held-out-loss differences are below `1e-5`, and accuracy is

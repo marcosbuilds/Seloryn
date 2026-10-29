@@ -3,6 +3,10 @@ Set-StrictMode -Version Latest
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 Push-Location $root
 try {
+    & python scripts/ci/public_boundary.py
+    if ($LASTEXITCODE -ne 0) { throw 'Public source boundary failed' }
+    & python scripts/ci/check-docs.py
+    if ($LASTEXITCODE -ne 0) { throw 'Public documentation checks failed' }
     & python -m pip install --disable-pip-version-check --quiet -r scripts/release/requirements.txt
     if ($LASTEXITCODE -ne 0) { throw 'Release script dependencies failed to install' }
     & python scripts/release/verify-version.py
@@ -26,10 +30,6 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Benchmark evidence suite failed' }
     & python scripts/ci/conformance.py --run --suite hardware
     if ($LASTEXITCODE -ne 0) { throw 'Hardware conformance suite failed' }
-    & npm ci --prefix packages/vscode --ignore-scripts --no-audit --no-fund
-    if ($LASTEXITCODE -ne 0) { throw 'VS Code packaging dependencies failed to install' }
-    & python scripts/ci/conformance.py --run --suite editor
-    if ($LASTEXITCODE -ne 0) { throw 'Editor conformance suite failed' }
     & python scripts/ci/conformance.py --run --suite release
     if ($LASTEXITCODE -ne 0) { throw 'Release conformance suite failed' }
     & .\target\release\seloryn.exe run examples\tensors\linear-forward.sely

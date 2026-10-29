@@ -320,6 +320,89 @@ def main() -> int:
         checkpoint_path = split / "checkpoints" / "model.json"
         checkpoint_payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
         original_checkpoint = json.loads(json.dumps(checkpoint_payload))
+        assert checkpoint_payload["schema"] == "seloryn.training.checkpoint.v3", checkpoint_payload
+        assert checkpoint_payload["runtime"] == "0.12.0", checkpoint_payload
+        assert checkpoint_payload["architecture"] == "dense_relu_dense_mse", checkpoint_payload
+        assert checkpoint_payload["device"] == "cpu", checkpoint_payload
+        assert checkpoint_payload["dtype"] == "F32", checkpoint_payload
+        assert checkpoint_payload["shapes"] == {
+            "inputs": [2],
+            "first_weights": [2, 8],
+            "first_bias": [8],
+            "second_weights": [8, 1],
+            "second_bias": [1],
+            "outputs": [1],
+        }, checkpoint_payload
+        assert checkpoint_payload["features"] == {
+            "kind": "ordered_numeric_matrix",
+            "order": "source-column-order",
+            "count": 2,
+        }, checkpoint_payload
+        assert checkpoint_payload["transform"] == {"name": "identity", "version": 1}, checkpoint_payload
+        assert checkpoint_payload["hash"]["algorithm"] == "sha256", checkpoint_payload
+        assert checkpoint_payload["hash"]["weights"] == checkpoint_payload["weights_sha256"], checkpoint_payload
+        assert checkpoint_payload["hash"]["data"] == checkpoint_payload["data_sha256"], checkpoint_payload
+        assert checkpoint_payload["hash"]["state"] == checkpoint_payload["state_sha256"], checkpoint_payload
+        assert checkpoint_payload["integrity"] == {
+            "algorithm": "sha256",
+            "scope": "payload-sections",
+            "authenticity": "none",
+        }, checkpoint_payload
+
+        def reject_contract_mutation(mutate, expected):
+            mutated = json.loads(json.dumps(original_checkpoint))
+            mutate(mutated)
+            checkpoint_path.write_text(json.dumps(mutated), encoding="utf-8")
+            rejected = subprocess.run(
+                [str(BINARY), "run", str(split), "--log=json"],
+                cwd=ROOT,
+                text=True,
+                encoding="utf-8",
+                capture_output=True,
+                check=False,
+                timeout=40,
+            )
+            assert rejected.returncode == 65, (rejected.stdout, rejected.stderr)
+            assert expected in rejected.stderr, (expected, rejected.stderr)
+
+        reject_contract_mutation(
+            lambda value: value.update({"schema": "seloryn.training.checkpoint.v2"}),
+            "schema seloryn.training.checkpoint.v2 is incompatible",
+        )
+        reject_contract_mutation(
+            lambda value: value.update({"runtime": "0.0.0"}),
+            "runtime version is incompatible",
+        )
+        reject_contract_mutation(
+            lambda value: value.update({"architecture": "other_mlp"}),
+            "architecture is unsupported",
+        )
+        reject_contract_mutation(
+            lambda value: value["shapes"].update({"first_weights": [8, 2]}),
+            "shape contract",
+        )
+        reject_contract_mutation(
+            lambda value: value["features"].update({"order": "column-major"}),
+            "feature contract",
+        )
+        reject_contract_mutation(
+            lambda value: value["transform"].update({"name": "standardize"}),
+            "transform contract",
+        )
+        reject_contract_mutation(
+            lambda value: value["hash"].update({"weights": "0" * 64}),
+            "hash metadata",
+        )
+        reject_contract_mutation(
+            lambda value: value["integrity"].update({"authenticity": "signed"}),
+            "integrity contract",
+        )
+        reject_contract_mutation(
+            lambda value: value.update({"unexpected": True}),
+            "unsupported field `unexpected`",
+        )
+
+        checkpoint_path.write_text(json.dumps(original_checkpoint), encoding="utf-8")
         checkpoint_payload["weights"]["first_bias"][0] += 1.0
         checkpoint_path.write_text(json.dumps(checkpoint_payload), encoding="utf-8")
         tampered = subprocess.run(

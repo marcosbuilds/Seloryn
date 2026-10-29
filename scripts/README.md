@@ -6,12 +6,12 @@ Scripts are grouped by their operational purpose:
   development workflow. `scripts/ci/conformance.py` validates the public
   capability matrix and selects the existing probes by `core`, `editor`,
   `hardware`, `release` or `benchmark` suite.
-- `install/` contains experimental scripts that install an already-built
-  binary into a caller-selected directory. They do not download releases or
-  establish platform support.
-- `release/prepare-release.py` stages one coordinated runtime plus VSIX
-  candidate with a compatibility manifest and external SHA-256 sums. It does
-  not create tags, GitHub releases or publish anything.
+- `release/package-runtime.py` packages the native runtime with provenance and
+  an embedded SHA-256-verifiable manifest. It does not create tags, GitHub
+  releases or publish anything.
+- Installer and editor builders are intentionally outside this public source
+  tree. Their verified-preview binaries are linked from
+  [`packages/catalog.toml`](../packages/catalog.toml).
 
 Run scripts from any working directory; each script resolves the repository
 root from its own location. Before committing or pushing a language change,

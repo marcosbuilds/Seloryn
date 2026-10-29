@@ -166,7 +166,7 @@ def main() -> int:
         (inference / "checkpoints" / "model.json").write_text(json.dumps(corrupted) + "\n", encoding="utf-8")
         rejected = run(inference)
         assert rejected.returncode == 65
-        assert "weights hash does not match" in rejected.stderr
+        assert "hash metadata for `weights` does not match" in rejected.stderr
 
         write_inference_project(inference, checkpoint_path, {"inputs": [[1.0, 2.0, 3.0]]})
         dimension_error = run(inference)

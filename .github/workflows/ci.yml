@@ -34,6 +34,10 @@ jobs:
           python --version
       - name: Release script dependencies
         run: python -m pip install --disable-pip-version-check --quiet -r scripts/release/requirements.txt
+      - name: Public source boundary
+        run: python scripts/ci/public_boundary.py
+      - name: Public documentation boundary
+        run: python scripts/ci/check-docs.py
       - name: Verify earned version comparison
         run: python scripts/release/verify-version.py
       - name: Format
@@ -281,14 +285,8 @@ jobs:
           --kind probe
           --
           python tests/gpu_training_probe.py
-      - name: Install VS Code packaging dependencies
-        run: npm ci --prefix packages/vscode --ignore-scripts --no-audit --no-fund
-      - name: Build deterministic VSIX preview
-        run: npm run package --prefix packages/vscode
-      - name: VS Code extension and CLI diagnostic integration
-        run: npm run test:cli --prefix packages/vscode
-      - name: VS Code extension metadata and API-double tests
-        run: npm test --prefix packages/vscode
+      - name: Cross-platform release staging integrity
+        run: python scripts/ci/conformance.py --run --suite release --json
       - name: PowerShell 5.1 CLI smoke
         if: runner.os == 'Windows'
         shell: powershell
@@ -325,10 +323,6 @@ jobs:
           if errorlevel 66 exit /b 1
           if not errorlevel 65 exit /b 1
           exit /b 0
-      - name: Windows installer and terminal lifecycle
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: .\tests\installer_probe.ps1
       - name: Finalize sanitized CI evidence
         if: always()
         run: >

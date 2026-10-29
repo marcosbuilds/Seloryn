@@ -107,20 +107,30 @@ general model loader or serving ABI.
 
 The project must grant `write = ["checkpoints"]` in `seloryn.toml`. A
 checkpoint uses the independent storage schema
-`seloryn.training.checkpoint.v2` and contains:
+`seloryn.training.checkpoint.v3` and contains:
 
+- runtime compatibility (`0.12.0`), the `dense_relu_dense_mse` architecture,
+  CPU/`F32` device metadata and explicit tensor shapes;
+- an ordered numeric feature descriptor and the `identity` transform. The
+  native profile has positional features only; it does not carry user-facing
+  feature names or a scaling pipeline;
 - model weights and biases with their dimensions and `F32` values;
 - SGD configuration and the completed update step;
 - seed, deterministic sampler order, cursor, epoch and RNG state;
-- SHA-256 hashes of the exact train and test JSON inputs.
+- SHA-256 hashes of the exact train and test JSON inputs;
 - SHA-256 hashes of the canonical weights, sampler-state payload and complete
-  training state (including the completed step).
+  training state (including the completed step), repeated in a checked hash
+  metadata object;
+- an explicit integrity declaration covering payload sections. `authenticity`
+  is `none`: SHA-256 detects changed bytes but does not authenticate an author.
 
 Writes are flushed and synced to a temporary file before replacement. A
-malformed checkpoint, dataset-hash mismatch, seed mismatch, shape mismatch or
+malformed, legacy-v2, runtime-incompatible, architecture-incompatible,
+feature/transform-incompatible, extra-field, dataset-hash, dtype, shape or
 hyperparameter mismatch fails with a diagnostic rather than silently
 restarting. The checkpoint is intentionally local and bounded; it is not a
-portable distributed format.
+portable distributed format. The loader rejects unknown metadata fields so a
+new producer cannot silently change the meaning of an existing artifact.
 
 When `seloryn job run` rejects a job during read-only preflight, it keeps the
 job in `accepted` or `queued` state and atomically writes

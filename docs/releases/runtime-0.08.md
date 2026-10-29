@@ -7,8 +7,8 @@ without embedding the input values into `.sely` source.
 
 Evidence:
 
-- [`src/runtime.rs`](../../src/runtime.rs)
-- [`src/semantic.rs`](../../src/semantic.rs)
+- [`src/runtime/mod.rs`](../../src/runtime/mod.rs)
+- [`src/language/semantic/checker.rs`](../../src/language/semantic/checker.rs)
 - [`examples/projects/json-array-pipeline`](../../examples/projects/json-array-pipeline)
 - [`tests/json_array_probe.py`](../../tests/json_array_probe.py)
 

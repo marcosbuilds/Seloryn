@@ -42,7 +42,7 @@ Legend: **✓ implemented** means the checker/interpreter has source and tests; 
 | Tensor engine | **⚠️ Experimental N1/N2:** owned F32/I64 CPU buffers, checked shapes, broadcasting, reductions, rank-2 matmul, shape/stride transpose views, F32 unary/stable reductions and broadcast sum-to-shape with bounded resident memory | No symbolic shapes or device movement; bounded autodiff is a separate CPU tape |
 | Device interface | **⚠️ Narrow preview:** adapter enumeration, one physical non-fallback WGSL compute/readback path and the closed scalar F32 `train_linear_gpu` profile | No device-resident tensors, autodiff parity, GPU MLP or general GPU training |
 | System library | **⚠️ Narrow:** local project modules and manifest-granted bounded JSON reads/writes | HTTP, subprocesses and unrestricted files require later gates |
-| Product tools | **⚠️ Partial:** development CLI, experimental build/exec, bounded parser-backed `lsp --stdio`, VS Code extension LSP client/release workflow and local installer scripts | Indexed analysis, formatter and supported runtime distribution are future |
+| Product tools | **⚠️ Partial:** development CLI, experimental build/exec and bounded parser-backed `lsp --stdio`; VS Code and installer are separate verified-preview release assets | Indexed analysis, formatter and stable runtime distribution are future |
 
 ### Capability sequencing
 

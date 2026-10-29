@@ -16,175 +16,175 @@ previous_extension_package = "0.11.0"
 id = "N3B-TENSOR-AUTODIFF"
 language = "0.01"
 summary = "Bounded CPU Tensor[F32] reverse-mode autodiff"
-evidence = "src/tensor_autograd.rs; examples/autograd/tensor-gradient.sely; tests/n3_tensor_probe.py"
+evidence = "src/compute/tensor_autograd.rs; examples/autograd/tensor-gradient.sely; tests/n3_tensor_probe.py"
 
 [[gains]]
 id = "N4-CPU-MLP-TRAINING"
 language = "0.02"
 summary = "Bounded CPU MLP training with deterministic mini-batches, evaluation, checkpoint and resume"
-evidence = "src/runtime.rs; examples/projects/mlp-training; tests/mlp_training_probe.py"
+evidence = "src/runtime/mod.rs; examples/projects/mlp-training; tests/mlp_training_probe.py"
 
 [[gains]]
 id = "N5-SELF-HOSTED-OPTIMIZATION"
 language = "0.03"
 summary = "Seloryn-authored tensor objective, multi-input gradients, bounded range and SGD loop"
-evidence = "src/tensor_autograd.rs; examples/projects/self-hosted-linear; tests/self_hosted_probe.py"
+evidence = "src/compute/tensor_autograd.rs; examples/projects/self-hosted-linear; tests/self_hosted_probe.py"
 
 [[gains]]
 id = "N6-RELIABLE-TRAINING-AND-GPU-PROBE"
 language = "0.04"
 summary = "Hardened CPU MLP resume/training evidence plus physical-host non-fallback GPU compute/readback probe"
-evidence = "src/runtime.rs; src/gpu.rs; tests/mlp_training_probe.py; tests/gpu_probe.py; packages/vscode"
+evidence = "src/runtime/mod.rs; src/compute/gpu.rs; tests/mlp_training_probe.py; tests/gpu_probe.py; packages/catalog.toml"
 
 [[gains]]
 id = "N7-STRICT-PROJECT-MANIFESTS"
 language = "0.05"
 summary = "Project manifests use a real TOML parser and reject malformed or future language declarations before execution"
-evidence = "src/project.rs; tests/bootstrap_cli.rs; tests/project_manifest_probe.py; tests/release_probe.py; docs/guide/cli.md; docs/releases/runtime-0.05.md"
+evidence = "src/project/mod.rs; tests/bootstrap_cli.rs; tests/project_manifest_probe.py; tests/release_probe.py; docs/guide/cli.md; docs/releases/runtime-0.05.md"
 
 [[gains]]
 id = "N8-VERIFIABLE-TRAINING-STREAM"
 language = "0.06"
 summary = "Hash-chained JSON2 training receipts, independent tamper verification, early event-sink cancellation, checkpoint cleanup and manifest limits for CPU training"
-evidence = "src/main.rs; src/runtime.rs; scripts/streaming/verify-event-chain.py; tests/streaming_v2_probe.py; docs/compute/training.md; docs/project/status.md; docs/releases/runtime-0.06.md"
+evidence = "src/cli/mod.rs; src/runtime/mod.rs; scripts/streaming/verify-event-chain.py; tests/streaming_v2_probe.py; docs/compute/training.md; docs/project/status.md; docs/releases/runtime-0.06.md"
 
 [[gains]]
 id = "N9-REPLAY-IDENTITY-AUTH-GPU-LINEAR"
 language = "0.07"
 summary = "Identity-bearing replayable CPU receipts with structured path redaction and optional HMAC authentication, plus explicit device-resident GPU linear training with one final readback"
-evidence = "src/main.rs; src/project.rs; src/runtime.rs; src/gpu.rs; scripts/streaming/verify-event-chain.py; scripts/streaming/replay-receipt.py; tests/streaming_v2_probe.py; tests/gpu_training_probe.py; examples/projects/gpu-linear-training; docs/releases/runtime-0.07.md"
+evidence = "src/cli/mod.rs; src/project/mod.rs; src/runtime/mod.rs; src/compute/gpu.rs; scripts/streaming/verify-event-chain.py; scripts/streaming/replay-receipt.py; tests/streaming_v2_probe.py; tests/gpu_training_probe.py; examples/projects/gpu-linear-training; docs/releases/runtime-0.07.md"
 
 [[extension_gains]]
 id = "EXT-N3B-TENSOR-AUTODIFF"
 language = "0.01"
 package = "0.1.0"
 summary = "Initial Seloryn editor preview with .sely association, syntax highlighting, completions and CLI diagnostics"
-evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; docs/releases/vscode-0.1.0.md"
+evidence = "packages/catalog.toml; docs/releases/vscode-0.1.0.md"
 
 [[extension_gains]]
 id = "EXT-N4-CPU-MLP-TRAINING"
 language = "0.02"
 package = "0.2.0"
 summary = "Editor completions and snippets expose the verified bounded CPU MLP training workflow"
-evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; docs/releases/vscode-0.2.0.md"
+evidence = "packages/catalog.toml; docs/releases/vscode-0.2.0.md"
 
 [[extension_gains]]
 id = "EXT-N5-SELF-HOSTED-OPTIMIZATION"
 language = "0.03"
 package = "0.3.0"
 summary = "Editor completions and snippets expose the Seloryn-authored tensor optimization workflow"
-evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; docs/releases/vscode-0.3.0.md"
+evidence = "packages/catalog.toml; docs/releases/vscode-0.3.0.md"
 
 [[extension_gains]]
 id = "EXT-N6-TRAINING-HARDWARE-COMMANDS"
 language = "0.04"
 package = "0.4.0"
 summary = "VS Code terminal commands expose verified CPU training, physical device inventory and bounded GPU compute/readback evidence"
-evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/package.test.js; packages/vscode/test/cli.integration.test.js; docs/releases/vscode-0.4.0.md"
+evidence = "packages/catalog.toml; docs/releases/vscode-0.4.0.md"
 
 [[extension_gains]]
 id = "EXT-N9-CANONICAL-IDENTITY"
 language = "0.07"
 package = "0.7.0"
 summary = "The extension package, language id and .sely file icon use the canonical public Seloryn symbol and the release line follows language compatibility"
-evidence = "assets/brand/seloryn-symbol.svg; packages/vscode/assets/seloryn-icon-source.svg; packages/vscode/assets/seloryn-icon.png; packages/vscode/icons/seloryn-file-icon-theme.json; packages/vscode/test/package.test.js; docs/project/versions.md"
+evidence = "assets/brand/seloryn-symbol.svg; packages/catalog.toml; docs/project/versions.md"
 
 [[gains]]
 id = "N10-JSON-TYPED-ARRAY-INGESTION"
 language = "0.08"
 summary = "Bounded JSON number arrays convert to typed List[I64] or List[F64] values for real Seloryn iteration"
-evidence = "src/runtime.rs; src/semantic.rs; examples/projects/json-array-pipeline; tests/json_array_probe.py; docs/releases/runtime-0.08.md"
+evidence = "src/runtime/mod.rs; src/language/semantic/checker.rs; examples/projects/json-array-pipeline; tests/json_array_probe.py; docs/releases/runtime-0.08.md"
 
 [[gains]]
 id = "N11-MLP-BATCH-INFERENCE"
 language = "0.09"
 summary = "Hash-validated bounded CPU MLP checkpoints can produce deterministic batch predictions with observable receipts"
-evidence = "src/runtime.rs; src/main.rs; examples/projects/mlp-inference; tests/mlp_inference_probe.py; docs/compute/training.md; docs/releases/runtime-0.09.md"
+evidence = "src/runtime/mod.rs; src/cli/mod.rs; examples/projects/mlp-inference; tests/mlp_inference_probe.py; docs/compute/training.md; docs/releases/runtime-0.09.md"
 
 [[gains]]
 id = "N12-SELF-HOSTED-CUSTOM-MLP"
 language = "0.10"
 summary = "A complete custom ReLU MLP can be authored in .sely with owned data ingestion, gradients, SGD, holdout evaluation, JSON persistence, reload and inference"
-evidence = "src/runtime.rs; src/semantic.rs; examples/projects/self-hosted-mlp; tests/self_hosted_mlp_probe.py; scripts/streaming/verify-event-chain.py; docs/compute/training.md; docs/project/status.md"
+evidence = "src/runtime/mod.rs; src/language/semantic/checker.rs; examples/projects/self-hosted-mlp; tests/self_hosted_mlp_probe.py; scripts/streaming/verify-event-chain.py; docs/compute/training.md; docs/project/status.md"
 
 [[gains]]
 id = "N13-SELF-HOSTED-LANGUAGE-MODEL"
 language = "0.11"
 summary = "A complete next-token language model can be authored in modular .sely source with runtime-sized vocabulary and datasets, reusable parameters and SGD, fused cross-entropy, held-out evaluation, checkpoint reload and inference"
-evidence = "src/runtime.rs; src/semantic.rs; examples/projects/self-hosted-language-model; tests/self_hosted_language_model_probe.py; tests/compare_language_model.py; docs/compute/language-model.md; docs/project/status.md"
+evidence = "src/runtime/mod.rs; src/language/semantic/checker.rs; examples/projects/self-hosted-language-model; tests/self_hosted_language_model_probe.py; tests/compare_language_model.py; docs/compute/language-model.md; docs/project/status.md"
 
 [[gains]]
 id = "N14-GENERIC-SELF-HOSTED-LANGUAGE-MODEL"
 language = "0.12"
-summary = "Generalized the source-owned language-model workflow to runtime-sized vocabularies and datasets, reusable .sely Parameter/Sgd modules, fused cross-entropy/autograd and sampled real JSON2 training evidence"
-evidence = "src/runtime.rs; src/semantic.rs; src/tensor/ops.rs; src/tensor_autograd.rs; examples/projects/self-hosted-language-model; tests/self_hosted_language_model_probe.py; tests/compare_language_model.py; docs/compute/language-model.md"
+summary = "Generalized the source-owned language-model workflow to runtime-sized vocabularies and datasets, reusable .sely Parameter/Sgd modules, fused cross-entropy/autograd and executed JSON2 training evidence"
+evidence = "src/runtime/mod.rs; src/language/semantic/checker.rs; src/compute/tensor/ops.rs; src/compute/tensor_autograd.rs; examples/projects/self-hosted-language-model; tests/self_hosted_language_model_probe.py; tests/compare_language_model.py; docs/compute/language-model.md"
 
 [[extension_gains]]
 id = "EXT-N10-JSON-TYPED-ARRAY-INGESTION"
 language = "0.08"
 package = "0.8.0"
 summary = "Editor completions expose typed JSON array ingestion on the language 0.08 compatibility line"
-evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; docs/releases/vscode-0.8.0.md"
+evidence = "packages/catalog.toml; docs/releases/vscode-0.8.0.md"
 
 [[extension_gains]]
 id = "EXT-N11-LSP-CLIENT"
 language = "0.08"
 package = "0.8.1"
 summary = "VS Code uses the parser-backed LSP for unsaved diagnostics, completion and definition while retaining the CLI bridge as an explicit fallback"
-evidence = "packages/vscode/lsp-client.js; packages/vscode/extension.js; packages/vscode/test/lsp.test.js; packages/vscode/package.json; docs/releases/vscode-0.8.1.md"
+evidence = "packages/catalog.toml; docs/releases/vscode-0.8.1.md"
 
 [[extension_gains]]
 id = "EXT-N12-MLP-BATCH-INFERENCE"
 language = "0.09"
 package = "0.9.0"
 summary = "VS Code exposes the verified batch-inference checkpoint workflow on the language 0.09 compatibility line"
-evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; docs/releases/vscode-0.9.0.md"
+evidence = "packages/catalog.toml; docs/releases/vscode-0.9.0.md"
 
 [[extension_gains]]
 id = "EXT-N13-SELF-HOSTED-CUSTOM-MLP"
 language = "0.10"
 package = "0.10.0"
 summary = "VS Code completions expose the source-owned custom MLP, persistence, progress and canonical GPU alias workflow on the language 0.10 line"
-evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; examples/projects/self-hosted-mlp; docs/releases/vscode-0.10.0.md"
+evidence = "packages/catalog.toml; examples/projects/self-hosted-mlp; docs/releases/vscode-0.10.0.md"
 
 [[extension_gains]]
 id = "EXT-N14-SELF-HOSTED-LANGUAGE-MODEL"
 language = "0.11"
 package = "0.11.0"
 summary = "VS Code completions expose text-array JSON ingestion and the source-owned modular language-model workflow on the language 0.11 line"
-evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/test/extension.test.js; examples/projects/self-hosted-language-model; docs/releases/vscode-0.11.0.md"
+evidence = "packages/catalog.toml; examples/projects/self-hosted-language-model; docs/releases/vscode-0.11.0.md"
 
 [[extension_gains]]
 id = "EXT-N15-GENERIC-SELF-HOSTED-LANGUAGE-MODEL"
 language = "0.12"
 package = "0.12.0"
 summary = "VS Code completions expose fused cross-entropy and the runtime-sized source-owned language-model workflow on the language 0.12 line"
-evidence = "packages/vscode/package.json; packages/vscode/extension.js; packages/vscode/syntaxes/seloryn.tmLanguage.json; docs/releases/vscode-0.12.0.md"
+evidence = "packages/catalog.toml; examples/projects/self-hosted-language-model; docs/releases/vscode-0.12.0.md"
 
 [[runtime_gains]]
 id = "R1-WORKSPACE-CONTRACTS"
 language = "0.09"
 package = "0.9.1"
 summary = "Read-only project diagnosis and transactional minimal/tabular-MLP project initialization"
-evidence = "src/workspace.rs; src/main.rs; tests/workspace_probe.py; docs/guide/cli.md; docs/releases/runtime-0.9.1.md"
+evidence = "src/cli/workspace.rs; src/cli/mod.rs; tests/workspace_probe.py; docs/guide/cli.md; docs/releases/runtime-0.9.1.md"
 
 [[runtime_gains]]
 id = "R2-REPRODUCIBLE-PROVENANCE"
 language = "0.09"
 package = "0.9.2"
 summary = "Release staging embeds and verifies source, toolchain, lockfile, binary and artifact provenance"
-evidence = "scripts/release/package-runtime.py; scripts/release/prepare-release.py; tests/release_staging_probe.py; docs/releases/runtime-0.9.2.md"
+evidence = "scripts/release/package-runtime.py; scripts/release/release_metadata.py; tests/release_staging_probe.py; docs/releases/runtime-0.9.2.md"
 
 [[runtime_gains]]
 id = "R3-INSTALL-PROVENANCE-GATE"
 language = "0.09"
 package = "0.9.3"
-summary = "The Windows installer verifies provenance schema, compatibility versions and binary hash before installation"
-evidence = "scripts/install/install-seloryn-windows.ps1; tests/installer_probe.ps1; docs/releases/runtime-0.9.3.md"
+summary = "The Windows installer release publishes a verified-preview artifact with manifest and SHA-256; installation lifecycle is tested outside this public language repository"
+evidence = "packages/catalog.toml; docs/releases/runtime-0.9.3.md"
 
 [[runtime_gains]]
 id = "R4-BUNDLE-LSP-CONTRACTS"
 language = "0.09"
 package = "0.9.4"
 summary = "Versioned seloryn.bundle.v1 artifacts with tamper-detecting build metadata and reliable full-document LSP lifecycle/version handling"
-evidence = "src/project.rs; src/main.rs; tests/bootstrap_cli.rs; tests/release_probe.py; src/lsp.rs; tests/lsp_probe.py; docs/releases/runtime-0.9.4.md"
+evidence = "src/project/mod.rs; src/cli/mod.rs; tests/bootstrap_cli.rs; tests/release_probe.py; src/protocols/lsp.rs; tests/lsp_probe.py; docs/releases/runtime-0.9.4.md"
