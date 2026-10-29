@@ -106,9 +106,12 @@ def main() -> int:
         assert rejected.returncode != 0
         assert "does not exist" in (rejected.stdout + rejected.stderr).lower()
 
-        wrong_platform = package(binary, output / "wrong-platform", "linux-x64", commit)
+        wrong_target = next(candidate for candidate in sorted(PLATFORMS) if candidate != target)
+        wrong_platform = package(binary, output / "wrong-platform", wrong_target, commit)
         assert wrong_platform.returncode != 0
-        assert "linux" in (wrong_platform.stdout + wrong_platform.stderr).lower()
+        assert wrong_target.split("-", maxsplit=1)[0] in (
+            wrong_platform.stdout + wrong_platform.stderr
+        ).lower()
 
     print(f"runtime release staging passed: platform={target} binary={expected_binary_name}")
     print("negative=missing-binary, platform-mismatch, tampered-binary-hash")
