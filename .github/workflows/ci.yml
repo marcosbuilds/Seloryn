@@ -289,6 +289,8 @@ jobs:
         run: npm run test:cli --prefix packages/vscode
       - name: VS Code extension metadata and API-double tests
         run: npm test --prefix packages/vscode
+      - name: Cross-platform release staging integrity
+        run: python scripts/ci/conformance.py --run --suite release --json
       - name: PowerShell 5.1 CLI smoke
         if: runner.os == 'Windows'
         shell: powershell

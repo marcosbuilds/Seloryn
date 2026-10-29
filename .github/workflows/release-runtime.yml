@@ -54,12 +54,6 @@ jobs:
         if: runner.os == 'Windows'
         shell: powershell
         run: .\tests\installer_probe.ps1
-      - name: Read package versions
-        id: versions
-        shell: bash
-        run: |
-          echo "language=$(python -c 'import tomllib; print(tomllib.load(open("VERSION.toml", "rb"))["current"]["language"])')" >> "$GITHUB_OUTPUT"
-          echo "runtime=$(python -c 'import tomllib; print(tomllib.load(open("VERSION.toml", "rb"))["current"]["runtime_package"])')" >> "$GITHUB_OUTPUT"
       - name: Package deterministic runtime archive
         shell: bash
         run: |
@@ -67,8 +61,6 @@ jobs:
             --binary "${{ matrix.binary }}" \
             --output-dir dist \
             --platform "${{ matrix.platform }}" \
-            --runtime-version "${{ steps.versions.outputs.runtime }}" \
-            --language-version "${{ steps.versions.outputs.language }}" \
             --commit "${GITHUB_SHA}"
       - uses: actions/upload-artifact@v4
         with:

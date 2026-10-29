@@ -7,6 +7,25 @@ $binary = Join-Path $root 'target\release\seloryn.exe'
 $installRoot = Join-Path ([IO.Path]::GetTempPath()) ("seloryn-installer-probe-{0}" -f $PID)
 $pathEntry = Join-Path $installRoot 'bin'
 
+function Read-Current-Version([string]$Key) {
+    $inCurrent = $false
+    foreach ($line in Get-Content -LiteralPath (Join-Path $root 'VERSION.toml')) {
+        $trimmed = $line.Trim()
+        if ($trimmed -eq '[current]') {
+            $inCurrent = $true
+            continue
+        }
+        if ($inCurrent -and $trimmed -match '^\[') { break }
+        if ($inCurrent -and $trimmed -match ('^{0}\s*=\s*"([^"]+)"$' -f [regex]::Escape($Key))) {
+            return $Matches[1]
+        }
+    }
+    throw "VERSION.toml current.$Key is missing"
+}
+
+$languageVersion = Read-Current-Version 'language'
+$runtimeVersion = Read-Current-Version 'runtime_package'
+
 function User-PathHas([string]$Entry) {
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
     if ([string]::IsNullOrWhiteSpace($userPath)) { return $false }
@@ -28,11 +47,11 @@ function Remove-User-Path([string]$Entry) {
 try {
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $installer `
         -Action Install -BinaryPath $binary -InstallRoot $installRoot `
-        -ExpectedLanguageVersion '0.12' -ExpectedRuntimeVersion '0.12.0' -AddToPath | Out-Null
+        -ExpectedLanguageVersion $languageVersion -ExpectedRuntimeVersion $runtimeVersion -AddToPath | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'initial installer invocation failed' }
     $manifestPath = Join-Path $installRoot 'seloryn-install.json'
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    if ($manifest.language_version -ne '0.12' -or $manifest.runtime_package -ne '0.12.0') {
+    if ($manifest.language_version -ne $languageVersion -or $manifest.runtime_package -ne $runtimeVersion) {
         throw 'installer manifest did not persist the binary compatibility line'
     }
     if (-not $manifest.path_added -or -not (User-PathHas $pathEntry)) {
@@ -68,15 +87,15 @@ try {
     $binaryHash = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()
     [ordered]@{
         schema = 'seloryn.provenance.v1'
-        language_version = '0.12'
-        runtime_package = '0.12.0'
+        language_version = $languageVersion
+        runtime_package = $runtimeVersion
         runtime = [ordered]@{ binary_sha256 = $binaryHash }
     } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $provenancePath -Encoding UTF8
     $invalidProvenancePath = Join-Path $installRoot 'invalid-provenance.json'
     [ordered]@{
         schema = 'seloryn.provenance.v1'
-        language_version = '0.12'
-        runtime_package = '0.12.0'
+        language_version = $languageVersion
+        runtime_package = $runtimeVersion
         runtime = [ordered]@{ binary_sha256 = [string]::new('0', 64) }
     } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $invalidProvenancePath -Encoding UTF8
     $invalidInstall = Start-Process -FilePath 'powershell.exe' -ArgumentList @(

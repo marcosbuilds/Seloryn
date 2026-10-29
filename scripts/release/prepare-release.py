@@ -13,16 +13,19 @@ import tempfile
 import zipfile
 from pathlib import Path
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # Python 3.10 and older developer hosts.
-    import tomli as tomllib
+from release_metadata import (
+    PLATFORMS,
+    PREVIEW_CHANNEL,
+    UNSTABLE_ABI,
+    binary_name,
+    current_metadata,
+    ensure_text,
+    sha256_bytes,
+    validate_release_binary,
+)
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PACKAGE_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\Z")
-LANGUAGE_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)\.[0-9]{2}\Z")
-PLATFORMS = {"windows-x64", "linux-x64", "macos-arm64"}
 
 
 def arguments() -> argparse.Namespace:
@@ -43,54 +46,87 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def runtime_provenance(path: Path) -> dict[str, str]:
-    with zipfile.ZipFile(path) as archive:
+def runtime_provenance(
+    path: Path, platform: str, language: str, runtime: str, commit: str
+) -> dict[str, object]:
+    try:
+        archive = zipfile.ZipFile(path)
+    except (OSError, zipfile.BadZipFile) as error:
+        raise SystemExit(f"runtime archive is invalid: {error}") from error
+    with archive:
         try:
+            if archive.testzip() is not None:
+                raise SystemExit("runtime archive contains a corrupt entry")
+            expected_names = {binary_name(platform), "LICENSE", "runtime-manifest.json"}
+            names = archive.namelist()
+            if len(names) != len(expected_names) or set(names) != expected_names:
+                raise SystemExit("runtime archive has an unexpected file set")
             document = json.loads(archive.read("runtime-manifest.json"))
-        except (KeyError, json.JSONDecodeError) as error:
+        except (KeyError, json.JSONDecodeError, UnicodeDecodeError) as error:
             raise SystemExit(f"runtime archive has invalid provenance metadata: {error}") from error
-    required = [
-        "abi",
-        "binary_sha256",
-        "build_profile",
-        "cargo_lock_sha256",
-        "commit",
-        "provenance_schema",
-        "rust_toolchain_sha256",
-        "source_tree_sha256",
-    ]
-    for key in required:
-        if not isinstance(document.get(key), str) or not document[key]:
-            raise SystemExit(f"runtime provenance is missing `{key}`")
+        if not isinstance(document, dict):
+            raise SystemExit("runtime provenance must be a JSON object")
+        required = [
+            "abi",
+            "artifact",
+            "binary_sha256",
+            "binary_name",
+            "build_profile",
+            "cargo_lock_sha256",
+            "channel",
+            "commit",
+            "language_version",
+            "platform",
+            "provenance_schema",
+            "runtime_package",
+            "rust_toolchain_sha256",
+            "source_tree_sha256",
+        ]
+        for key in required:
+            ensure_text(document, key, "runtime provenance")
+        binary = archive.read(binary_name(platform))
     if document["provenance_schema"] != "seloryn.provenance.v1":
         raise SystemExit("runtime provenance schema is unsupported")
+    if document["artifact"] != path.name:
+        raise SystemExit("runtime provenance artifact name does not match the archive")
+    if document["abi"] != UNSTABLE_ABI:
+        raise SystemExit("runtime provenance ABI is not unstable")
     if document["build_profile"] != "release":
         raise SystemExit("runtime provenance must describe a release build")
-    return {key: document[key] for key in required}
+    if document["channel"] != PREVIEW_CHANNEL:
+        raise SystemExit(f"runtime provenance is not {PREVIEW_CHANNEL}")
+    if document["commit"] != commit:
+        raise SystemExit("runtime provenance commit does not match staging commit")
+    if document["language_version"] != language:
+        raise SystemExit("runtime provenance language version does not match VERSION.toml")
+    if document["runtime_package"] != runtime:
+        raise SystemExit("runtime provenance runtime package does not match VERSION.toml")
+    if document["platform"] != platform:
+        raise SystemExit("runtime provenance platform does not match staging platform")
+    if document["binary_name"] != binary_name(platform):
+        raise SystemExit("runtime provenance binary name does not match staging platform")
+    if not isinstance(document.get("binary_bytes"), int) or document["binary_bytes"] != len(binary):
+        raise SystemExit("runtime provenance binary byte count does not match the archive")
+    if document["binary_sha256"] != sha256_bytes(binary):
+        raise SystemExit("runtime provenance binary SHA-256 does not match the archive")
+    for key in ("binary_sha256", "cargo_lock_sha256", "rust_toolchain_sha256", "source_tree_sha256"):
+        if not isinstance(document[key], str) or not re.fullmatch(r"[0-9a-f]{64}", document[key]):
+            raise SystemExit(f"runtime provenance `{key}` is not a lowercase SHA-256")
+    return document
 
 
-def require_version(value: object, pattern: re.Pattern[str], label: str) -> str:
-    if not isinstance(value, str) or not pattern.fullmatch(value):
-        raise SystemExit(f"{label} has an invalid canonical value: {value!r}")
-    return value
-
-
-def current_versions() -> tuple[str, str, str]:
-    document = tomllib.loads((ROOT / "VERSION.toml").read_text(encoding="utf-8"))
-    current = document.get("current")
-    if not isinstance(current, dict):
-        raise SystemExit("VERSION.toml is missing [current]")
-    language = require_version(current.get("language"), LANGUAGE_PATTERN, "language version")
-    runtime = require_version(current.get("runtime_package"), PACKAGE_PATTERN, "runtime package")
-    extension = require_version(
-        current.get("extension_package"), PACKAGE_PATTERN, "extension package"
-    )
-    language_base = tuple(int(part) for part in language.split("."))
-    for label, package in (("runtime", runtime), ("extension", extension)):
-        package_base = tuple(int(part) for part in package.split(".")[:2])
-        if package_base != language_base:
-            raise SystemExit(f"{label} package is not on language compatibility line {language}")
-    return language, runtime, extension
+def extension_package_version(path: Path) -> str:
+    try:
+        with zipfile.ZipFile(path) as archive:
+            package = json.loads(archive.read("extension/package.json"))
+    except (OSError, KeyError, json.JSONDecodeError, UnicodeDecodeError, zipfile.BadZipFile) as error:
+        raise SystemExit(f"VSIX has invalid extension/package.json: {error}") from error
+    if not isinstance(package, dict) or package.get("name") != "seloryn-language":
+        raise SystemExit("VSIX package name is not seloryn-language")
+    version = package.get("version")
+    if not isinstance(version, str) or not version:
+        raise SystemExit("VSIX package version is missing")
+    return version
 
 
 def verify_versions() -> None:
@@ -105,10 +141,9 @@ def package_runtime(
     binary: Path,
     output_dir: Path,
     platform: str,
-    runtime: str,
-    language: str,
     commit: str,
 ) -> Path:
+    runtime = current_metadata(ROOT)["runtime_package"]
     archive = output_dir / f"seloryn-runtime-{runtime}-{platform}.zip"
     subprocess.run(
         [
@@ -120,10 +155,6 @@ def package_runtime(
             str(output_dir),
             "--platform",
             platform,
-            "--runtime-version",
-            runtime,
-            "--language-version",
-            language,
             "--commit",
             commit,
         ],
@@ -138,11 +169,12 @@ def package_runtime(
 def stage() -> int:
     options = arguments()
     verify_versions()
-    language, runtime, extension_version = current_versions()
-    binary = options.binary.resolve()
+    metadata = current_metadata(ROOT)
+    language = metadata["language"]
+    runtime = metadata["runtime_package"]
+    extension_version = metadata["extension_package"]
+    binary = validate_release_binary(options.binary, options.platform, ROOT)
     extension = options.extension.resolve()
-    if not binary.is_file():
-        raise SystemExit(f"runtime binary does not exist: {binary}")
     if not extension.is_file():
         raise SystemExit(f"VSIX does not exist: {extension}")
     if not options.commit or any(character.isspace() for character in options.commit):
@@ -155,8 +187,6 @@ def stage() -> int:
             binary,
             Path(temporary),
             options.platform,
-            runtime,
-            language,
             options.commit,
         )
         staged_runtime = output_dir / runtime_archive.name
@@ -164,7 +194,11 @@ def stage() -> int:
 
     staged_extension = output_dir / f"seloryn-language-{extension_version}.vsix"
     shutil.copyfile(extension, staged_extension)
-    provenance = runtime_provenance(staged_runtime)
+    provenance = runtime_provenance(
+        staged_runtime, options.platform, language, runtime, options.commit
+    )
+    if extension_package_version(staged_extension) != extension_version:
+        raise SystemExit("VSIX package version does not match VERSION.toml")
     artifacts = [
         {
             "kind": "runtime",
@@ -183,12 +217,13 @@ def stage() -> int:
     ]
     manifest = {
         "schema": 1,
-        "channel": "verified-preview",
+        "channel": metadata["channel"],
         "language_version": language,
         "runtime_package": runtime,
         "extension_package": extension_version,
         "commit": options.commit,
-        "abi": "unstable",
+        "abi": UNSTABLE_ABI,
+        "platform": options.platform,
         "artifacts": artifacts,
         "provenance": provenance,
     }
@@ -204,7 +239,7 @@ def stage() -> int:
         "runtime_package": runtime,
         "extension_package": extension_version,
         "commit": options.commit,
-        "abi": "unstable",
+        "abi": UNSTABLE_ABI,
         "artifacts": {item["name"]: item["sha256"] for item in artifacts},
         "runtime": provenance,
     }

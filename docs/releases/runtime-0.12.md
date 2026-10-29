@@ -15,9 +15,16 @@ Evidence:
 - [`tests/self_hosted_language_model_probe.py`](../../tests/self_hosted_language_model_probe.py)
 - [`tests/compare_language_model.py`](../../tests/compare_language_model.py)
 - [`tests/installer_probe.ps1`](../../tests/installer_probe.ps1)
+- [`tests/release_staging_probe.py`](../../tests/release_staging_probe.py)
 - [`docs/compute/language-model.md`](../compute/language-model.md)
 
-The runtime remains `verified-preview` with an unstable ABI. This is a bounded
+The release staging probe reads the current versions from `VERSION.toml`,
+selects the native host target, rejects missing or platform-divergent binaries,
+and validates the runtime ZIP manifest, commit, hashes and byte counts. It also
+keeps hash tampering as a failing case. This is reproducible local provenance
+evidence; the runtime remains `verified-preview` with an unstable ABI.
+
+This is a bounded
 CPU contextual linear model with one-hot windows and whitespace tokenization,
 not an embedding model, transformer, subword tokenizer, GPU tensor trainer,
 HTTP server or stable production runtime.

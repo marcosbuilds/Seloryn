@@ -8,21 +8,27 @@ import sys
 import tempfile
 from pathlib import Path
 
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import tomli as tomllib
+
 
 ROOT = Path(__file__).resolve().parents[1]
 BINARY = ROOT / "target" / "release" / ("seloryn.exe" if sys.platform == "win32" else "seloryn")
+CURRENT_LANGUAGE = tomllib.loads((ROOT / "VERSION.toml").read_text(encoding="utf-8"))["current"]["language"]
 
 
 MANIFEST = """[package]
 name = "import-contract"
-language = "0.12"
+language = "{language}"
 source_root = "src"
 entry = "main.sely"
 
 [capabilities]
 read = []
 write = []
-"""
+""".format(language=CURRENT_LANGUAGE)
 
 
 def run(project: Path) -> subprocess.CompletedProcess[str]:

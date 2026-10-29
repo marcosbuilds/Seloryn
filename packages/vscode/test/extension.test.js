@@ -7,6 +7,12 @@ const fs = require('node:fs');
 const extension = require('../extension');
 const lspClient = require('../lsp-client');
 
+const versionSource = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'VERSION.toml'), 'utf8');
+const currentSection = versionSource.match(/^\[current\]\s*([\s\S]*?)(?=^\[)/mu)?.[1] ?? '';
+const currentVersion = (key) => currentSection.match(new RegExp(`^${key}\\s*=\\s*"([^"]+)"$`, 'mu'))?.[1];
+const languageVersion = currentVersion('language');
+const runtimeVersion = currentVersion('runtime_package');
+
 const lspFrames = Buffer.concat([
   lspClient.frame({ jsonrpc: '2.0', id: 1, result: { ok: true } }),
   lspClient.frame({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: {} })
@@ -257,8 +263,8 @@ assert.equal(extension.sanitizeGhostText('abcdefgh', 4), 'abcd');
 const diagnosticDocument = documentFor('🙂\nfn main() -> Unit:\n    return\n');
 const diagnosticPayload = JSON.stringify({
   schema: 'seloryn.analysis.v1',
-  language_version: '0.12',
-  runtime_package: '0.12.0',
+  language_version: languageVersion,
+  runtime_package: runtimeVersion,
   diagnostics: [{
     code: 'SEL-P001',
     severity: 'error',
@@ -339,8 +345,8 @@ const diagnosticVscode = {
 
   const unicodePayload = JSON.stringify({
     schema: 'seloryn.analysis.v1',
-  language_version: '0.12',
-  runtime_package: '0.12.0',
+  language_version: languageVersion,
+  runtime_package: runtimeVersion,
     diagnostics: [{
       code: 'SEL-P001',
       severity: 'error',

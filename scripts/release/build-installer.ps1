@@ -11,6 +11,24 @@ $previousDotnetRoot = $env:DOTNET_ROOT
 $previousDotnetCliHome = $env:DOTNET_CLI_HOME
 Push-Location $root
 try {
+    function Read-Current-Version([string]$Key) {
+        $inCurrent = $false
+        foreach ($line in Get-Content -LiteralPath (Join-Path $root 'VERSION.toml')) {
+            $trimmed = $line.Trim()
+            if ($trimmed -eq '[current]') {
+                $inCurrent = $true
+                continue
+            }
+            if ($inCurrent -and $trimmed -match '^\[') { break }
+            if ($inCurrent -and $trimmed -match ('^{0}\s*=\s*"([^"]+)"$' -f [regex]::Escape($Key))) {
+                return $Matches[1]
+            }
+        }
+        throw "VERSION.toml current.$Key is missing"
+    }
+
+    $languageVersion = Read-Current-Version 'language'
+    $runtimeVersion = Read-Current-Version 'runtime_package'
     New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
     if (Test-Path -LiteralPath $InstallRoot) { Remove-Item -LiteralPath $InstallRoot -Recurse -Force }
 
@@ -62,8 +80,8 @@ try {
         installer_version = 'experimental-beta'
         channel = 'experimental-beta'
         versioning = 'not-public'
-        language_version = '0.12'
-        runtime_package = '0.12.0'
+        language_version = $languageVersion
+        runtime_package = $runtimeVersion
         platform = 'windows-x64'
         artifact = Split-Path -Leaf $artifact
         sha256 = $hash
@@ -81,18 +99,19 @@ try {
     if (Test-Path -LiteralPath $setupStdout) { Get-Content -LiteralPath $setupStdout }
     if (Test-Path -LiteralPath $setupStderr) { Get-Content -LiteralPath $setupStderr }
     if ($setupProcess.ExitCode -ne 0) { throw 'embedded headless installation failed' }
-    $runtime = Join-Path $InstallRoot 'versions\0.12.0\bin\seloryn.exe'
-    $launcher = Join-Path $InstallRoot 'bin\seloryn0.12.0.exe'
+    $runtime = Join-Path $InstallRoot ("versions\{0}\bin\seloryn.exe" -f $runtimeVersion)
+    $launcher = Join-Path $InstallRoot ("bin\seloryn{0}.exe" -f $runtimeVersion)
     if (-not (Test-Path -LiteralPath $runtime -PathType Leaf)) { throw 'installed runtime is missing' }
     if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'versioned launcher is missing' }
     $version = (& $runtime --version | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $version -notmatch '^seloryn 0\.12 package=0\.12\.0 ') { throw 'installed runtime version check failed' }
+    $versionPrefix = '^seloryn {0} package={1} ' -f [regex]::Escape($languageVersion), [regex]::Escape($runtimeVersion)
+    if ($LASTEXITCODE -ne 0 -or $version -notmatch $versionPrefix) { throw 'installed runtime version check failed' }
     $env:SELORYN_HOME = $InstallRoot
     $listed = (& $launcher versions | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $listed -notmatch '0\.12\.0') { throw 'installed launcher registry check failed' }
+    if ($LASTEXITCODE -ne 0 -or $listed -notmatch [regex]::Escape($runtimeVersion)) { throw 'installed launcher registry check failed' }
     $defaultLauncher = Join-Path $InstallRoot 'bin\seloryn.exe'
     $defaultVersion = (& $defaultLauncher --version | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or $defaultVersion -notmatch '^seloryn 0\.12 package=0\.12\.0 ') { throw 'default launcher dispatch check failed' }
+    if ($LASTEXITCODE -ne 0 -or $defaultVersion -notmatch $versionPrefix) { throw 'default launcher dispatch check failed' }
     Write-Output ("installer artifact={0} sha256={1} headless={2} install_root={3}" -f $artifact, $hash, $headlessArtifact, $InstallRoot)
 }
 finally {

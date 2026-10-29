@@ -93,9 +93,16 @@ JSON/JSON2 streaming in both shells; the Windows CI probe executes those
 entrypoints against the installed binary.
 
 The POSIX script has the equivalent `install`, `rollback`, `uninstall` and
-`diagnose-path` actions. Its syntax and lifecycle were inspected with Git Bash
-on the Windows host, but native Linux and macOS binaries were not available
-for execution here; those targets remain unsupported.
+`diagnose-path` actions. The release staging probe chooses `linux-x64` on a
+native Linux x64 host and `macos-arm64` on a native Apple arm64 host, and
+requires the matching Cargo release binary. macOS x64 has no declared target;
+the probe fails instead of claiming an artifact. This repository run executed
+the Windows target only, so it does not claim native Linux/macOS execution or
+installer support.
+
+The staging gate is still a local `verified-preview` provenance check. It does
+not create a signed public release and does not change the runtime to
+`supported-stable`.
 
 ## Planned distribution requirements
 

@@ -6,6 +6,9 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..');
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+const versionSource = fs.readFileSync(path.join(root, '..', '..', 'VERSION.toml'), 'utf8');
+const currentSection = versionSource.match(/^\[current\]\s*([\s\S]*?)(?=^\[)/mu)?.[1] ?? '';
+const currentVersion = (key) => currentSection.match(new RegExp(`^${key}\\s*=\\s*"([^"]+)"$`, 'mu'))?.[1];
 const iconThemePath = path.join(root, manifest.contributes.iconThemes[0].path);
 const iconTheme = JSON.parse(fs.readFileSync(iconThemePath, 'utf8'));
 const pngPath = path.join(root, manifest.icon);
@@ -14,7 +17,7 @@ const packagedSymbol = fs.readFileSync(path.join(root, 'assets', 'seloryn-icon-s
 const png = fs.readFileSync(pngPath);
 const svg = packagedSymbol;
 
-assert.equal(manifest.version, '0.12.0');
+assert.equal(manifest.version, currentVersion('extension_package'));
 // VSCE rejects SVG files as the extension manifest icon. The PNG is the
 // marketplace-compatible render of the canonical Seloryn SVG source.
 assert.equal(manifest.icon, './assets/seloryn-icon.png');

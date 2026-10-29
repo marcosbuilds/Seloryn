@@ -667,7 +667,7 @@
       "area": "release",
       "claim": "Local runtime staging records source, toolchain, lockfile, binary and artifact provenance.",
       "status": "verified-preview",
-      "implementation": ["scripts/release/package-runtime.py", "scripts/release/prepare-release.py"],
+      "implementation": ["scripts/release/release_metadata.py", "scripts/release/package-runtime.py", "scripts/release/prepare-release.py"],
       "positive_probes": ["release-staging", "release-public-projects"],
       "negative_probes": ["release-staging"],
       "platforms": ["linux", "macos", "windows"],

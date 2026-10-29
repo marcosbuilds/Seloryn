@@ -36,7 +36,7 @@ purpose ML platform.
 | Bounded JSON number arrays converted to typed `List[I64]` / `List[F64]` | **Verified language gain** | [`examples/projects/json-array-pipeline`](../../examples/projects/json-array-pipeline), [`tests/json_array_probe.py`](../../tests/json_array_probe.py) |
 | Hash-validated bounded CPU MLP checkpoint batch inference | **Verified language gain** | [`examples/projects/mlp-inference`](../../examples/projects/mlp-inference), [`tests/mlp_inference_probe.py`](../../tests/mlp_inference_probe.py); no general model loader or serving |
 | Read-only `doctor` project diagnostics and transactional `init` project templates | **Verified runtime patch** | [`src/workspace.rs`](../../src/workspace.rs), [`tests/workspace_probe.py`](../../tests/workspace_probe.py); reports `production_ready=false` while ABI remains unstable |
-| Runtime release provenance: source tree, toolchain, lockfile, binary and staged artifact hashes | **Verified packaging gate** | [`scripts/release/package-runtime.py`](../../scripts/release/package-runtime.py), [`scripts/release/prepare-release.py`](../../scripts/release/prepare-release.py), [`tests/release_staging_probe.py`](../../tests/release_staging_probe.py) |
+| Runtime release provenance: native host target, source tree, toolchain, lockfile, binary, ZIP manifest and staged artifact hashes | **Verified packaging gate** | [`scripts/release/release_metadata.py`](../../scripts/release/release_metadata.py), [`scripts/release/package-runtime.py`](../../scripts/release/package-runtime.py), [`scripts/release/prepare-release.py`](../../scripts/release/prepare-release.py), [`tests/release_staging_probe.py`](../../tests/release_staging_probe.py) |
 | Versioned `seloryn.bundle.v1` artifacts with build metadata hash verification | **Verified runtime patch** | [`src/project.rs`](../../src/project.rs), [`src/main.rs`](../../src/main.rs), [`tests/release_probe.py`](../../tests/release_probe.py) |
 | Four-process operational reliability, deterministic semantic receipts/checkpoints and workspace confinement | **Verified bounded CPU evidence** | [`tests/operational_reliability_probe.py`](../../tests/operational_reliability_probe.py), [`operational-reliability.md`](../benchmarks/operational-reliability.md); forced Windows termination is classified separately from the cooperative-cancellation slice |
 | VS Code `.sely` highlighting, parser-backed LSP diagnostics/completion/definition, CLI fallback and canonical Seloryn file icon | **Verified editor preview on the `0.12` language line** | [`packages/vscode`](../../packages/vscode); headless transport/controller tests and Marketplace publication pending |
@@ -152,3 +152,11 @@ The runtime-only `0.9.4` patch versions the `.selyapp` wire format, verifies
 build-directory metadata before execution and hardens the LSP document
 lifecycle. It improves compatibility and maintenance safety but is not a stable
 runtime ABI or public release.
+
+The current staging gate derives its language/package versions and preview
+channel from `VERSION.toml`. It accepts only the native Cargo release output
+for the host target (`windows-x64`, `linux-x64`, or `macos-arm64`), validates
+the binary format and architecture, and checks the embedded runtime manifest,
+hashes, byte counts and commit. macOS x64 has no declared target and is
+rejected rather than represented as a supported artifact. This is local
+provenance evidence, not a signed release or a `supported-stable` claim.
