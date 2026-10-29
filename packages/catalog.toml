@@ -1,65 +1,59 @@
-schema = "seloryn.package-catalog.v1"
-updated = "2026-10-28"
+schema = "seloryn.package-catalog.v2"
+updated = "2026-10-29"
+policy = "Binary distribution is published as GitHub Release assets; private builders are not part of this repository."
 
 [runtime]
 kind = "runtime"
-source = "Cargo.toml"
 current_package = "0.12.0"
 current_channel = "verified-preview"
-current_status = "local-candidate"
-latest_published_package = "0.7.0"
-latest_published_tag = "seloryn-v0.07"
-latest_published_release = "https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07"
-download_windows_x64 = "https://github.com/marcosbuilds/Seloryn/releases/download/seloryn-v0.07/seloryn-runtime-0.7.0-windows-x64.zip"
-download_linux_x64 = "https://github.com/marcosbuilds/Seloryn/releases/download/seloryn-v0.07/seloryn-runtime-0.7.0-linux-x64.zip"
-download_macos_arm64 = "https://github.com/marcosbuilds/Seloryn/releases/download/seloryn-v0.07/seloryn-runtime-0.7.0-macos-arm64.zip"
+current_status = "published"
+latest_published_package = "0.12.0"
+latest_published_tag = "seloryn-v0.12"
+latest_published_release = "https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.12"
+download_windows_x64 = "https://github.com/marcosbuilds/Seloryn/releases/download/seloryn-v0.12/seloryn-runtime-0.12.0-windows-x64.zip"
+download_windows_x64_sha256 = "85617898a97cf25ad41d93084e8337d9148e617f7c172a8dc48f52ae1180c2f1"
+download_windows_x64_bytes = 3488616
+download_linux_x64 = ""
+download_macos_arm64 = ""
+platform_limit = "Only Windows x64 is published on this line; Linux x64 and macOS arm64 remain unclaimed until their assets exist."
 
 [vscode]
 kind = "extension"
-source = "vscode/package.json"
 current_package = "0.12.0"
 current_channel = "verified-preview"
-current_status = "local-candidate"
-latest_published_package = "0.4.0"
-latest_published_tag = "vscode-v0.4.0"
-latest_published_release = "https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.4.0"
-download_vsix = "https://github.com/marcosbuilds/Seloryn/releases/download/vscode-v0.4.0/seloryn-language-0.4.0.vsix"
+current_status = "published"
+latest_published_package = "0.12.0"
+latest_published_tag = "vscode-v0.12.0"
+latest_published_release = "https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.12.0"
+download_vsix = "https://github.com/marcosbuilds/Seloryn/releases/download/vscode-v0.12.0/seloryn-language-0.12.0.vsix"
+download_vsix_sha256 = "8be2dc5b87cf2b3171618ce73215148c6f181fbadb3b55e38bed9020848f7fdc"
+download_vsix_bytes = 24398
+source_policy = "The extension source is built by a private distribution pipeline; a downloaded VSIX remains inspectable executable extension content."
 
-[windows_setup]
+[windows_installer]
 kind = "installer"
-source = "../scripts/release/build-installer.ps1"
 current_package = "0.12.0"
-current_status = "local-candidate"
-latest_published_package = ""
-latest_published_release = ""
-download = ""
+current_channel = "verified-preview"
+current_status = "published"
+latest_published_package = "0.12.0"
+latest_published_tag = "installer-v0.12.0"
+latest_published_release = "https://github.com/marcosbuilds/Seloryn/releases/tag/installer-v0.12.0"
+download = "https://github.com/marcosbuilds/Seloryn/releases/download/installer-v0.12.0/SelorynSetup-0.12.0-windows-x64.zip"
+download_sha256 = "b397415d7b3ad8918a5ed28a4a75ba6da6fd7578acc212c4c1d33a14c9775837"
+download_bytes = 101827290
+headless_download = "https://github.com/marcosbuilds/Seloryn/releases/download/installer-v0.12.0/SelorynSetup-0.12.0-windows-x64-headless.exe"
+headless_sha256 = "90f0f6d294770c9f481d0dc03aad58844985e337e950716abc7acd97358b628e"
+signature_status = "unsigned"
 
-[fonts.sora]
-kind = "font-source"
-asset = "../assets/fonts/sora-variable.ttf"
-license = "SIL Open Font License 1.1"
-source_url = "https://github.com/sora-xor/sora-font"
-source_revision = "7f9a9c5d0ccd1c099cfac420aa27133df1c5fdc4"
-download_variable_ttf = "https://raw.githubusercontent.com/sora-xor/sora-font/7f9a9c5d0ccd1c099cfac420aa27133df1c5fdc4/fonts/variable/Sora%5Bwght%5D.ttf"
-status = "third-party-scaffold"
-
-[fonts.seloryn_display]
-kind = "font"
-asset = "../assets/fonts/seloryn-display.ttf"
-status = "generated-display-face"
-
-[fonts.seloryn_signature]
-kind = "font"
-asset = "../assets/fonts/seloryn-signature-regular.ttf"
-status = "embedded-installer-face"
-
-[fonts.seloryn_font]
-kind = "font-package"
-source = "fonts/seloryn-font/package.toml"
+[fonts]
+kind = "binary-font-distribution"
 current_package = "2.0.0"
 current_channel = "experimental"
-current_status = "local-candidate"
-language_compatibility = "0.12"
-license = "MIT"
-source_archive_sha256 = "4031aa2cc86a4218cbb4c13b8dc1adf7e55982db0b59c560cd09ef5278f37cb5"
-download = ""
+current_status = "published"
+latest_published_package = "2.0.0"
+latest_published_tag = "fonts-v2.0.0"
+latest_published_release = "https://github.com/marcosbuilds/Seloryn/releases/tag/fonts-v2.0.0"
+download = "https://github.com/marcosbuilds/Seloryn/releases/download/fonts-v2.0.0/seloryn-font-2.0.0.zip"
+download_sha256 = "3efcfff21b3fd204ee18378e1353d6b6c22d89dfea28a3734a7db5776981fb80"
+download_bytes = 110312
+source_policy = "The release contains binary font formats, metadata, CSS and license only; generators and source assets are private."

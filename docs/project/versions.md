@@ -40,10 +40,9 @@ extension update requires an additional editor-specific evidenced gain on the
 same language line.
 
 The installable package inventory is maintained separately in
-[`packages/catalog.toml`](../../packages/catalog.toml). It distinguishes the
-current local `0.12` candidates from the latest published runtime and extension
-previews and records the separate `seloryn-font` `2.0.0` experimental package;
-a local candidate must not be presented as an official download.
+[`packages/catalog.toml`](../../packages/catalog.toml). It records the
+published runtime, VSIX, installer and binary font releases with exact asset
+URLs, sizes and SHA-256 values; a release asset is not a source-tree claim.
 
 Historical tags remain immutable. Runtime tags use `seloryn-vM.mm`; extension
 tags use `vscode-vM.m.P`. Those namespaces are retained for artifact tooling,
@@ -53,13 +52,12 @@ while the existing extension tags cover `vscode-v0.1.0` through
 `vscode-v0.4.0`; do not create, delete or retag references to make the history
 look more uniform.
 
-Before publication, `scripts/release/prepare-release.py` creates a single
-staging directory containing the runtime archive, the VSIX, `release-manifest.json`
-and `SHA256SUMS`. The manifest is the promotion unit: its runtime and extension
-versions must match the language line, its artifact hashes are independently
-recomputed, and its `abi = "unstable"` field prevents a preview artifact from
-being mistaken for a stable ABI release. Staging is local and non-publishing;
-the remote release still requires explicit publication authorization.
+The public runtime staging gate creates a native runtime archive,
+`runtime-manifest.json` and `SHA256SUMS`. VSIX, installer and font artifacts are
+promoted by their separate distribution pipeline and linked from the catalog;
+their builders are intentionally absent from this repository. The `abi =
+"unstable"` field prevents a preview artifact from being mistaken for a stable
+ABI release.
 
 ## Current comparison
 

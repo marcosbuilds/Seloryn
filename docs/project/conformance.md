@@ -27,9 +27,9 @@ Suites are scoped so that platform and tool requirements stay visible:
 | Suite | Scope | Typical requirement |
 |---|---|---|
 | `core` | language, runtime, CPU training, receipts, jobs and operational probes | Rust release binary and Python 3.12 |
-| `editor` | LSP and VS Code package/integration probes | Node.js, npm dependencies and release binary |
+| `editor` | Rust LSP protocol probes | Python 3.12 and release binary |
 | `hardware` | physical GPU inventory and scalar GPU-linear proof | compatible physical adapter |
-| `release` | staging provenance and Windows installer proof | release dependencies; Windows for installer |
+| `release` | native runtime staging provenance and published release catalog | release dependencies and release binary |
 | `benchmark` | repeated timing evidence | controlled environment for promotion |
 
 Use `--capability <id>` to run the probes attached to one row. For example:

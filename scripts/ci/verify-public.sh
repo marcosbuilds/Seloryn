@@ -12,8 +12,6 @@ cargo build --release --locked
 python3 scripts/ci/conformance.py --run --suite core
 python3 scripts/ci/conformance.py --run --suite benchmark
 python3 scripts/ci/conformance.py --run --suite hardware
-npm ci --prefix packages/vscode --ignore-scripts --no-audit --no-fund
-python3 scripts/ci/conformance.py --run --suite editor
 python3 scripts/ci/conformance.py --run --suite release
 ./target/release/seloryn run examples/tensors/linear-forward.sely
 ./target/release/seloryn run examples/tensors/tensor-reduce.sely

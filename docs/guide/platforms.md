@@ -8,7 +8,7 @@ installable-platform support badge.
 
 | Platform | Planned target | Validation |
 |---|---|---|
-| Windows 10/11 x64 | Development host smoke observed; local installer lifecycle verified | `cmd.exe`, PowerShell 5.1, PowerShell 7.6; Windows Terminal and public release remain unverified |
+| Windows 10/11 x64 | Verified-preview runtime and unsigned installer assets published | `cmd.exe`, PowerShell 5.1, PowerShell 7.6 and native release packaging; clean-machine support and signing remain unverified |
 | Linux x64 | CI execution evidence; not supported | Native shell, libc/runtime linkage, paths/signals and an actual release artifact |
 | macOS arm64 / x64 | CI execution evidence; not supported | Gatekeeper, architecture, filesystem case rules and an actual release artifact |
 | Accelerators | Separate qualification | Driver, runtime, device families and numeric tolerance |

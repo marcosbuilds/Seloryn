@@ -50,10 +50,6 @@ jobs:
           python tests/gpu_training_probe.py
           python tests/self_hosted_language_model_probe.py
           python tests/compare_language_model.py
-      - name: Windows installer and terminal lifecycle
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: .\tests\installer_probe.ps1
       - name: Package deterministic runtime archive
         shell: bash
         run: |

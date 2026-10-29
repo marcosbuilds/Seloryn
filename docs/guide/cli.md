@@ -63,12 +63,10 @@ events are produced.
 
 ### Installation consistency
 
-The versioned Windows launcher is the source of truth for the selected runtime.
-Use `seloryn versions` to inspect it and `seloryn use 0.12.0` to select the
-installed version. Native default selection repairs a stale default launcher
-when the selected package payload is already present. The development-only
-legacy installer refuses to install, uninstall or roll back a managed versioned
-installation. Restart a shell after changing `PATH`.
+Runtime selection and installation are distribution concerns. Use the exact
+runtime or installer asset linked from [`docs/guide/install.md`](install.md)
+and verify its published SHA-256 before execution. The public CLI does not
+include a versioned launcher or a network package manager.
 
 The local `job` contract canonicalizes a bounded JSON spec and stores an
 event-authoritative state snapshot under `.seloryn/jobs/<job-id>`. Public

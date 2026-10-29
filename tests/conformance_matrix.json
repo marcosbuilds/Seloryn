@@ -307,6 +307,15 @@
       "notes": "Source, toolchain, lockfile, binary and artifact provenance."
     },
     {
+      "id": "public-boundary",
+      "path": "tests/public_boundary_probe.py",
+      "command": ["python", "tests/public_boundary_probe.py"],
+      "suites": ["core", "release"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "Git"],
+      "notes": "Forbidden installer, editor, font and operator paths stay absent from tracked public source."
+    },
+    {
       "id": "performance",
       "path": "tests/performance_probe.py",
       "command": ["python", "tests/performance_probe.py", "--runs", "3"],
@@ -332,42 +341,6 @@
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary", "physical compatible adapter"],
       "notes": "Closed scalar F32 device-resident training profile; no CPU fallback."
-    },
-    {
-      "id": "installer-windows",
-      "path": "tests/installer_probe.ps1",
-      "command": ["pwsh", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "tests/installer_probe.ps1"],
-      "suites": ["release"],
-      "platforms": ["windows"],
-      "requirements": ["PowerShell", "release binary", "local provenance artifact"],
-      "notes": "Local installer verification only; no public download claim."
-    },
-    {
-      "id": "vscode-package",
-      "path": "packages/vscode/package.json",
-      "command": ["npm", "run", "package", "--prefix", "packages/vscode"],
-      "suites": ["editor"],
-      "platforms": ["linux", "macos", "windows"],
-      "requirements": ["Node.js", "npm dependencies"],
-      "notes": "Deterministic VSIX packaging preview."
-    },
-    {
-      "id": "vscode-tests",
-      "path": "packages/vscode/package.json",
-      "command": ["npm", "test", "--prefix", "packages/vscode"],
-      "suites": ["editor"],
-      "platforms": ["linux", "macos", "windows"],
-      "requirements": ["Node.js", "npm dependencies"],
-      "notes": "Package metadata and API-double tests; install dependencies first."
-    },
-    {
-      "id": "vscode-cli-integration",
-      "path": "packages/vscode/package.json",
-      "command": ["npm", "run", "test:cli", "--prefix", "packages/vscode"],
-      "suites": ["editor"],
-      "platforms": ["linux", "macos", "windows"],
-      "requirements": ["Node.js", "npm dependencies", "release binary"],
-      "notes": "Extension-to-CLI diagnostics and integration fixtures."
     },
     {
       "id": "boundary-gpu-tensor",
@@ -648,15 +621,15 @@
     {
       "id": "lsp-editor",
       "area": "developer-experience",
-      "claim": "Bounded parser-backed LSP lifecycle plus VS Code package and CLI integration evidence.",
+      "claim": "Bounded parser-backed LSP lifecycle evidence for the language server.",
       "status": "verified-preview",
-      "implementation": ["src/lsp.rs", "packages/vscode", "tests/lsp_probe.py"],
-      "positive_probes": ["lsp", "vscode-package", "vscode-tests", "vscode-cli-integration"],
-      "negative_probes": ["lsp", "vscode-cli-integration"],
+      "implementation": ["src/lsp.rs", "tests/lsp_probe.py"],
+      "positive_probes": ["lsp"],
+      "negative_probes": ["lsp"],
       "platforms": ["linux", "macos", "windows"],
-      "requirements": ["Python 3.12", "Node.js", "npm dependencies", "release binary"],
-      "documentation": ["docs/project/status.md", "docs/guide/editor.md", "packages/vscode/README.md"],
-      "limits": ["Indexed/incremental analysis, rename and Marketplace publication remain outside this proof."]
+      "requirements": ["Python 3.12", "release binary"],
+      "documentation": ["docs/project/status.md", "docs/guide/editor.md"],
+      "limits": ["The VS Code package is distributed separately; indexed/incremental analysis, rename and Marketplace publication remain outside this proof."]
     },
     {
       "id": "structured-inspection",
@@ -676,26 +649,13 @@
       "area": "release",
       "claim": "Local runtime staging records source, toolchain, lockfile, binary and artifact provenance.",
       "status": "verified-preview",
-      "implementation": ["scripts/release/release_metadata.py", "scripts/release/package-runtime.py", "scripts/release/prepare-release.py"],
-      "positive_probes": ["release-staging", "release-public-projects"],
-      "negative_probes": ["release-staging"],
+      "implementation": ["scripts/release/release_metadata.py", "scripts/release/package-runtime.py"],
+      "positive_probes": ["release-staging", "release-public-projects", "public-boundary"],
+      "negative_probes": ["release-staging", "public-boundary"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release dependencies", "release binary"],
       "documentation": ["docs/project/status.md", "docs/project/versions.md", "docs/guide/install.md"],
-      "limits": ["This is provenance and local staging evidence, not a public release or signature claim."]
-    },
-    {
-      "id": "installer-preview",
-      "area": "release",
-      "claim": "Windows installer verifies local provenance and compatibility before installing a supplied binary.",
-      "status": "experimental-implemented",
-      "implementation": ["scripts/install/install-seloryn-windows.ps1", "tests/installer_probe.ps1"],
-      "positive_probes": ["installer-windows"],
-      "negative_probes": ["installer-windows"],
-      "platforms": ["windows"],
-      "requirements": ["Windows PowerShell", "local release binary", "local provenance artifact"],
-      "documentation": ["docs/project/status.md", "docs/guide/install.md"],
-      "limits": ["No public download, signing, cross-platform installer lifecycle or stable release target is claimed."]
+      "limits": ["This is local runtime provenance and release-asset evidence; installer and editor builders are private distribution concerns, and signatures are not claimed."]
     },
     {
       "id": "performance-evidence",

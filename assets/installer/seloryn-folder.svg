@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" role="img" aria-labelledby="title description">
-  <title id="title">Seloryn folder</title>
-  <desc id="description">A simple outlined folder used by the Seloryn installer to choose an installation directory.</desc>
-  <path d="M3.5 6.5h6l2 2h9v9.25a1.75 1.75 0 0 1-1.75 1.75h-14.5a1.75 1.75 0 0 1-1.75-1.75V8.25A1.75 1.75 0 0 1 3.5 6.5Z" fill="#0E2520" stroke="#75E4C8" stroke-width="1.5" stroke-linejoin="round"/>
-  <path d="M2.75 10.25h17.5" stroke="#34CCA7" stroke-width="1.5" stroke-linecap="round"/>
-</svg>

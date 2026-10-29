@@ -1,18 +1,20 @@
-# Seloryn packages
+# Seloryn distributions
 
-This directory contains installable package sources and the public package
-catalog. Generated binaries and VSIX files are build outputs; they belong in a
-release archive or a GitHub Release, not in the source tree.
+This directory contains the public distribution catalog only. The runtime
+language and Rust implementation remain in this repository; the VSIX,
+Windows installer and font package are built outside the public source tree
+and published as GitHub Release assets.
 
-| Package | Source | Current local line | Latest published preview |
-|---|---|---:|---|
-| Runtime | [`Cargo.toml`](../Cargo.toml) and [`scripts/release`](../scripts/release) | `0.12.0` | [`seloryn-v0.07`](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.07) |
-| VS Code extension | [`vscode/`](vscode) | `0.12.0` local candidate | [`vscode-v0.4.0`](https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.4.0) |
-| Windows setup | [`scripts/release/build-installer.ps1`](../scripts/release/build-installer.ps1) | `0.12.0` local candidate | Not published |
-| Seloryn Font | [`fonts/seloryn-font/`](fonts/seloryn-font) | `2.0.0` experimental candidate | Not published |
-| Bundled app faces | [`assets/fonts/`](../assets/fonts) | embedded project assets | Not published as a standalone installer |
+| Distribution | Current release | Download |
+|---|---|---|
+| Runtime, Windows x64 | `0.12.0`, verified-preview | [GitHub Release](https://github.com/marcosbuilds/Seloryn/releases/tag/seloryn-v0.12) |
+| VS Code extension | `0.12.0`, verified-preview | [GitHub Release](https://github.com/marcosbuilds/Seloryn/releases/tag/vscode-v0.12.0) |
+| Windows installer | `0.12.0`, unsigned verified-preview | [GitHub Release](https://github.com/marcosbuilds/Seloryn/releases/tag/installer-v0.12.0) |
+| Seloryn Font | `2.0.0`, experimental binary distribution | [GitHub Release](https://github.com/marcosbuilds/Seloryn/releases/tag/fonts-v2.0.0) |
 
-The exact status, official download URLs and compatibility lines are recorded
-in [`catalog.toml`](catalog.toml). A local candidate is never described as an
-official release. The latest published preview is the source of truth for
-downloads until a newer GitHub Release is actually created.
+Use the exact asset URL and SHA-256 recorded in [`catalog.toml`](catalog.toml).
+The catalog deliberately does not contain source paths, local build scripts or
+claims of support for platforms whose assets are not published. A downloaded
+VSIX is executable extension content and can be inspected by its consumer; the
+boundary here is the public Git repository, not secrecy of a distributed
+binary.

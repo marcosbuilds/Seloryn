@@ -281,14 +281,6 @@ jobs:
           --kind probe
           --
           python tests/gpu_training_probe.py
-      - name: Install VS Code packaging dependencies
-        run: npm ci --prefix packages/vscode --ignore-scripts --no-audit --no-fund
-      - name: Build deterministic VSIX preview
-        run: npm run package --prefix packages/vscode
-      - name: VS Code extension and CLI diagnostic integration
-        run: npm run test:cli --prefix packages/vscode
-      - name: VS Code extension metadata and API-double tests
-        run: npm test --prefix packages/vscode
       - name: Cross-platform release staging integrity
         run: python scripts/ci/conformance.py --run --suite release --json
       - name: PowerShell 5.1 CLI smoke
@@ -327,10 +319,6 @@ jobs:
           if errorlevel 66 exit /b 1
           if not errorlevel 65 exit /b 1
           exit /b 0
-      - name: Windows installer and terminal lifecycle
-        if: runner.os == 'Windows'
-        shell: powershell
-        run: .\tests\installer_probe.ps1
       - name: Finalize sanitized CI evidence
         if: always()
         run: >
