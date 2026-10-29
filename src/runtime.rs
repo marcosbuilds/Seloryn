@@ -33,6 +33,10 @@ const MAX_TRAINING_INPUTS: usize = 64;
 const MAX_TRAINING_OUTPUTS: usize = 32;
 const MAX_TRAINING_HIDDEN: usize = 256;
 const MAX_TRAINING_PARAMETERS: usize = 1_000_000;
+const MLP_CHECKPOINT_SCHEMA: &str = "seloryn.training.checkpoint.v3";
+const MLP_CHECKPOINT_LEGACY_SCHEMA: &str = "seloryn.training.checkpoint.v2";
+const MLP_CHECKPOINT_ARCHITECTURE: &str = "dense_relu_dense_mse";
+const MLP_CHECKPOINT_RUNTIME: &str = env!("CARGO_PKG_VERSION");
 const MLP_RNG_SEED_MIX: u64 = 0x9E37_79B9_7F4A_7C15;
 const MLP_RNG_NONZERO_FALLBACK: u64 = 0xD1B5_4A32_D192_ED03;
 const LINEAR_DEVICE: &str = "cpu";
@@ -4039,25 +4043,239 @@ fn read_mlp_inputs(
     })
 }
 
+fn checkpoint_string<'a>(
+    values: &'a BTreeMap<String, JsonValue>,
+    field: &str,
+) -> Result<&'a str, String> {
+    match values.get(field) {
+        Some(JsonValue::String(value)) => Ok(value),
+        Some(_) => Err(format!("MLP checkpoint field `{field}` must be a string")),
+        None => Err(format!("MLP checkpoint field `{field}` is missing")),
+    }
+}
+
+fn checkpoint_object<'a>(
+    values: &'a BTreeMap<String, JsonValue>,
+    field: &str,
+) -> Result<&'a BTreeMap<String, JsonValue>, String> {
+    match values.get(field) {
+        Some(JsonValue::Object(value)) => Ok(value),
+        Some(_) => Err(format!("MLP checkpoint field `{field}` must be an object")),
+        None => Err(format!("MLP checkpoint field `{field}` is missing")),
+    }
+}
+
+fn reject_unknown_checkpoint_fields(
+    values: &BTreeMap<String, JsonValue>,
+    allowed: &[&str],
+    scope: &str,
+) -> Result<(), String> {
+    if let Some(field) = values
+        .keys()
+        .find(|field| !allowed.iter().any(|allowed| allowed == field))
+    {
+        return Err(format!(
+            "MLP checkpoint {scope} contains unsupported field `{field}`"
+        ));
+    }
+    Ok(())
+}
+
+fn checkpoint_sha256<'a>(
+    values: &'a BTreeMap<String, JsonValue>,
+    field: &str,
+) -> Result<&'a str, String> {
+    let value = checkpoint_string(values, field)?;
+    if value.len() != 64
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(format!(
+            "MLP checkpoint field `{field}` must be a lowercase SHA-256 digest"
+        ));
+    }
+    Ok(value)
+}
+
+fn validate_checkpoint_shape(
+    shapes: &BTreeMap<String, JsonValue>,
+    field: &str,
+    expected: &[usize],
+) -> Result<(), String> {
+    let actual = json_usize_array(shapes, field)?;
+    if actual != expected {
+        return Err(format!(
+            "MLP checkpoint shape contract for `{field}` does not match the architecture"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_mlp_checkpoint_schema(values: &BTreeMap<String, JsonValue>) -> Result<(), String> {
+    match values.get("schema") {
+        Some(JsonValue::String(schema)) if schema == MLP_CHECKPOINT_SCHEMA => Ok(()),
+        Some(JsonValue::String(schema)) if schema == MLP_CHECKPOINT_LEGACY_SCHEMA => Err(format!(
+            "MLP checkpoint schema {MLP_CHECKPOINT_LEGACY_SCHEMA} is incompatible with this runtime; retrain to create {MLP_CHECKPOINT_SCHEMA}"
+        )),
+        _ => Err("MLP checkpoint schema is unsupported".to_owned()),
+    }
+}
+
+fn validate_mlp_checkpoint_contract(
+    values: &BTreeMap<String, JsonValue>,
+    input_size: usize,
+    hidden_size: usize,
+    output_size: usize,
+) -> Result<(), String> {
+    validate_mlp_checkpoint_schema(values)?;
+    reject_unknown_checkpoint_fields(
+        values,
+        &[
+            "schema",
+            "runtime",
+            "model",
+            "architecture",
+            "device",
+            "dtype",
+            "step",
+            "seed",
+            "input_size",
+            "hidden_size",
+            "output_size",
+            "batch_size",
+            "learning_rate",
+            "train_sha256",
+            "test_sha256",
+            "optimizer",
+            "weights_sha256",
+            "data_sha256",
+            "state_sha256",
+            "shapes",
+            "features",
+            "transform",
+            "hash",
+            "integrity",
+            "weights",
+            "data",
+        ],
+        "root",
+    )?;
+    if checkpoint_string(values, "runtime")? != MLP_CHECKPOINT_RUNTIME {
+        return Err("MLP checkpoint runtime version is incompatible".to_owned());
+    }
+    if checkpoint_string(values, "model")? != "mlp" {
+        return Err("MLP checkpoint model is unsupported".to_owned());
+    }
+    if checkpoint_string(values, "architecture")? != MLP_CHECKPOINT_ARCHITECTURE {
+        return Err("MLP checkpoint architecture is unsupported".to_owned());
+    }
+    if checkpoint_string(values, "device")? != "cpu" {
+        return Err("MLP checkpoint device is unsupported".to_owned());
+    }
+    if checkpoint_string(values, "dtype")? != "F32" {
+        return Err("MLP checkpoint dtype is unsupported".to_owned());
+    }
+
+    let optimizer = checkpoint_object(values, "optimizer")?;
+    reject_unknown_checkpoint_fields(optimizer, &["name", "state"], "optimizer")?;
+    if checkpoint_string(optimizer, "name")? != "sgd"
+        || checkpoint_string(optimizer, "state")? != "stateless"
+    {
+        return Err("MLP checkpoint optimizer is unsupported".to_owned());
+    }
+
+    let shapes = checkpoint_object(values, "shapes")?;
+    reject_unknown_checkpoint_fields(
+        shapes,
+        &[
+            "inputs",
+            "first_weights",
+            "first_bias",
+            "second_weights",
+            "second_bias",
+            "outputs",
+        ],
+        "shapes",
+    )?;
+    validate_checkpoint_shape(shapes, "inputs", &[input_size])?;
+    validate_checkpoint_shape(shapes, "first_weights", &[input_size, hidden_size])?;
+    validate_checkpoint_shape(shapes, "first_bias", &[hidden_size])?;
+    validate_checkpoint_shape(shapes, "second_weights", &[hidden_size, output_size])?;
+    validate_checkpoint_shape(shapes, "second_bias", &[output_size])?;
+    validate_checkpoint_shape(shapes, "outputs", &[output_size])?;
+
+    let features = checkpoint_object(values, "features")?;
+    reject_unknown_checkpoint_fields(features, &["kind", "order", "count"], "features")?;
+    if checkpoint_string(features, "kind")? != "ordered_numeric_matrix"
+        || checkpoint_string(features, "order")? != "source-column-order"
+        || json_usize_field(features, "count")? != input_size
+    {
+        return Err("MLP checkpoint feature contract is incompatible".to_owned());
+    }
+
+    let transform = checkpoint_object(values, "transform")?;
+    reject_unknown_checkpoint_fields(transform, &["name", "version"], "transform")?;
+    if checkpoint_string(transform, "name")? != "identity"
+        || json_u64_field(transform, "version")? != 1
+    {
+        return Err("MLP checkpoint transform contract is unsupported".to_owned());
+    }
+
+    for field in [
+        "train_sha256",
+        "test_sha256",
+        "weights_sha256",
+        "data_sha256",
+        "state_sha256",
+    ] {
+        checkpoint_sha256(values, field)?;
+    }
+    let hashes = checkpoint_object(values, "hash")?;
+    reject_unknown_checkpoint_fields(
+        hashes,
+        &["algorithm", "train", "test", "weights", "data", "state"],
+        "hash",
+    )?;
+    if checkpoint_string(hashes, "algorithm")? != "sha256" {
+        return Err("MLP checkpoint hash algorithm is unsupported".to_owned());
+    }
+    for (nested, top_level) in [
+        ("train", "train_sha256"),
+        ("test", "test_sha256"),
+        ("weights", "weights_sha256"),
+        ("data", "data_sha256"),
+        ("state", "state_sha256"),
+    ] {
+        if checkpoint_sha256(hashes, nested)? != checkpoint_sha256(values, top_level)? {
+            return Err(format!(
+                "MLP checkpoint hash metadata for `{nested}` does not match the payload metadata"
+            ));
+        }
+    }
+
+    let integrity = checkpoint_object(values, "integrity")?;
+    reject_unknown_checkpoint_fields(
+        integrity,
+        &["algorithm", "scope", "authenticity"],
+        "integrity",
+    )?;
+    if checkpoint_string(integrity, "algorithm")? != "sha256"
+        || checkpoint_string(integrity, "scope")? != "payload-sections"
+        || checkpoint_string(integrity, "authenticity")? != "none"
+    {
+        return Err(
+            "MLP checkpoint integrity contract is unsupported; SHA-256 does not authenticate authorship"
+                .to_owned(),
+        );
+    }
+    Ok(())
+}
+
 fn parse_mlp_model_checkpoint(value: &JsonValue) -> Result<(MlpModel, i64), String> {
     let JsonValue::Object(values) = value else {
         return Err("MLP checkpoint root must be an object".to_owned());
     };
-    if !matches!(values.get("schema"), Some(JsonValue::String(value)) if value == "seloryn.training.checkpoint.v2")
-    {
-        return Err("MLP checkpoint schema is unsupported".to_owned());
-    }
-    if !matches!(values.get("model"), Some(JsonValue::String(value)) if value == "mlp") {
-        return Err("MLP checkpoint model is unsupported".to_owned());
-    }
-    if !matches!(
-        values.get("optimizer"),
-        Some(JsonValue::Object(optimizer))
-            if matches!(optimizer.get("name"), Some(JsonValue::String(value)) if value == "sgd")
-                && matches!(optimizer.get("state"), Some(JsonValue::String(value)) if value == "stateless")
-    ) {
-        return Err("MLP checkpoint optimizer is unsupported".to_owned());
-    }
     let step = json_i64_field(values, "step")?;
     if step < 0 {
         return Err("MLP checkpoint step cannot be negative".to_owned());
@@ -4065,6 +4283,7 @@ fn parse_mlp_model_checkpoint(value: &JsonValue) -> Result<(MlpModel, i64), Stri
     let input_size = json_usize_field(values, "input_size")?;
     let hidden_size = json_usize_field(values, "hidden_size")?;
     let output_size = json_usize_field(values, "output_size")?;
+    validate_mlp_checkpoint_contract(values, input_size, hidden_size, output_size)?;
     if input_size == 0 || input_size > MAX_TRAINING_INPUTS {
         return Err(format!(
             "MLP checkpoint input size must be between 1 and {MAX_TRAINING_INPUTS}"
@@ -4323,21 +4542,7 @@ fn parse_mlp_checkpoint(
     let JsonValue::Object(values) = value else {
         return Err("MLP checkpoint root must be an object".to_owned());
     };
-    if !matches!(values.get("schema"), Some(JsonValue::String(value)) if value == "seloryn.training.checkpoint.v2")
-    {
-        return Err("MLP checkpoint schema is unsupported".to_owned());
-    }
-    if !matches!(values.get("model"), Some(JsonValue::String(value)) if value == "mlp") {
-        return Err("MLP checkpoint model is unsupported".to_owned());
-    }
-    if !matches!(
-        values.get("optimizer"),
-        Some(JsonValue::Object(optimizer))
-            if matches!(optimizer.get("name"), Some(JsonValue::String(value)) if value == "sgd")
-                && matches!(optimizer.get("state"), Some(JsonValue::String(value)) if value == "stateless")
-    ) {
-        return Err("MLP checkpoint optimizer is unsupported".to_owned());
-    }
+    validate_mlp_checkpoint_schema(values)?;
     if !matches!(values.get("train_sha256"), Some(JsonValue::String(value)) if value == &train.sha256)
         || !matches!(values.get("test_sha256"), Some(JsonValue::String(value)) if value == &test.sha256)
     {
@@ -4351,6 +4556,9 @@ fn parse_mlp_checkpoint(
     let checkpoint_batch = json_usize_field(values, "batch_size")?;
     let checkpoint_hidden = json_usize_field(values, "hidden_size")?;
     let checkpoint_learning_rate = json_f32_field(values, "learning_rate")?;
+    let input_size = json_usize_field(values, "input_size")?;
+    let output_size = json_usize_field(values, "output_size")?;
+    validate_mlp_checkpoint_contract(values, input_size, checkpoint_hidden, output_size)?;
     if checkpoint_batch != batch_size
         || checkpoint_hidden != hidden_size
         || (checkpoint_learning_rate - learning_rate).abs() > f32::EPSILON
@@ -4360,10 +4568,7 @@ fn parse_mlp_checkpoint(
     if step < 0 {
         return Err("MLP checkpoint step cannot be negative".to_owned());
     }
-    let input_size = json_usize_field(values, "input_size")?;
-    if input_size != train.input_size
-        || json_usize_field(values, "output_size")? != train.output_size
-    {
+    if input_size != train.input_size || output_size != train.output_size {
         return Err("MLP checkpoint dimensions do not match the current data".to_owned());
     }
     let model_values = match values.get("weights") {
@@ -4379,7 +4584,7 @@ fn parse_mlp_checkpoint(
     let model = MlpModel {
         input_size,
         hidden_size,
-        output_size: train.output_size,
+        output_size,
         first_weights: json_f32_array(model_values, "first_weights")?,
         first_bias: json_f32_array(model_values, "first_bias")?,
         second_weights: json_f32_array(model_values, "second_weights")?,
@@ -4387,8 +4592,8 @@ fn parse_mlp_checkpoint(
     };
     if model.first_weights.len() != input_size * hidden_size
         || model.first_bias.len() != hidden_size
-        || model.second_weights.len() != hidden_size * train.output_size
-        || model.second_bias.len() != train.output_size
+        || model.second_weights.len() != hidden_size * output_size
+        || model.second_bias.len() != output_size
     {
         return Err("MLP checkpoint parameter shapes are invalid".to_owned());
     }
@@ -4497,12 +4702,100 @@ fn encode_mlp_checkpoint(
         ("data".to_owned(), data_value.clone()),
     ]));
     let state_sha256 = sha256_hex(json::encode(&state_value).as_bytes());
+    let shapes_value = JsonValue::Object(BTreeMap::from([
+        (
+            "inputs".to_owned(),
+            JsonValue::Array(vec![JsonValue::Number(train.input_size.to_string())]),
+        ),
+        (
+            "first_weights".to_owned(),
+            JsonValue::Array(vec![
+                JsonValue::Number(train.input_size.to_string()),
+                JsonValue::Number(model.hidden_size.to_string()),
+            ]),
+        ),
+        (
+            "first_bias".to_owned(),
+            JsonValue::Array(vec![JsonValue::Number(model.hidden_size.to_string())]),
+        ),
+        (
+            "second_weights".to_owned(),
+            JsonValue::Array(vec![
+                JsonValue::Number(model.hidden_size.to_string()),
+                JsonValue::Number(train.output_size.to_string()),
+            ]),
+        ),
+        (
+            "second_bias".to_owned(),
+            JsonValue::Array(vec![JsonValue::Number(train.output_size.to_string())]),
+        ),
+        (
+            "outputs".to_owned(),
+            JsonValue::Array(vec![JsonValue::Number(train.output_size.to_string())]),
+        ),
+    ]));
+    let features_value = JsonValue::Object(BTreeMap::from([
+        (
+            "kind".to_owned(),
+            JsonValue::String("ordered_numeric_matrix".to_owned()),
+        ),
+        (
+            "order".to_owned(),
+            JsonValue::String("source-column-order".to_owned()),
+        ),
+        (
+            "count".to_owned(),
+            JsonValue::Number(train.input_size.to_string()),
+        ),
+    ]));
+    let transform_value = JsonValue::Object(BTreeMap::from([
+        ("name".to_owned(), JsonValue::String("identity".to_owned())),
+        ("version".to_owned(), JsonValue::Number("1".to_owned())),
+    ]));
+    let hash_value = JsonValue::Object(BTreeMap::from([
+        (
+            "algorithm".to_owned(),
+            JsonValue::String("sha256".to_owned()),
+        ),
+        ("train".to_owned(), JsonValue::String(train.sha256.clone())),
+        ("test".to_owned(), JsonValue::String(test.sha256.clone())),
+        (
+            "weights".to_owned(),
+            JsonValue::String(weights_sha256.clone()),
+        ),
+        ("data".to_owned(), JsonValue::String(data_sha256.clone())),
+        ("state".to_owned(), JsonValue::String(state_sha256.clone())),
+    ]));
+    let integrity_value = JsonValue::Object(BTreeMap::from([
+        (
+            "algorithm".to_owned(),
+            JsonValue::String("sha256".to_owned()),
+        ),
+        (
+            "scope".to_owned(),
+            JsonValue::String("payload-sections".to_owned()),
+        ),
+        (
+            "authenticity".to_owned(),
+            JsonValue::String("none".to_owned()),
+        ),
+    ]));
     let checkpoint = JsonValue::Object(std::collections::BTreeMap::from([
         (
             "schema".to_owned(),
-            JsonValue::String("seloryn.training.checkpoint.v2".to_owned()),
+            JsonValue::String(MLP_CHECKPOINT_SCHEMA.to_owned()),
+        ),
+        (
+            "runtime".to_owned(),
+            JsonValue::String(MLP_CHECKPOINT_RUNTIME.to_owned()),
         ),
         ("model".to_owned(), JsonValue::String("mlp".to_owned())),
+        (
+            "architecture".to_owned(),
+            JsonValue::String(MLP_CHECKPOINT_ARCHITECTURE.to_owned()),
+        ),
+        ("device".to_owned(), JsonValue::String("cpu".to_owned())),
+        ("dtype".to_owned(), JsonValue::String("F32".to_owned())),
         ("step".to_owned(), JsonValue::Number(state.step.to_string())),
         ("seed".to_owned(), JsonValue::Number(seed.to_string())),
         (
@@ -4549,6 +4842,11 @@ fn encode_mlp_checkpoint(
         ),
         ("data_sha256".to_owned(), JsonValue::String(data_sha256)),
         ("state_sha256".to_owned(), JsonValue::String(state_sha256)),
+        ("shapes".to_owned(), shapes_value),
+        ("features".to_owned(), features_value),
+        ("transform".to_owned(), transform_value),
+        ("hash".to_owned(), hash_value),
+        ("integrity".to_owned(), integrity_value),
         ("weights".to_owned(), weights_value),
         ("data".to_owned(), data_value),
     ]));

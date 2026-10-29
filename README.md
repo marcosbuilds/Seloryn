@@ -22,6 +22,39 @@ These are verified previews, not a stable ABI or a claim of GPU tensor/MLP
 training, distributed execution, package registry, HTTP runtime or a general
 model framework.
 
+## First run from a clone
+
+The shortest verified CLI path is provided by the idempotent quickstart scripts.
+They build the release binary, run read-only `doctor` on the tracked JSON
+project, check and run the tracked tensor example, then execute the portable
+core conformance suite. The scripts use only repository examples and do not
+create or overwrite user project files.
+
+On POSIX shells:
+
+```sh
+bash scripts/quickstart/first-run-posix.sh
+```
+
+On PowerShell 5.1 or 7+:
+
+```powershell
+pwsh -NoProfile -File .\scripts\quickstart\first-run-powershell.ps1
+```
+
+The observable tensor result is:
+
+```text
+Tensor[F32, shape=[2, 2], values=[19.0, 22.0, 43.0, 50.0]]
+```
+
+The prerequisite doctor requires the Rust toolchain pinned by
+`rust-toolchain.toml` and Python 3.10+ for the conformance tooling. Node.js/npm
+are not required for this CLI path; they are needed only for the separate
+VS Code/editor checks. Missing required tools produce an installation-oriented
+error before build or source execution. The runtime remains a verified preview
+with an unstable ABI; this path does not install or promote a stable release.
+
 ![Seloryn architecture](assets/diagrams/architecture-flow.png)
 
 ## What exists today vs. what is designed

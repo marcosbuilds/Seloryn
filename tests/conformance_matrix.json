@@ -109,6 +109,15 @@
       "notes": "JSON2 chain, replay, authentication, redaction and tamper cases."
     },
     {
+      "id": "adversarial-stream",
+      "path": "tests/adversarial_stream_probe.py",
+      "command": ["python", "tests/adversarial_stream_probe.py"],
+      "suites": ["core", "release"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12"],
+      "notes": "Bounded verifier campaign with positive Unicode/extreme-number input and stable negative corruption/resource-limit results."
+    },
+    {
       "id": "self-hosted-linear",
       "path": "tests/self_hosted_probe.py",
       "command": ["python", "tests/self_hosted_probe.py"],
@@ -525,8 +534,8 @@
       "claim": "Human/JSON/JSON2 streams with identity, bounded source/manifest/static preflight error receipts, hash chaining, replay, redaction and optional keyed authentication.",
       "status": "verified-preview",
       "implementation": ["src/main.rs", "src/runtime.rs", "scripts/streaming/verify-event-chain.py", "scripts/streaming/replay-receipt.py"],
-      "positive_probes": ["streaming-v2", "auditable-local-inference"],
-      "negative_probes": ["streaming-v2", "auditable-local-inference"],
+      "positive_probes": ["streaming-v2", "adversarial-stream", "auditable-local-inference"],
+      "negative_probes": ["streaming-v2", "adversarial-stream", "auditable-local-inference"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary"],
       "documentation": ["docs/project/status.md", "docs/compute/training.md", "docs/benchmarks/auditable-local-inference.md"],

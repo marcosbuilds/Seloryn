@@ -5,6 +5,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import tempfile
+import json
 from pathlib import Path
 
 
@@ -71,8 +72,62 @@ def main() -> int:
         metadata_text = metadata.read_text(encoding="utf-8")
         assert '"schema":"seloryn.build.v1"' in metadata_text
         assert '"bundle_format":"seloryn.bundle.v1"' in metadata_text
+        metadata_payload = json.loads(metadata_text)
+        assert metadata_payload["runtime_package"] == "0.12.0", metadata_payload
+        assert metadata_payload["profile"] == "release", metadata_payload
+        assert metadata_payload["artifact"] == "seloryn.selyapp", metadata_payload
+        assert metadata_payload["integrity"] == "sha256", metadata_payload
+        assert metadata_payload["authenticity"] == "none", metadata_payload
+        assert metadata_payload["deterministic"] is True, metadata_payload
         bundled = run("exec", str(temporary))
         assert_pipeline_output(bundled)
+
+        def reject_metadata_mutation(mutate, expected):
+            mutated = json.loads(json.dumps(metadata_payload))
+            mutate(mutated)
+            metadata.write_text(json.dumps(mutated), encoding="utf-8")
+            rejected = subprocess.run(
+                [str(BINARY), "exec", str(temporary)],
+                cwd=ROOT,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                capture_output=True,
+                check=False,
+            )
+            assert rejected.returncode == 65, (rejected.stdout, rejected.stderr)
+            assert expected in rejected.stderr, (expected, rejected.stderr)
+            metadata.write_text(metadata_text, encoding="utf-8")
+
+        reject_metadata_mutation(
+            lambda value: value.update({"runtime_package": "0.0.0"}),
+            "runtime version is incompatible",
+        )
+        reject_metadata_mutation(
+            lambda value: value.update({"profile": "unsupported"}),
+            "profile is unsupported",
+        )
+        reject_metadata_mutation(
+            lambda value: value.update({"artifact": "other.selyapp"}),
+            "artifact is unsupported",
+        )
+        reject_metadata_mutation(
+            lambda value: value.update({"integrity": "sha512"}),
+            "integrity algorithm is unsupported",
+        )
+        reject_metadata_mutation(
+            lambda value: value.update({"authenticity": "signed"}),
+            "does not authenticate authorship",
+        )
+        reject_metadata_mutation(
+            lambda value: value.update({"deterministic": False}),
+            "deterministic flag is invalid",
+        )
+        reject_metadata_mutation(
+            lambda value: value.update({"unexpected": True}),
+            "contains unsupported field `unexpected`",
+        )
+
         metadata.write_text(metadata_text.replace('"sha256":"', '"sha256":"0', 1), encoding="utf-8")
         tampered = subprocess.run(
             [str(BINARY), "exec", str(temporary)],

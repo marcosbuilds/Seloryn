@@ -175,7 +175,10 @@ incremental parsing, rename, formatting or debugging support.
 files and explicitly declared `[capabilities].read` and `[capabilities].write`
 directories into a deterministic `.selyapp` bundle using the versioned
 `seloryn.bundle.v1` format. It also writes `seloryn-build.json` with the
-language/runtime versions, profile, byte length and SHA-256 of the artifact.
+language/runtime versions, profile, artifact name, byte length, SHA-256 and an
+explicit `integrity=sha256` / `authenticity=none` declaration. `exec` validates
+all of those fields, rejects unsupported extra metadata and checks the hash
+before materialization.
 The runtime performs the same deterministic lowering at `exec` time; this
 bundle is not native code or a public release. `exec` validates and materializes
 that bundle in a temporary directory before running the same project contract.

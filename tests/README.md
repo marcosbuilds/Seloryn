@@ -16,6 +16,9 @@
 - `structured_inspection_probe.py` proves the compact `seloryn.analysis.v1`
   project/source context, local/standard import classification and negative
   diagnostics/exit behavior without executing the fixture.
+- `adversarial_stream_probe.py` proves bounded receipt-verifier handling for
+  valid Unicode/extreme numbers, non-finite numbers, truncation, duplicate
+  keys, tamper, invalid Unicode/UTF-8, nesting and line-size limits.
 - `performance_probe.py` runs the source-owned training fixture repeatedly and
   reports median/P95 wall time alongside the pure-Python numerical oracle.
 - `../scripts/ci/conformance.py` validates the public capability matrix and

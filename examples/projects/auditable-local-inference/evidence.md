@@ -1,7 +1,11 @@
 # Evidence record
 
 The first black-box probe was run against the local release binary on Windows
-with language `0.12` and runtime package `0.12.0`.
+with language `0.12` and runtime package `0.12.0`. The train/test JSON files
+are repository-authored, domain-inspired synthetic fixtures; they are not
+field measurements, a public dataset or production telemetry. Their file
+hashes and evidence boundary are recorded in
+[`docs/benchmarks/evidence-catalog.json`](../../../docs/benchmarks/evidence-catalog.json).
 
 | Evidence | Observed result |
 |---|---|

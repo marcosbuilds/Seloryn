@@ -3904,6 +3904,14 @@ fn build_path(path: PathBuf, profile: String, output: PathBuf) -> u8 {
             "sha256".to_owned(),
             json::JsonValue::String(bundle_sha256.clone()),
         ),
+        (
+            "integrity".to_owned(),
+            json::JsonValue::String("sha256".to_owned()),
+        ),
+        (
+            "authenticity".to_owned(),
+            json::JsonValue::String("none".to_owned()),
+        ),
         ("deterministic".to_owned(), json::JsonValue::Bool(true)),
     ]));
     let metadata_path = output.join("seloryn-build.json");
@@ -4015,6 +4023,29 @@ fn verify_build_metadata(
             diagnostic::Span::new(0, 0),
         ));
     };
+    const ALLOWED_FIELDS: &[&str] = &[
+        "schema",
+        "bundle_format",
+        "language_version",
+        "runtime_package",
+        "profile",
+        "artifact",
+        "bytes",
+        "sha256",
+        "integrity",
+        "authenticity",
+        "deterministic",
+    ];
+    if let Some(field) = object
+        .keys()
+        .find(|field| !ALLOWED_FIELDS.contains(&field.as_str()))
+    {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            format!("bundle build metadata contains unsupported field `{field}`"),
+            diagnostic::Span::new(0, 0),
+        ));
+    }
     let string_field = |key: &str| -> Result<&str, diagnostic::Diagnostic> {
         match object.get(key) {
             Some(json::JsonValue::String(value)) => Ok(value),
@@ -4048,6 +4079,51 @@ fn verify_build_metadata(
         return Err(diagnostic::Diagnostic::new(
             "SEL-B001",
             "bundle build metadata language version is incompatible",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    if string_field("runtime_package")? != PACKAGE_VERSION {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata runtime version is incompatible",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    if !matches!(string_field("profile")?, "debug" | "release") {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata profile is unsupported",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    if string_field("artifact")? != "seloryn.selyapp" {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata artifact is unsupported",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    if string_field("integrity")? != "sha256" {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata integrity algorithm is unsupported",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    if string_field("authenticity")? != "none" {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata authenticity is unsupported; SHA-256 does not authenticate authorship",
+            diagnostic::Span::new(0, 0),
+        ));
+    }
+    if !matches!(
+        object.get("deterministic"),
+        Some(json::JsonValue::Bool(true))
+    ) {
+        return Err(diagnostic::Diagnostic::new(
+            "SEL-B001",
+            "bundle build metadata deterministic flag is invalid",
             diagnostic::Span::new(0, 0),
         ));
     }

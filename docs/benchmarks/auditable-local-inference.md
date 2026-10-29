@@ -2,14 +2,22 @@
 
 This is the first product-shaped proof of Seloryn's proposed niche: a local AI
 workflow whose data, model, checkpoint and runtime contracts are explicit and
-machine-checked before a result is accepted.
+machine-checked before a result is accepted. Its four-feature
+equipment-health data is a small repository-authored fixture inspired by that
+domain, not field data, public-dataset evidence or production telemetry.
 
 The fixture is deliberately small so its behavior is inspectable. It contains
-an owned binary equipment-health dataset, a four-input/four-hidden-unit ReLU
+a synthetic domain-inspired binary equipment-health dataset, a
+four-input/four-hidden-unit ReLU
 MLP, mean-squared error, source-owned reverse-mode updates, holdout evaluation,
 JSON checkpoint persistence, reload and a separate inference request. The
 network and training loop are written in `.sely`; the runtime supplies tensor
 and autodiff primitives, not a predefined trainer.
+
+The file-level provenance, hashes, split, shape and unsupported claims are
+listed in the [public evidence catalog](evidence-catalog.json). Reproducing
+the probe verifies this authored fixture and its independent numerical
+reference; it does not turn the fixture into production evidence.
 
 ## Reproduction gate
 
