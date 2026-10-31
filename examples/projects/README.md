@@ -16,9 +16,10 @@ capabilities; they are not packages published to a registry.
   reverse-mode update loop, holdout evaluation, checkpoint persistence,
   checkpoint reload and inference in `.sely`; Rust supplies only tensor kernels
   and the gradient primitive.
-- `self-hosted-language-model/` defines a modular 14-token contextual language model
-  in `.sely`, including tokenizer, dataset, cross-entropy objective, SGD,
-  evaluation, hash-validated checkpoint reload, JSON streaming and inference.
+- `self-hosted-language-model/` defines modular contextual language-model
+  workflows in `.sely`, including a one-hot linear baseline and a selectable
+  embedding/ReLU MLP path with tokenizer, indexed dataset, cross-entropy objective,
+  SGD, evaluation, hash-validated checkpoint reload, JSON streaming and inference.
 - `auditable-local-inference/` defines a contract-first four-feature ReLU MLP
   in `.sely`, including dataset/model/run validation, source-owned training,
   holdout evaluation, hash-bound checkpoint reload, separate inference and a

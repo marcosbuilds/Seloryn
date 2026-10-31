@@ -1,13 +1,14 @@
 # Executable language-model proof
 
-Seloryn now has one complete, bounded contextual next-token workflow authored in
+Seloryn now has two complete, bounded contextual next-token workflows authored in
 `.sely`. The fixture uses a runtime-selected context window (the proof uses four
-tokens), a one-hot linear softmax model and an owned dataset. The path is real:
-source modules load `vocab.json` and token datasets, derive tensor dimensions,
-compute fused cross-entropy, request reverse-mode gradients, update named
-parameters with reusable SGD, evaluate held-out loss/perplexity, persist a JSON
-checkpoint with SHA-256 metadata for both weights and vocabulary, reload it and
-answer token-list or free-text CLI requests. The same source also passes a
+tokens), an owned dataset and either a one-hot linear softmax model or a
+selectable embedding/ReLU MLP model. The paths are real: source modules load
+`vocab.json` and token datasets, derive tensor dimensions, compute fused or
+indexed cross-entropy, request reverse-mode gradients, update named parameters
+with reusable SGD, evaluate held-out loss/perplexity, persist JSON checkpoints
+with SHA-256 metadata for every parameter and the vocabulary, reload them and
+answer token-list or free-text CLI requests. The one-hot source also passes a
 five-token vocabulary variant.
 
 ## Project tree
@@ -51,9 +52,34 @@ flowchart LR
 
 There is no call to a predefined `train_mlp`, `train_linear` or prediction
 function in the project source. The runtime provides tensor primitives, fused
-cross-entropy, reverse-mode gradients and bounded whitespace splitting; the
-architecture, context-window construction, objective, loop, evaluation,
-serialization and inference orchestration are `.sely` code.
+cross-entropy, indexed targets, embedding lookup, reverse-mode gradients and
+bounded whitespace splitting; the architecture, context-window construction,
+objective, loop, evaluation, serialization and inference orchestration are
+`.sely` code.
+
+## Verified embedding/ReLU MLP path
+
+`train_embedding` selects a separate CPU architecture without changing the
+original one-hot checkpoint path:
+
+```text
+Tensor[I64, rows x context]
+    -> embedding table [vocabulary x D]
+    -> flatten(rows, context x D)
+    -> dense + ReLU
+    -> dense logits
+    -> indexed cross-entropy
+```
+
+The proof uses vocabulary `14`, context `4`, embedding dimension `8`, hidden
+width `32`, seed `17` and `160` full-batch SGD updates. It checks repeated-index
+scatter-add, autodiff parity, per-tensor checkpoint hashes, fresh-process
+inference, deterministic repeatability, exact `80 + 80` resume, and rejection
+of changed vocabulary/dataset/state. The independent stdlib reference matches
+final and held-out loss/perplexity within `2e-4`, with equal accuracy and
+generated text. Measured values are initial loss `2.639393568`, final loss
+`0.148477018`, held-out loss `0.838562548`, perplexity `2.313039780` and
+accuracy `0.666667` on this fixture.
 
 ## Reproduction
 
@@ -76,9 +102,10 @@ read from the training object in memory.
 
 ## Measured comparison
 
-The reference loads the same vocabulary and datasets, then uses the same
-four-token one-hot window, full-batch linear model and 160 updates in Python's
-standard library. This is a correctness comparison. Process and filesystem
+The original comparison loads the same vocabulary and datasets, then uses the
+same four-token one-hot window, full-batch linear model and 160 updates in
+Python's standard library. The embedding proof has a separate pure-Python
+reference. These are correctness comparisons. Process and filesystem
 noise is material at this size; the measurement is evidence of current
 overhead, not a speed claim.
 
@@ -93,7 +120,7 @@ equal. The model's context window, vocabulary and tensor dimensions are derived
 from the request and dataset rather than fixed in source. `infer_text` splits
 Unicode whitespace and still requires every resulting token in the vocabulary.
 The checkpoint binds the exact vocabulary hash, so reordering tokens with the
-same size is rejected. This is not an embedding model, transformer, subword
+same size is rejected. The embedding path is still not a transformer, subword
 tokenizer, GPU trainer, HTTP server or stable production runtime.
 
 As a separate cold-process observation on the Windows release binary, three

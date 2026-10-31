@@ -142,7 +142,16 @@
       "suites": ["core"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary"],
-      "notes": "Runtime-sized source-owned CPU contextual training and inference with configurable one-hot windows."
+      "notes": "Runtime-sized source-owned CPU contextual training and inference with configurable one-hot windows; the same project also exposes the separately probed embedding/ReLU MLP path."
+    },
+    {
+      "id": "self-hosted-embedding-language-model",
+      "path": "tests/self_hosted_embedding_probe.py",
+      "command": ["python", "tests/self_hosted_embedding_probe.py"],
+      "suites": ["core", "benchmark"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["CPU", "Python 3.12", "release binary", "stdlib numerical reference"],
+      "notes": "Independent source-owned embedding/ReLU MLP proof with indexed data, autodiff, hash-bound checkpoint, inference and split-resume equivalence."
     },
     {
       "id": "auditable-local-inference",
@@ -489,6 +498,19 @@
       "limits": ["This is not transformer training, subword tokenization, HTTP serving or GPU training."]
     },
     {
+      "id": "source-owned-embedding-language-model",
+      "area": "language-model",
+      "claim": "A source-owned bounded CPU embedding/ReLU MLP contextual next-token workflow supports indexed data, training, evaluation, hash-bound checkpoint reload, inference and deterministic split resume.",
+      "status": "verified-preview",
+      "implementation": ["examples/projects/self-hosted-language-model", "src/compute/tensor/storage.rs", "src/compute/tensor_autograd.rs"],
+      "positive_probes": ["self-hosted-embedding-language-model"],
+      "negative_probes": ["self-hosted-embedding-language-model"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["CPU", "bounded dimensions", "Python 3.12", "stdlib numerical reference"],
+      "documentation": ["docs/project/status.md", "docs/compute/language-model.md", "docs/compute/llms.md", "examples/projects/self-hosted-language-model/evidence.md"],
+      "limits": ["This is a bounded CPU architecture and does not claim transformer training, subword tokenization, GPU training, HTTP serving or a stable ABI."]
+    },
+    {
       "id": "auditable-local-inference",
       "area": "evidence",
       "claim": "Source-owned bounded local inference with explicit data/model/run contracts, hash-bound checkpoint and audit event.",
@@ -694,7 +716,7 @@
       "platforms": ["not-applicable"],
       "requirements": ["public boundary record"],
       "documentation": ["docs/project/status.md", "docs/compute/llms.md", "docs/systems/http.md"],
-      "limits": ["The verified language-model row is a bounded CPU one-hot linear proof; embeddings, subwords, transformer layers and HTTP serving remain unsupported."]
+      "limits": ["The verified language-model rows are bounded CPU one-hot and embedding/ReLU MLP proofs; subwords, transformer layers and HTTP serving remain unsupported."]
     },
     {
       "id": "distributed-boundary",

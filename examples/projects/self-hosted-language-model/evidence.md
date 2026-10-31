@@ -5,6 +5,7 @@ Commands:
 ```text
 cargo build --release --locked
 python tests/self_hosted_language_model_probe.py
+python tests/self_hosted_embedding_probe.py
 python tests/compare_language_model.py
 ```
 
@@ -92,4 +93,5 @@ and vocabulary-integrity rejection.
 | checkpoint hash | `c351fc799fa676a27840e4f5134b18a232d58a17fb1913ac6a38e696e944da2c` |
 
 The embedding gate is additive: the original v2 one-hot path remains covered by
-the original probe and its v2 checkpoint is unchanged.
+the original probe and its v2 checkpoint is unchanged. This is a verified local
+preview gate, not a new published package or a claim of transformer support.

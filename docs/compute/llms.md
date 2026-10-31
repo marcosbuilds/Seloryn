@@ -1,6 +1,6 @@
 # Language-model capability boundary
 
-Seloryn has a bounded contextual next-token baseline in [`language-model.md`](language-model.md). It is a verified proof of the end-to-end path, not a claim of transformer, foundation-model or production-serving capability.
+Seloryn has bounded contextual next-token workflows in [`language-model.md`](language-model.md). The one-hot linear and embedding/ReLU MLP paths are verified proofs of an end-to-end CPU path, not claims of transformer, foundation-model or production-serving capability.
 
 ### Technical layers
 
@@ -19,11 +19,12 @@ Seloryn has a bounded contextual next-token baseline in [`language-model.md`](la
 ### Current verified boundary
 
 - Scalar autodiff, matrix kernels and CPU MLP training are verified previews.
-- The contextual language-model proof uses a bounded one-hot linear model, a
-  configurable short context window, source-owned training and hash-bound JSON
-  checkpoints.
-- Embeddings, subword tokenization, attention, transformer layers, GPU tensor
-  training, distributed execution and HTTP serving are unsupported boundaries.
+- The contextual language-model proof includes a bounded one-hot linear model
+  and a separately selectable embedding/ReLU MLP model, both with a short
+  context window, source-owned training and hash-bound JSON checkpoints.
+- Subword tokenization, attention, transformer layers, GPU tensor training,
+  distributed execution and HTTP serving are unsupported boundaries. The
+  embedding path is CPU-only and bounded; it does not imply a transformer.
 - A new capability is accepted only with an independent numerical reference,
   negative tests and published environment-specific evidence.
 
