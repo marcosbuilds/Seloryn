@@ -48,7 +48,7 @@ def main() -> None:
         (project / "src").mkdir(parents=True)
         (project / "seloryn.toml").write_text(MANIFEST, encoding="utf-8")
         (project / "src" / "app.sely").write_text(
-            "module app\n\npub fn one() -> F64:\n    return 1.0\n\npub fn two() -> F64:\n    return 2.0\n",
+            "module app\n\nlet secret: F64 = 99.0\n\nfn hidden() -> F64:\n    return secret\n\npub fn one() -> F64:\n    return 1.0\n\npub fn two() -> F64:\n    return 2.0\n",
             encoding="utf-8",
         )
         entry = project / "src" / "main.sely"
@@ -62,6 +62,47 @@ def main() -> None:
         assert envelope["value"] == 3.0, envelope
 
         entry.write_text(
+            "import app as scope\n\nfn main() -> F64:\n    return scope.one()\n",
+            encoding="utf-8",
+        )
+        aliased = run(project)
+        assert aliased.returncode == 0, (aliased.stdout, aliased.stderr)
+        assert json.loads(aliased.stdout)["value"] == 1.0, aliased.stdout
+
+        entry.write_text(
+            "import app as scope\n\nfn main() -> F64:\n    return scope.hidden()\n",
+            encoding="utf-8",
+        )
+        private_alias = run(project)
+        assert private_alias.returncode == 65, (private_alias.stdout, private_alias.stderr)
+        assert "SEL-M004" in private_alias.stdout or "SEL-M004" in private_alias.stderr
+        assert "not exported" in private_alias.stdout or "not exported" in private_alias.stderr
+
+        entry.write_text(
+            "import app\n\nfn main() -> F64:\n    return hidden()\n",
+            encoding="utf-8",
+        )
+        private_unqualified = run(project)
+        assert private_unqualified.returncode == 65, (
+            private_unqualified.stdout,
+            private_unqualified.stderr,
+        )
+        assert "SEL-M004" in private_unqualified.stdout or "SEL-M004" in private_unqualified.stderr
+        assert "not in scope" in private_unqualified.stdout or "not in scope" in private_unqualified.stderr
+
+        entry.write_text(
+            "import app\n\nfn main() -> F64:\n    let leaked: F64 = secret\n    return leaked\n",
+            encoding="utf-8",
+        )
+        private_binding = run(project)
+        assert private_binding.returncode == 65, (
+            private_binding.stdout,
+            private_binding.stderr,
+        )
+        assert "SEL-M004" in private_binding.stdout or "SEL-M004" in private_binding.stderr
+        assert "not in scope" in private_binding.stdout or "not in scope" in private_binding.stderr
+
+        entry.write_text(
             "from app import one, missing\n\nfn main() -> F64:\n    return one()\n",
             encoding="utf-8",
         )
@@ -70,7 +111,7 @@ def main() -> None:
         assert "SEL-M004" in invalid.stdout or "SEL-M004" in invalid.stderr
         assert "missing" in invalid.stdout or "missing" in invalid.stderr
     print("Seloryn import contract proof: PASS")
-    print("gates | multi_symbol_import=0 missing_symbol=65")
+    print("gates | multi_symbol_import=0 alias_public=0 private_alias=65 private_unqualified=65 private_binding=65 missing_symbol=65")
 
 
 if __name__ == "__main__":

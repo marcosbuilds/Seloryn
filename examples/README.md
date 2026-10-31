@@ -48,7 +48,7 @@ examples/
   tensors/                            standalone bounded CPU tensor programs
   projects/auditable-local-inference first product-shaped, source-owned workflow
   projects/self-hosted-mlp            source-owned custom ReLU MLP proof
-  projects/self-hosted-language-model source-owned CPU contextual next-token proof; configurable one-hot context windows
+  projects/self-hosted-language-model source-owned CPU contextual next-token proof; one-hot and embedding/ReLU context windows
   projects/source-contract-reuse  experimental shared optimizer contract proof
   projects/mlp-training               bounded native CPU MLP trainer and resume fixture
   projects/mlp-inference              bounded batch inference from an MLP checkpoint
@@ -64,8 +64,9 @@ examples/
 
 The map distinguishes evidence slices; it is not a feature roadmap. In
 particular, the GPU linear project does not make the tensor or MLP projects GPU
-capable, and the language-model project does not claim embeddings, transformer,
-serving, subword tokenization or long-context support.
+capable, and the language-model project does not claim transformer, serving,
+subword tokenization or long-context support. Its embedding/ReLU path is a
+bounded CPU proof with the measured fixture documented in its evidence record.
 
 ## Standalone examples
 

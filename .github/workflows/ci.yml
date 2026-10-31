@@ -183,6 +183,14 @@ jobs:
           --kind probe
           --
           python tests/self_hosted_language_model_probe.py
+      - name: Independent self-hosted embedding language-model proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name self-hosted-embedding-language-model
+          --kind probe
+          --
+          python tests/self_hosted_embedding_probe.py
       - name: Independent auditable local-inference proof
         run: >
           python scripts/ci/ci_evidence.py run
@@ -331,7 +339,7 @@ jobs:
           --expected ci-evidence-helper n1-cli n2-cli n3a-cli n3b-tensor
           public-projects project-manifest local-import cpu-mlp-training
           training-stream self-hosted-mlp self-hosted-language-model
-          auditable-local-inference performance operational-reliability
+          self-hosted-embedding-language-model auditable-local-inference performance operational-reliability
           job-lifecycle job-lease job-recovery job-concurrency job-preflight job-worker
           language-model-comparison gpu-compute gpu-training
       - name: Upload sanitized CI evidence

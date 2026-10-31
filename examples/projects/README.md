@@ -16,6 +16,10 @@ capabilities; they are not packages published to a registry.
   reverse-mode update loop, holdout evaluation, checkpoint persistence,
   checkpoint reload and inference in `.sely`; Rust supplies only tensor kernels
   and the gradient primitive.
+- `seloryn init --template=source-mlp` creates a fresh copy of this style of
+  source-owned MLP project, including bounded data, declared checkpoint
+  capabilities and a reload check. It is the shortest path from an empty
+  directory to an editable training workflow.
 - `self-hosted-language-model/` defines modular contextual language-model
   workflows in `.sely`, including a one-hot linear baseline and a selectable
   embedding/ReLU MLP path with tokenizer, indexed dataset, cross-entropy objective,

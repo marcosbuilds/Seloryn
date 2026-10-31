@@ -88,6 +88,7 @@ From the repository root, build the release binary and run the black-box proof:
 ```powershell
 cargo build --release --locked
 python tests/self_hosted_language_model_probe.py
+python tests/self_hosted_embedding_probe.py
 python tests/compare_language_model.py
 ```
 

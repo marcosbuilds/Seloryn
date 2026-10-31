@@ -79,7 +79,7 @@
       "suites": ["core"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary"],
-      "notes": "Validates every requested local export and rejects missing exports."
+      "notes": "Validates every requested local export and rejects missing exports, private module aliases, unqualified private calls and private bindings."
     },
     {
       "id": "json-array",
@@ -630,7 +630,7 @@
     {
       "id": "workspace-tools",
       "area": "developer-experience",
-      "claim": "Read-only doctor diagnostics and transactional init templates with refusal paths.",
+      "claim": "Read-only doctor diagnostics and transactional init templates, including a source-owned MLP starter with refusal paths.",
       "status": "verified-preview",
       "implementation": ["src/cli/workspace.rs", "src/cli/mod.rs"],
       "positive_probes": ["workspace"],
@@ -638,7 +638,7 @@
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary"],
       "documentation": ["docs/project/status.md", "docs/guide/cli.md"],
-      "limits": ["Diagnostics report unstable ABI/production status accurately; they do not change it."]
+      "limits": ["The source-owned starter is bounded CPU/ReLU MLP evidence; its probe also rejects read/write capability escapes and malformed checkpoint hashes; diagnostics report unstable ABI/production status accurately and do not change it."]
     },
     {
       "id": "lsp-editor",

@@ -1,5 +1,6 @@
 #![allow(clippy::result_large_err)]
 
+use crate::builtins;
 use crate::data::sha256_hex;
 use crate::diagnostic::{Diagnostic, Span};
 use crate::language::analysis::{self, ImportKind};
@@ -161,8 +162,32 @@ pub fn load(path: &Path) -> Result<LoadedProgram, Diagnostic> {
         visited: HashMap::new(),
         ordered: Vec::new(),
         aliases: HashMap::new(),
+        private_symbols: HashMap::new(),
     };
     loader.visit(&entry_path, true)?;
+
+    if let Some(entry_unit) = loader.visited.get(&entry_path) {
+        let imported_symbols = analysis::imports(&entry_unit.program)
+            .into_iter()
+            .flat_map(|import| import.symbols)
+            .collect::<HashSet<_>>();
+        let mut declared_symbols = analysis::symbols(&entry_unit.program)
+            .into_iter()
+            .map(|symbol| symbol.name)
+            .collect::<HashSet<_>>();
+        declared_symbols.extend(
+            analysis::imports(&entry_unit.program)
+                .into_iter()
+                .filter_map(|import| import.alias),
+        );
+        validate_entry_visibility(
+            &entry_unit.program,
+            &loader.aliases,
+            &loader.private_symbols,
+            &imported_symbols,
+            &declared_symbols,
+        )?;
+    }
 
     let analysis_files = loader
         .ordered
@@ -525,7 +550,8 @@ struct Loader {
     visiting: HashSet<PathBuf>,
     visited: HashMap<PathBuf, Unit>,
     ordered: Vec<PathBuf>,
-    aliases: HashMap<String, String>,
+    aliases: HashMap<String, HashSet<String>>,
+    private_symbols: HashMap<String, HashSet<PathBuf>>,
 }
 
 impl Loader {
@@ -569,6 +595,17 @@ impl Loader {
             ));
         };
         let imports = analysis::imports(&program);
+        if !is_entry {
+            for symbol in analysis::symbols(&program)
+                .into_iter()
+                .filter(|symbol| !symbol.public)
+            {
+                self.private_symbols
+                    .entry(symbol.name)
+                    .or_default()
+                    .insert(path.clone());
+            }
+        }
         self.visited.insert(path.clone(), Unit { program, source });
         for import in imports {
             let analysis::Import {
@@ -592,7 +629,8 @@ impl Loader {
                 }
             }
             if is_entry && let Some(alias) = alias {
-                self.aliases.insert(alias, module);
+                self.aliases
+                    .insert(alias, self.exported_symbols(&module_path));
             }
         }
         self.visiting.remove(&path);
@@ -644,15 +682,406 @@ impl Loader {
     }
 
     fn is_exported(&self, path: &Path, symbol: &str) -> bool {
-        self.visited.get(path).is_some_and(|unit| {
-            unit.program.items.iter().any(|item| match item {
-                Item::Function(function) => function.public && function.name == symbol,
-                Item::Record(record) => record.public && record.name == symbol,
-                Item::Enum(enum_decl) => enum_decl.public && enum_decl.name == symbol,
-                _ => false,
-            })
-        })
+        self.exported_symbols(path).contains(symbol)
     }
+
+    fn exported_symbols(&self, path: &Path) -> HashSet<String> {
+        self.visited
+            .get(path)
+            .map(|unit| {
+                analysis::symbols(&unit.program)
+                    .into_iter()
+                    .filter(|symbol| symbol.public)
+                    .map(|symbol| symbol.name)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_entry_visibility(
+    program: &Program,
+    aliases: &HashMap<String, HashSet<String>>,
+    private_symbols: &HashMap<String, HashSet<PathBuf>>,
+    imported_symbols: &HashSet<String>,
+    declared_symbols: &HashSet<String>,
+) -> Result<(), Diagnostic> {
+    for item in &program.items {
+        match item {
+            Item::Function(function) => {
+                let mut function_symbols = declared_symbols.clone();
+                extend_local_bindings(&function.body, &mut function_symbols);
+                validate_statements_visibility(
+                    &function.body,
+                    aliases,
+                    private_symbols,
+                    imported_symbols,
+                    &function_symbols,
+                )?;
+            }
+            Item::Binding(binding) => validate_expr_visibility(
+                &binding.value,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )?,
+            Item::Statement(statement) => validate_statement_visibility(
+                statement,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )?,
+            Item::Record(_) | Item::Enum(_) | Item::Directive(_) => {}
+        }
+    }
+    Ok(())
+}
+
+fn extend_local_bindings(statements: &[Statement], names: &mut HashSet<String>) {
+    for statement in statements {
+        match statement {
+            Statement::Binding(binding) => {
+                names.insert(binding.name.clone());
+            }
+            Statement::If {
+                branches,
+                otherwise,
+                ..
+            } => {
+                for branch in branches {
+                    extend_local_bindings(&branch.body, names);
+                }
+                if let Some(body) = otherwise {
+                    extend_local_bindings(body, names);
+                }
+            }
+            Statement::Match(statement) => {
+                for case in &statement.cases {
+                    extend_local_bindings(&case.body, names);
+                }
+            }
+            Statement::For { name, body, .. } => {
+                names.insert(name.clone());
+                extend_local_bindings(body, names);
+            }
+            Statement::Assignment { .. }
+            | Statement::Return { .. }
+            | Statement::Require { .. }
+            | Statement::Expression(_) => {}
+        }
+    }
+}
+
+fn validate_statements_visibility(
+    statements: &[Statement],
+    aliases: &HashMap<String, HashSet<String>>,
+    private_symbols: &HashMap<String, HashSet<PathBuf>>,
+    imported_symbols: &HashSet<String>,
+    declared_symbols: &HashSet<String>,
+) -> Result<(), Diagnostic> {
+    for statement in statements {
+        validate_statement_visibility(
+            statement,
+            aliases,
+            private_symbols,
+            imported_symbols,
+            declared_symbols,
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_statement_visibility(
+    statement: &Statement,
+    aliases: &HashMap<String, HashSet<String>>,
+    private_symbols: &HashMap<String, HashSet<PathBuf>>,
+    imported_symbols: &HashSet<String>,
+    declared_symbols: &HashSet<String>,
+) -> Result<(), Diagnostic> {
+    match statement {
+        Statement::Binding(binding) => validate_expr_visibility(
+            &binding.value,
+            aliases,
+            private_symbols,
+            imported_symbols,
+            declared_symbols,
+        ),
+        Statement::Assignment { value, .. } | Statement::Expression(value) => {
+            validate_expr_visibility(
+                value,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )
+        }
+        Statement::Return { value, .. } => value.as_ref().map_or(Ok(()), |value| {
+            validate_expr_visibility(
+                value,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )
+        }),
+        Statement::Require {
+            condition, failure, ..
+        } => {
+            validate_expr_visibility(
+                condition,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )?;
+            validate_expr_visibility(
+                failure,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )
+        }
+        Statement::If {
+            branches,
+            otherwise,
+            ..
+        } => {
+            for branch in branches {
+                validate_expr_visibility(
+                    &branch.condition,
+                    aliases,
+                    private_symbols,
+                    imported_symbols,
+                    declared_symbols,
+                )?;
+                validate_statements_visibility(
+                    &branch.body,
+                    aliases,
+                    private_symbols,
+                    imported_symbols,
+                    declared_symbols,
+                )?;
+            }
+            otherwise.as_ref().map_or(Ok(()), |body| {
+                validate_statements_visibility(
+                    body,
+                    aliases,
+                    private_symbols,
+                    imported_symbols,
+                    declared_symbols,
+                )
+            })
+        }
+        Statement::Match(statement) => {
+            validate_expr_visibility(
+                &statement.value,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )?;
+            for case in &statement.cases {
+                if let Some(guard) = &case.guard {
+                    validate_expr_visibility(
+                        guard,
+                        aliases,
+                        private_symbols,
+                        imported_symbols,
+                        declared_symbols,
+                    )?;
+                }
+                validate_statements_visibility(
+                    &case.body,
+                    aliases,
+                    private_symbols,
+                    imported_symbols,
+                    declared_symbols,
+                )?;
+            }
+            Ok(())
+        }
+        Statement::For { iterable, body, .. } => {
+            validate_expr_visibility(
+                iterable,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )?;
+            validate_statements_visibility(
+                body,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )
+        }
+    }
+}
+
+fn validate_expr_visibility(
+    expression: &Expr,
+    aliases: &HashMap<String, HashSet<String>>,
+    private_symbols: &HashMap<String, HashSet<PathBuf>>,
+    imported_symbols: &HashSet<String>,
+    declared_symbols: &HashSet<String>,
+) -> Result<(), Diagnostic> {
+    match expression {
+        Expr::Member {
+            object, name, span, ..
+        } => {
+            if let Expr::Name { name: alias, .. } = object.as_ref()
+                && let Some(exports) = aliases.get(alias)
+                && !exports.contains(name)
+            {
+                return Err(Diagnostic::new(
+                    "SEL-M004",
+                    format!("`{name}` is not exported by imported module alias `{alias}`"),
+                    *span,
+                ));
+            }
+            validate_expr_visibility(
+                object,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )
+        }
+        Expr::Call {
+            callee,
+            arguments,
+            span,
+        } => {
+            if let Expr::Name { name, .. } = callee.as_ref()
+                && private_symbol_is_unavailable(
+                    name,
+                    private_symbols,
+                    imported_symbols,
+                    declared_symbols,
+                )
+            {
+                return Err(Diagnostic::new(
+                    "SEL-M004",
+                    format!("private symbol `{name}` from an imported module is not in scope"),
+                    *span,
+                ));
+            }
+            validate_expr_visibility(
+                callee,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )?;
+            for argument in arguments {
+                validate_expr_visibility(
+                    argument,
+                    aliases,
+                    private_symbols,
+                    imported_symbols,
+                    declared_symbols,
+                )?;
+            }
+            Ok(())
+        }
+        Expr::Group { value, .. } | Expr::Unary { value, .. } | Expr::Propagate { value, .. } => {
+            validate_expr_visibility(
+                value,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )
+        }
+        Expr::Binary { left, right, .. } => {
+            validate_expr_visibility(
+                left,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )?;
+            validate_expr_visibility(
+                right,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )
+        }
+        Expr::NamedArgument { value, .. } => validate_expr_visibility(
+            value,
+            aliases,
+            private_symbols,
+            imported_symbols,
+            declared_symbols,
+        ),
+        Expr::Index { object, index, .. } => {
+            validate_expr_visibility(
+                object,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )?;
+            validate_expr_visibility(
+                index,
+                aliases,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            )
+        }
+        Expr::List { values, .. } => {
+            for value in values {
+                validate_expr_visibility(
+                    value,
+                    aliases,
+                    private_symbols,
+                    imported_symbols,
+                    declared_symbols,
+                )?;
+            }
+            Ok(())
+        }
+        Expr::Name { name, span }
+            if private_symbol_is_unavailable(
+                name,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            ) =>
+        {
+            Err(Diagnostic::new(
+                "SEL-M004",
+                format!("private symbol `{name}` from an imported module is not in scope"),
+                *span,
+            ))
+        }
+        Expr::Name { .. }
+        | Expr::Integer { .. }
+        | Expr::Float { .. }
+        | Expr::String { .. }
+        | Expr::Boolean { .. }
+        | Expr::Null { .. } => Ok(()),
+    }
+}
+
+fn private_symbol_is_unavailable(
+    name: &str,
+    private_symbols: &HashMap<String, HashSet<PathBuf>>,
+    imported_symbols: &HashSet<String>,
+    declared_symbols: &HashSet<String>,
+) -> bool {
+    private_symbols.contains_key(name)
+        && builtins::lookup(name).is_none()
+        && !imported_symbols.contains(name)
+        && !declared_symbols.contains(name)
 }
 
 fn is_local_directive(item: &Item, _source_root: &Path) -> bool {
@@ -919,7 +1348,7 @@ fn normalize_path(path: &Path) -> PathBuf {
     result
 }
 
-fn rewrite_item(item: Item, aliases: &HashMap<String, String>) -> Item {
+fn rewrite_item(item: Item, aliases: &HashMap<String, HashSet<String>>) -> Item {
     match item {
         Item::Function(mut function) => {
             function.body = rewrite_statements(function.body, aliases);
@@ -936,7 +1365,7 @@ fn rewrite_item(item: Item, aliases: &HashMap<String, String>) -> Item {
 
 fn rewrite_statements(
     statements: Vec<Statement>,
-    aliases: &HashMap<String, String>,
+    aliases: &HashMap<String, HashSet<String>>,
 ) -> Vec<Statement> {
     statements
         .into_iter()
@@ -944,7 +1373,10 @@ fn rewrite_statements(
         .collect()
 }
 
-fn rewrite_statement(statement: Statement, aliases: &HashMap<String, String>) -> Statement {
+fn rewrite_statement(
+    statement: Statement,
+    aliases: &HashMap<String, HashSet<String>>,
+) -> Statement {
     match statement {
         Statement::Binding(mut binding) => {
             binding.value = rewrite_expr(binding.value, aliases);
@@ -1004,7 +1436,7 @@ fn rewrite_statement(statement: Statement, aliases: &HashMap<String, String>) ->
 
 fn rewrite_match(
     mut statement: MatchStatement,
-    aliases: &HashMap<String, String>,
+    aliases: &HashMap<String, HashSet<String>>,
 ) -> MatchStatement {
     statement.value = rewrite_expr(statement.value, aliases);
     statement.cases = statement
@@ -1024,7 +1456,7 @@ fn rewrite_pattern(pattern: Pattern) -> Pattern {
     pattern
 }
 
-fn rewrite_expr(expression: Expr, aliases: &HashMap<String, String>) -> Expr {
+fn rewrite_expr(expression: Expr, aliases: &HashMap<String, HashSet<String>>) -> Expr {
     match expression {
         Expr::Member {
             object,
@@ -1034,7 +1466,9 @@ fn rewrite_expr(expression: Expr, aliases: &HashMap<String, String>) -> Expr {
         } => {
             if !optional
                 && let Expr::Name { name: alias, .. } = object.as_ref()
-                && aliases.contains_key(alias)
+                && aliases
+                    .get(alias)
+                    .is_some_and(|exports| exports.contains(&name))
             {
                 return Expr::Name { name, span };
             }

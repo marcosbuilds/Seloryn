@@ -10,7 +10,7 @@ seloryn --version
 seloryn devices [--format=human|json]
 seloryn gpu-probe [--format=human|json]
 seloryn doctor [project] [--format=human|json]
-seloryn init <directory> [--template=minimal|tabular-mlp] [--name=<name>] [--format=human|json]
+seloryn init <directory> [--template=minimal|tabular-mlp|source-mlp] [--name=<name>] [--format=human|json]
 seloryn check <file.sely|project> [--format=human|json] [--color=auto|always|never] [--quiet]
 seloryn inspect <file.sely|project> [--format=human|json]
 seloryn run <file.sely|project> [--format=human|json] [--color=auto|always|never] [--log=off|human|json|json2|json2-signed]
@@ -204,8 +204,11 @@ semantic validation without executing project code. It emits the stable
 `seloryn.doctor.v1` JSON envelope and explicitly reports the current
 `verified-preview` channel, unstable ABI and `production_ready=false`.
 `init <directory>` creates a validated project atomically and refuses to
-overwrite an existing path. The default `minimal` template and the
-`tabular-mlp` starter both emit a stable `seloryn.init.v1` report.
+overwrite an existing path. The default `minimal` template, the
+`tabular-mlp` starter and the source-owned `source-mlp` starter all emit a
+stable `seloryn.init.v1` report. `source-mlp` puts the model, loss, gradient
+updates, checkpoint and reload path in `src/main.sely`; it does not call the
+built-in `train_mlp` profile.
 
 `job` exposes the first local lifecycle contract. `create` canonicalizes a
 bounded JSON specification and stores it with an initial `accepted` state;

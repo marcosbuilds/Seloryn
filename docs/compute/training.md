@@ -46,6 +46,21 @@ reference tensor kernels and reverse-mode tape; it does not supply the custom
 model's training function, optimizer loop, checkpoint schema or inference
 policy.
 
+For a clean project start, `seloryn init --template=source-mlp` creates the
+same kind of source-owned workflow in a new directory. The generated project
+is checked before it is committed, then can be run with only:
+
+```text
+seloryn init my-model --template=source-mlp
+seloryn check my-model
+seloryn run my-model --log=json2
+```
+
+The starter is intentionally small and CPU-only. Its value is that the
+developer edits the model, objective, gradient update and checkpoint code in
+`.sely`, while the runtime preserves tensor bounds, declared file capabilities
+and verifiable training events.
+
 ## Executable MLP profile
 
 The `training.train_mlp` standard function accepts exactly eight arguments:

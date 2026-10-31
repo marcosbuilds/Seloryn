@@ -15,6 +15,7 @@ const ABI: &str = "unstable";
 pub(crate) enum InitTemplate {
     Minimal,
     TabularMlp,
+    SourceMlp,
 }
 
 impl InitTemplate {
@@ -22,6 +23,7 @@ impl InitTemplate {
         match self {
             Self::Minimal => "minimal",
             Self::TabularMlp => "tabular-mlp",
+            Self::SourceMlp => "source-mlp",
         }
     }
 }
@@ -34,6 +36,7 @@ pub(crate) fn parse_template_text(value: &str) -> Option<InitTemplate> {
     match value {
         "minimal" => Some(InitTemplate::Minimal),
         "tabular-mlp" => Some(InitTemplate::TabularMlp),
+        "source-mlp" => Some(InitTemplate::SourceMlp),
         _ => None,
     }
 }
@@ -475,6 +478,9 @@ fn template_files(template: InitTemplate, name: &str) -> Vec<(String, String)> {
                 InitTemplate::TabularMlp => format!(
                     "[package]\nname = \"{name}\"\nlanguage = \"{LANGUAGE_VERSION}\"\nsource_root = \"src\"\nentry = \"main.sely\"\n\n[capabilities]\nread = [\"data\"]\nwrite = [\"checkpoints\"]\n\n[limits]\njson_max_bytes = 1048576\njson_max_depth = 32\n"
                 ),
+                InitTemplate::SourceMlp => format!(
+                    "[package]\nname = \"{name}\"\nlanguage = \"{LANGUAGE_VERSION}\"\nsource_root = \"src\"\nentry = \"main.sely\"\n\n[capabilities]\nread = [\"data\", \"checkpoints\"]\nwrite = [\"checkpoints\"]\n\n[limits]\njson_max_bytes = 1048576\njson_max_depth = 32\n"
+                ),
             },
         ),
         (
@@ -484,6 +490,7 @@ fn template_files(template: InitTemplate, name: &str) -> Vec<(String, String)> {
                     "fn main() -> Text:\n    return \"hello from Seloryn\"\n".to_owned()
                 }
                 InitTemplate::TabularMlp => "from training import train_mlp\n\nfn main() -> Json:\n    return train_mlp(\"data/train.json\", \"data/test.json\", \"checkpoints/model.json\", seed=17, steps=640, batch_size=3, hidden_size=8, learning_rate=0.02)\n".to_owned(),
+                InitTemplate::SourceMlp => source_mlp_main().to_owned(),
             },
         ),
         (
@@ -494,6 +501,9 @@ fn template_files(template: InitTemplate, name: &str) -> Vec<(String, String)> {
                 ),
                 InitTemplate::TabularMlp => format!(
                     "# {name}\n\nCreated by `seloryn init --template=tabular-mlp`. This is a bounded CPU MLP training starter with explicit data and checkpoint capabilities.\n\n```text\nseloryn doctor .\nseloryn run . --log=human\n```\n"
+                ),
+                InitTemplate::SourceMlp => format!(
+                    "# {name}\n\nCreated by `seloryn init --template=source-mlp`. The model, loss, gradient update, checkpoint and reload path are authored in `src/main.sely`; the runtime supplies bounded tensors, autodiff, JSON and capabilities.\n\n```text\nseloryn doctor .\nseloryn check .\nseloryn run . --log=human\n```\n"
                 ),
             },
         ),
@@ -515,7 +525,120 @@ fn template_files(template: InitTemplate, name: &str) -> Vec<(String, String)> {
             ),
         ]);
     }
+    if template == InitTemplate::SourceMlp {
+        files.extend([
+            (
+                "data/train.json".to_owned(),
+                "{\"inputs\":[-2,-1,-1,0,0,1,1,2,2,3,3,4],\"targets\":[-2.6,-0.8,1.0,2.8,4.6,6.4]}\n".to_owned(),
+            ),
+            (
+                "data/test.json".to_owned(),
+                "{\"inputs\":[-1,-0.5,0.5,1,2.5,3.5],\"targets\":[-0.8,1.9,5.5]}\n".to_owned(),
+            ),
+            (
+                "checkpoints/README.md".to_owned(),
+                "Generated checkpoints are written here by the source-owned model.\n".to_owned(),
+            ),
+        ]);
+    }
     files
+}
+
+fn source_mlp_main() -> &'static str {
+    r#"from autograd import gradients
+from data import range
+from json import as_f64_list, as_i64, as_text, from_f64_list, from_i64, from_text, get, object, read_file, sha256, write_file
+from tensor import values
+from training import progress
+
+record Dataset:
+    inputs: Tensor[F32]
+    targets: Tensor[F32]
+
+record Model:
+    first: Tensor[F32]
+    first_bias: Tensor[F32]
+    second: Tensor[F32]
+    second_bias: Tensor[F32]
+
+record Report:
+    architecture: Text
+    steps: I64
+    initial_loss: F32
+    final_loss: F32
+    evaluation_loss: F32
+    reloaded_loss: F32
+    prediction: F32
+
+fn load_dataset(path: Text, rows: I64) -> Result[Dataset, JsonIoError]:
+    let document: Json = read_file(path)?
+    let input_values: List[F64] = as_f64_list(get(document, ["inputs"])?)?
+    let target_values: List[F64] = as_f64_list(get(document, ["targets"])?)?
+    return Ok(Dataset(tensor_f32(input_values, [rows, 2]), tensor_f32(target_values, [rows, 1])))
+
+fn forward(inputs: Tensor[F32], model: Model) -> Tensor[F32]:
+    let hidden: Tensor[F32] = tensor_relu(matmul(inputs, model.first) + model.first_bias)
+    return matmul(hidden, model.second) + model.second_bias
+
+fn objective(inputs: Tensor[F32], first: Tensor[F32], first_bias: Tensor[F32], second: Tensor[F32], second_bias: Tensor[F32], targets: Tensor[F32]) -> Tensor[F32]:
+    let hidden: Tensor[F32] = tensor_relu(matmul(inputs, first) + first_bias)
+    let prediction: Tensor[F32] = matmul(hidden, second) + second_bias
+    let error: Tensor[F32] = prediction - targets
+    return tensor_mean(error * error)
+
+fn evaluate(dataset: Dataset, model: Model) -> F32:
+    return tensor_item_f32(objective(dataset.inputs, model.first, model.first_bias, model.second, model.second_bias, dataset.targets))
+
+fn save_model(path: Text, model: Model, steps: I64) -> Result[Unit, JsonIoError]:
+    let packed: List[F64] = values(model.first) + values(model.first_bias) + values(model.second) + values(model.second_bias)
+    let weights: Json = from_f64_list(packed)
+    let weights_sha256: Text = sha256(weights)
+    let checkpoint_values: List[Json] = [from_text("seloryn.sely.model.v1"), from_text("custom_relu_mlp"), from_i64(2), from_i64(3), from_i64(1), from_i64(steps), weights, from_text(weights_sha256)]
+    let checkpoint: Json = object(["schema", "architecture", "input_size", "hidden_size", "output_size", "steps", "weights", "weights_sha256"], checkpoint_values)?
+    return write_file(path, checkpoint)
+
+fn load_model(path: Text) -> Result[Model, JsonIoError]:
+    let document: Json = read_file(path)?
+    let schema: Text = as_text(get(document, ["schema"])?)?
+    require schema == "seloryn.sely.model.v1" else JsonIoError("unsupported Seloryn model checkpoint")
+    let input_size: I64 = as_i64(get(document, ["input_size"])?)?
+    let hidden_size: I64 = as_i64(get(document, ["hidden_size"])?)?
+    let output_size: I64 = as_i64(get(document, ["output_size"])?)?
+    require input_size == 2 else JsonIoError("checkpoint input shape does not match the source model")
+    require hidden_size == 3 else JsonIoError("checkpoint hidden shape does not match the source model")
+    require output_size == 1 else JsonIoError("checkpoint output shape does not match the source model")
+    let weights: Json = get(document, ["weights"])?
+    let expected_weights_sha256: Text = as_text(get(document, ["weights_sha256"])?)?
+    require expected_weights_sha256 == sha256(weights) else JsonIoError("checkpoint weights hash does not match the payload")
+    let packed: List[F64] = as_f64_list(weights)?
+    let first: Tensor[F32] = tensor_f32([packed[0], packed[1], packed[2], packed[3], packed[4], packed[5]], [2, 3])
+    let first_bias: Tensor[F32] = tensor_f32([packed[6], packed[7], packed[8]], [1, 3])
+    let second: Tensor[F32] = tensor_f32([packed[9], packed[10], packed[11]], [3, 1])
+    let second_bias: Tensor[F32] = tensor_f32([packed[12]], [1, 1])
+    return Ok(Model(first, first_bias, second, second_bias))
+
+fn train(train_data: Dataset, test_data: Dataset, steps: I64) -> Result[Report, JsonIoError]:
+    let rate: Tensor[F32] = tensor_f32([0.05], [])
+    var model: Model = Model(tensor_f32([0.2, -0.1, -0.3, 0.4, 0.1, 0.2], [2, 3]), tensor_f32([0.1, 0.1, 0.1], [1, 3]), tensor_f32([0.5, -0.2, 0.3], [3, 1]), tensor_f32([0.1], [1, 1]))
+    let initial_loss: F32 = evaluate(train_data, model)
+    for step in range(steps):
+        let derivatives: List[Tensor[F32]] = gradients(objective, train_data.inputs, model.first, model.first_bias, model.second, model.second_bias, train_data.targets)
+        model = Model(model.first - rate * derivatives[1], model.first_bias - rate * derivatives[2], model.second - rate * derivatives[3], model.second_bias - rate * derivatives[4])
+        let live_loss: F32 = evaluate(train_data, model)
+        progress("source_owned_relu_mlp", step + 1, steps, live_loss)
+    let final_loss: F32 = evaluate(train_data, model)
+    let evaluation_loss: F32 = evaluate(test_data, model)
+    save_model("checkpoints/model.json", model, steps)?
+    let reloaded: Model = load_model("checkpoints/model.json")?
+    let reloaded_loss: F32 = evaluate(test_data, reloaded)
+    let prediction: F32 = tensor_get_f32(forward(test_data.inputs, reloaded), [0, 0])
+    return Ok(Report("source_owned_relu_mlp", steps, initial_loss, final_loss, evaluation_loss, reloaded_loss, prediction))
+
+fn main() -> Result[Report, JsonIoError]:
+    let train_data: Dataset = load_dataset("data/train.json", 6)?
+    let test_data: Dataset = load_dataset("data/test.json", 3)?
+    return train(train_data, test_data, 160)
+"#
 }
 
 fn init_json(result: &InitResult) -> JsonValue {
@@ -575,12 +698,20 @@ mod tests {
             parse_template_text("tabular-mlp"),
             Some(InitTemplate::TabularMlp)
         );
+        assert_eq!(
+            parse_template_text("source-mlp"),
+            Some(InitTemplate::SourceMlp)
+        );
         assert_eq!(parse_template_text("all"), None);
     }
 
     #[test]
     fn template_files_have_expected_entrypoints() {
-        for template in [InitTemplate::Minimal, InitTemplate::TabularMlp] {
+        for template in [
+            InitTemplate::Minimal,
+            InitTemplate::TabularMlp,
+            InitTemplate::SourceMlp,
+        ] {
             let files = template_files(template, "demo");
             assert!(files.iter().any(|(path, _)| path == "seloryn.toml"));
             assert!(files.iter().any(|(path, _)| path == "src/main.sely"));
@@ -589,6 +720,11 @@ mod tests {
             template_files(InitTemplate::TabularMlp, "demo")
                 .iter()
                 .any(|(path, _)| path == "data/train.json")
+        );
+        assert!(
+            template_files(InitTemplate::SourceMlp, "demo")
+                .iter()
+                .any(|(path, contents)| path == "src/main.sely" && contents.contains("gradients"))
         );
     }
 
