@@ -151,6 +151,22 @@ jobs:
           --kind probe
           --
           python tests/import_contract_probe.py
+      - name: Workspace templates and free-layout probe
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name workspace
+          --kind probe
+          --
+          python tests/workspace_probe.py
+      - name: Trainable Project v1 proof
+        run: >
+          python scripts/ci/ci_evidence.py run
+          --output-dir .ci-evidence
+          --name trainable-project
+          --kind probe
+          --
+          python tests/trainable_project_probe.py
       - name: Independent CPU MLP training proof
         run: >
           python scripts/ci/ci_evidence.py run
@@ -337,7 +353,7 @@ jobs:
           python scripts/ci/ci_evidence.py finalize
           --output-dir .ci-evidence
           --expected ci-evidence-helper n1-cli n2-cli n3a-cli n3b-tensor
-          public-projects project-manifest local-import cpu-mlp-training
+          public-projects project-manifest local-import workspace trainable-project cpu-mlp-training
           training-stream self-hosted-mlp self-hosted-language-model
           self-hosted-embedding-language-model auditable-local-inference performance operational-reliability
           job-lifecycle job-lease job-recovery job-concurrency job-preflight job-worker

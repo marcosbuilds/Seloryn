@@ -43,6 +43,8 @@ DEFAULT_EXPECTED = (
     "public-projects",
     "project-manifest",
     "local-import",
+    "workspace",
+    "trainable-project",
     "cpu-mlp-training",
     "training-stream",
     "self-hosted-mlp",

@@ -181,6 +181,15 @@
       "notes": "Read-only doctor and transactional init, including refusal paths."
     },
     {
+      "id": "trainable-project",
+      "path": "tests/trainable_project_probe.py",
+      "command": ["python", "tests/trainable_project_probe.py"],
+      "suites": ["core"],
+      "platforms": ["linux", "macos", "windows"],
+      "requirements": ["Python 3.12", "release binary"],
+      "notes": "Generated Trainable Project v1 with source-owned train/eval/infer, contract-bound checkpoint and negative integrity cases."
+    },
+    {
       "id": "mlp-inference",
       "path": "tests/mlp_inference_probe.py",
       "command": ["python", "tests/mlp_inference_probe.py"],
@@ -630,15 +639,15 @@
     {
       "id": "workspace-tools",
       "area": "developer-experience",
-      "claim": "Read-only doctor diagnostics and transactional init templates, including a source-owned MLP starter with refusal paths.",
+      "claim": "Read-only doctor diagnostics and transactional init templates, including source-owned one-file and modular Trainable Project MLP starters with refusal paths.",
       "status": "verified-preview",
       "implementation": ["src/cli/workspace.rs", "src/cli/mod.rs"],
-      "positive_probes": ["workspace"],
-      "negative_probes": ["workspace"],
+      "positive_probes": ["workspace", "trainable-project"],
+      "negative_probes": ["workspace", "trainable-project"],
       "platforms": ["linux", "macos", "windows"],
       "requirements": ["Python 3.12", "release binary"],
       "documentation": ["docs/project/status.md", "docs/guide/cli.md"],
-      "limits": ["The source-owned starter is bounded CPU/ReLU MLP evidence; its probe also rejects read/write capability escapes and malformed checkpoint hashes; diagnostics report unstable ABI/production status accurately and do not change it."]
+      "limits": ["The starters are bounded CPU/ReLU MLP evidence; probes reject read/write capability escapes, malformed contracts and checkpoint hashes. The modular starter's directory tree is illustrative, not a loader requirement: entry and imported modules define the graph. Diagnostics report unstable ABI/production status accurately and do not change it."]
     },
     {
       "id": "lsp-editor",

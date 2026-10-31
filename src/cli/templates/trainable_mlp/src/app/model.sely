@@ -1,0 +1,20 @@
+module app.model
+
+pub record Model:
+    first: Tensor[F32]
+    first_bias: Tensor[F32]
+    second: Tensor[F32]
+    second_bias: Tensor[F32]
+
+pub fn initial() -> Model:
+    return Model(tensor_f32([0.2, -0.1, 0.1, 0.3, -0.3, 0.4, 0.1, 0.2, 0.2, -0.2, 0.3, 0.1, 0.4, -0.1, 0.2, 0.3], [4, 4]), tensor_f32([0.1, 0.1, 0.1, 0.1], [1, 4]), tensor_f32([0.5, -0.2, 0.3, 0.4], [4, 1]), tensor_f32([0.1], [1, 1]))
+
+pub fn forward(inputs: Tensor[F32], model: Model) -> Tensor[F32]:
+    let hidden: Tensor[F32] = tensor_relu(matmul(inputs, model.first) + model.first_bias)
+    return matmul(hidden, model.second) + model.second_bias
+
+pub fn objective(inputs: Tensor[F32], first: Tensor[F32], first_bias: Tensor[F32], second: Tensor[F32], second_bias: Tensor[F32], targets: Tensor[F32]) -> Tensor[F32]:
+    let hidden: Tensor[F32] = tensor_relu(matmul(inputs, first) + first_bias)
+    let prediction: Tensor[F32] = matmul(hidden, second) + second_bias
+    let error: Tensor[F32] = prediction - targets
+    return tensor_mean(error * error)

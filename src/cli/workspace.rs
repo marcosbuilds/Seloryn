@@ -16,6 +16,7 @@ pub(crate) enum InitTemplate {
     Minimal,
     TabularMlp,
     SourceMlp,
+    TrainableMlp,
 }
 
 impl InitTemplate {
@@ -24,6 +25,7 @@ impl InitTemplate {
             Self::Minimal => "minimal",
             Self::TabularMlp => "tabular-mlp",
             Self::SourceMlp => "source-mlp",
+            Self::TrainableMlp => "trainable-mlp",
         }
     }
 }
@@ -37,6 +39,7 @@ pub(crate) fn parse_template_text(value: &str) -> Option<InitTemplate> {
         "minimal" => Some(InitTemplate::Minimal),
         "tabular-mlp" => Some(InitTemplate::TabularMlp),
         "source-mlp" => Some(InitTemplate::SourceMlp),
+        "trainable-mlp" => Some(InitTemplate::TrainableMlp),
         _ => None,
     }
 }
@@ -468,6 +471,9 @@ fn validate_project_name(name: &str) -> Result<(), InitFailure> {
 }
 
 fn template_files(template: InitTemplate, name: &str) -> Vec<(String, String)> {
+    if template == InitTemplate::TrainableMlp {
+        return trainable_mlp_template_files(name);
+    }
     let mut files = vec![
         (
             "seloryn.toml".to_owned(),
@@ -481,6 +487,7 @@ fn template_files(template: InitTemplate, name: &str) -> Vec<(String, String)> {
                 InitTemplate::SourceMlp => format!(
                     "[package]\nname = \"{name}\"\nlanguage = \"{LANGUAGE_VERSION}\"\nsource_root = \"src\"\nentry = \"main.sely\"\n\n[capabilities]\nread = [\"data\", \"checkpoints\"]\nwrite = [\"checkpoints\"]\n\n[limits]\njson_max_bytes = 1048576\njson_max_depth = 32\n"
                 ),
+                InitTemplate::TrainableMlp => unreachable!(),
             },
         ),
         (
@@ -491,6 +498,7 @@ fn template_files(template: InitTemplate, name: &str) -> Vec<(String, String)> {
                 }
                 InitTemplate::TabularMlp => "from training import train_mlp\n\nfn main() -> Json:\n    return train_mlp(\"data/train.json\", \"data/test.json\", \"checkpoints/model.json\", seed=17, steps=640, batch_size=3, hidden_size=8, learning_rate=0.02)\n".to_owned(),
                 InitTemplate::SourceMlp => source_mlp_main().to_owned(),
+                InitTemplate::TrainableMlp => unreachable!(),
             },
         ),
         (
@@ -505,6 +513,7 @@ fn template_files(template: InitTemplate, name: &str) -> Vec<(String, String)> {
                 InitTemplate::SourceMlp => format!(
                     "# {name}\n\nCreated by `seloryn init --template=source-mlp`. The model, loss, gradient update, checkpoint and reload path are authored in `src/main.sely`; the runtime supplies bounded tensors, autodiff, JSON and capabilities.\n\n```text\nseloryn doctor .\nseloryn check .\nseloryn run . --log=human\n```\n"
                 ),
+                InitTemplate::TrainableMlp => unreachable!(),
             },
         ),
     ];
@@ -542,6 +551,90 @@ fn template_files(template: InitTemplate, name: &str) -> Vec<(String, String)> {
         ]);
     }
     files
+}
+
+fn trainable_mlp_template_files(name: &str) -> Vec<(String, String)> {
+    [
+        (
+            "seloryn.toml",
+            include_str!("templates/trainable_mlp/seloryn.toml"),
+        ),
+        (
+            "README.md",
+            include_str!("templates/trainable_mlp/README.md"),
+        ),
+        (
+            "src/main.sely",
+            include_str!("templates/trainable_mlp/src/main.sely"),
+        ),
+        (
+            "src/app/production.sely",
+            include_str!("templates/trainable_mlp/src/app/production.sely"),
+        ),
+        (
+            "src/app/contracts.sely",
+            include_str!("templates/trainable_mlp/src/app/contracts.sely"),
+        ),
+        (
+            "src/app/data.sely",
+            include_str!("templates/trainable_mlp/src/app/data.sely"),
+        ),
+        (
+            "src/app/model.sely",
+            include_str!("templates/trainable_mlp/src/app/model.sely"),
+        ),
+        (
+            "src/app/parameters.sely",
+            include_str!("templates/trainable_mlp/src/app/parameters.sely"),
+        ),
+        (
+            "src/app/optim.sely",
+            include_str!("templates/trainable_mlp/src/app/optim.sely"),
+        ),
+        (
+            "src/app/checkpoint.sely",
+            include_str!("templates/trainable_mlp/src/app/checkpoint.sely"),
+        ),
+        (
+            "src/app/training.sely",
+            include_str!("templates/trainable_mlp/src/app/training.sely"),
+        ),
+        (
+            "src/app/evaluation.sely",
+            include_str!("templates/trainable_mlp/src/app/evaluation.sely"),
+        ),
+        (
+            "src/app/serving.sely",
+            include_str!("templates/trainable_mlp/src/app/serving.sely"),
+        ),
+        (
+            "contracts/dataset.json",
+            include_str!("templates/trainable_mlp/contracts/dataset.json"),
+        ),
+        (
+            "contracts/model.json",
+            include_str!("templates/trainable_mlp/contracts/model.json"),
+        ),
+        (
+            "contracts/run.json",
+            include_str!("templates/trainable_mlp/contracts/run.json"),
+        ),
+        (
+            "data/train.json",
+            include_str!("templates/trainable_mlp/data/train.json"),
+        ),
+        (
+            "data/test.json",
+            include_str!("templates/trainable_mlp/data/test.json"),
+        ),
+        (
+            "checkpoints/README.md",
+            include_str!("templates/trainable_mlp/checkpoints/README.md"),
+        ),
+    ]
+    .into_iter()
+    .map(|(path, contents)| (path.to_owned(), contents.replace("__PROJECT_NAME__", name)))
+    .collect()
 }
 
 fn source_mlp_main() -> &'static str {
@@ -702,6 +795,10 @@ mod tests {
             parse_template_text("source-mlp"),
             Some(InitTemplate::SourceMlp)
         );
+        assert_eq!(
+            parse_template_text("trainable-mlp"),
+            Some(InitTemplate::TrainableMlp)
+        );
         assert_eq!(parse_template_text("all"), None);
     }
 
@@ -711,6 +808,7 @@ mod tests {
             InitTemplate::Minimal,
             InitTemplate::TabularMlp,
             InitTemplate::SourceMlp,
+            InitTemplate::TrainableMlp,
         ] {
             let files = template_files(template, "demo");
             assert!(files.iter().any(|(path, _)| path == "seloryn.toml"));
@@ -725,6 +823,12 @@ mod tests {
             template_files(InitTemplate::SourceMlp, "demo")
                 .iter()
                 .any(|(path, contents)| path == "src/main.sely" && contents.contains("gradients"))
+        );
+        assert!(
+            template_files(InitTemplate::TrainableMlp, "demo")
+                .iter()
+                .any(|(path, contents)| path == "src/app/training.sely"
+                    && contents.contains("gradients"))
         );
     }
 

@@ -1,0 +1,42 @@
+module app.serving
+
+from app.checkpoint import restore
+from app.contracts import Contract
+from app.data import load_dataset
+from app.model import Model, forward
+from audit import emit
+from data import len, range, to_f64
+from json import as_f64_list, as_text_list, from_f64, from_i64, from_text, get, object, read_file, sha256
+
+pub record InferenceReport:
+    schema: Text
+    model_id: Text
+    decision: Text
+    score: F32
+    threshold: F32
+    checkpoint_sha256: Text
+    input_feature_count: I64
+
+fn validate_feature_names(names: List[Text], expected: List[Text]) -> Result[Text, JsonIoError]:
+    require len(names) == len(expected) else JsonIoError("feature count does not match contract")
+    for index in range(len(expected)):
+        require names[index] == expected[index] else JsonIoError("feature order mismatch with dataset contract")
+    return Ok("validated")
+
+pub fn infer(request: Json, contract: Contract) -> Result[InferenceReport, JsonIoError]:
+    let names: List[Text] = as_text_list(get(request, ["feature_names"])?)?
+    validate_feature_names(names, contract.feature_names)?
+    let values: List[F64] = as_f64_list(get(request, ["features"])?)?
+    require len(values) == contract.feature_count else JsonIoError("feature values do not match contract")
+    let train_data = load_dataset("data/train.json", contract.train_rows, contract)?
+    let test_data = load_dataset("data/test.json", contract.test_rows, contract)?
+    let model: Model = restore("checkpoints/model.json", contract, train_data, test_data)?
+    let checkpoint: Json = read_file("checkpoints/model.json")?
+    let input: Tensor[F32] = tensor_f32(values, [1, contract.feature_count])
+    let score: F32 = tensor_get_f32(forward(input, model), [0, 0])
+    var decision: Text = "normal"
+    if score >= contract.threshold:
+        decision = "review"
+    let audit_payload: Json = object(["model_id", "decision", "score", "threshold", "checkpoint_sha256", "input_feature_count"], [from_text(contract.model_id), from_text(decision), from_f64(to_f64(score)), from_f64(to_f64(contract.threshold)), from_text(sha256(checkpoint)), from_i64(len(values))])?
+    emit("inference.complete", audit_payload)
+    return Ok(InferenceReport("seloryn.inference.v1", contract.model_id, decision, score, contract.threshold, sha256(checkpoint), len(values)))

@@ -10,7 +10,7 @@ seloryn --version
 seloryn devices [--format=human|json]
 seloryn gpu-probe [--format=human|json]
 seloryn doctor [project] [--format=human|json]
-seloryn init <directory> [--template=minimal|tabular-mlp|source-mlp] [--name=<name>] [--format=human|json]
+seloryn init <directory> [--template=minimal|tabular-mlp|source-mlp|trainable-mlp] [--name=<name>] [--format=human|json]
 seloryn check <file.sely|project> [--format=human|json] [--color=auto|always|never] [--quiet]
 seloryn inspect <file.sely|project> [--format=human|json]
 seloryn run <file.sely|project> [--format=human|json] [--color=auto|always|never] [--log=off|human|json|json2|json2-signed]
@@ -103,8 +103,12 @@ not a release hash or a supported language release. `check` validates UTF-8,
 layout, the E3 parser subset and the E3 semantic core: lexical scopes,
 scalar types, records, enums, `Result`, `Option`, `require`, postfix `?`,
 calls and exhaustive `match`. It reports `checked` only when all these
-checks pass. Local project imports are resolved through `seloryn.toml`; external
-packages and nullable `T?` syntax remain unavailable.
+checks pass. Local project imports are resolved through the manifest's
+`source_root` and the entrypoint's import graph; the loader does not require a
+fixed `src/`, `main.sely` or subdirectory layout. The manifest may point at a
+different entry file, and a module such as `domain.model` resolves to the
+corresponding path below `source_root`. Unimported source files are ignored by
+the graph load. External packages and nullable `T?` syntax remain unavailable.
 
 Project commands parse `seloryn.toml` as TOML before loading source. Malformed
 manifests and a `[package] language` newer than the runtime fail with
@@ -205,10 +209,15 @@ semantic validation without executing project code. It emits the stable
 `verified-preview` channel, unstable ABI and `production_ready=false`.
 `init <directory>` creates a validated project atomically and refuses to
 overwrite an existing path. The default `minimal` template, the
-`tabular-mlp` starter and the source-owned `source-mlp` starter all emit a
-stable `seloryn.init.v1` report. `source-mlp` puts the model, loss, gradient
-updates, checkpoint and reload path in `src/main.sely`; it does not call the
-built-in `train_mlp` profile.
+`tabular-mlp` starter, the source-owned `source-mlp` starter and the modular
+`trainable-mlp` starter all emit a stable `seloryn.init.v1` report.
+`source-mlp` puts the model, loss, gradient updates, checkpoint and reload path
+in `src/main.sely`; `trainable-mlp` additionally demonstrates source-owned
+`train`, `eval` and `infer` modes with contracts and a hash-bound checkpoint.
+Its generated directory is an example, not a required project layout: the
+loader follows only the manifest entry and imported modules, so developers may
+rename the entry, choose another `source_root`, add nested modules or leave
+unimported files out entirely.
 
 `job` exposes the first local lifecycle contract. `create` canonicalizes a
 bounded JSON specification and stores it with an initial `accepted` state;

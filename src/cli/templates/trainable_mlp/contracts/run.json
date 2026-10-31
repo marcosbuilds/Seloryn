@@ -1,0 +1,8 @@
+{
+  "schema": "seloryn.run-contract.v1",
+  "device_policy": "cpu_required",
+  "fallback": "error",
+  "checkpoint": "checkpoints/model.json",
+  "receipt": "json2",
+  "determinism": "numerical"
+}

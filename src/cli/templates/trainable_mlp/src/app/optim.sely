@@ -1,0 +1,15 @@
+module app.optim
+
+from app.parameters import Parameter, replace
+
+pub record Sgd:
+    learning_rate: Tensor[F32]
+
+pub fn sgd(learning_rate: Tensor[F32]) -> Sgd:
+    return Sgd(learning_rate)
+
+pub fn sgd_rate(learning_rate: F64) -> Sgd:
+    return sgd(tensor_f32([learning_rate], []))
+
+pub fn step(optimizer: Sgd, parameter_value: Parameter, gradient: Tensor[F32]) -> Parameter:
+    return replace(parameter_value, parameter_value.value - optimizer.learning_rate * gradient)

@@ -1,6 +1,6 @@
 # Getting started
 
-**Availability:** Seloryn 0.12 currently provides a verified-preview CPU MLP profile, a complete source-owned `.sely` runtime-sized contextual language-model workflow with configurable one-hot and embedding/ReLU windows, whitespace text inference, perplexity and hash-bound checkpoints, reusable parameters/SGD, fused cross-entropy, hash-validated inference, read-only `doctor` project diagnostics, transactional `init` templates including `source-mlp`, reproducible local release provenance, identity-bearing replayable training receipts, typed JSON number-array and text-array ingestion, a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. Project manifests are parsed strictly and future language versions are rejected before execution. It also includes a real hardware inventory, bounded GPU compute/readback probe and an explicit scalar F32 `from training import gpu` profile; general GPU tensor/MLP or language-model training is not enabled. There is no distributed backend, package registry, hosted API or stable ABI.
+**Availability:** Seloryn 0.12 currently provides a verified-preview CPU MLP profile, a complete source-owned `.sely` runtime-sized contextual language-model workflow with configurable one-hot and embedding/ReLU windows, whitespace text inference, perplexity and hash-bound checkpoints, reusable parameters/SGD, fused cross-entropy, hash-validated inference, read-only `doctor` project diagnostics, transactional `init` templates including `source-mlp` and the modular `trainable-mlp` workflow, reproducible local release provenance, identity-bearing replayable training receipts, typed JSON number-array and text-array ingestion, a Seloryn-authored tensor objective, multi-input gradients, bounded `range` and SGD loop. Project manifests are parsed strictly and future language versions are rejected before execution. It also includes a real hardware inventory, bounded GPU compute/readback probe and an explicit scalar F32 `from training import gpu` profile; general GPU tensor/MLP or language-model training is not enabled. There is no distributed backend, package registry, hosted API or stable ABI.
 
 The checker rejects malformed or semantically inconsistent source before execution. The [status page](../project/status.md) distinguishes implemented behavior from future design.
 
@@ -89,7 +89,8 @@ The current capability limits are recorded in the [status page](../project/statu
 
 Use `doctor` before execution when integrating a project into automation. It
 performs no project execution, network access or GPU dispatch. Use `init` to
-create a minimal, tabular-MLP or source-owned `source-mlp` layout that already
+create a minimal, tabular-MLP, source-owned `source-mlp` or modular
+`trainable-mlp` layout that already
 follows the manifest, capability and source-root rules; it refuses to overwrite
 an existing path. The `source-mlp` template keeps the model, objective, SGD
 loop, checkpoint and reload code in `.sely`.

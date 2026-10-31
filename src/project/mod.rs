@@ -557,6 +557,9 @@ struct Loader {
 impl Loader {
     #[allow(clippy::result_large_err)]
     fn visit(&mut self, path: &Path, is_entry: bool) -> Result<(), Diagnostic> {
+        // Project shape is graph-defined: only the manifest entry and its local
+        // imports are loaded. Unrelated files below source_root are deliberately
+        // ignored, so projects may choose their own names and directories.
         let path = normalize_path(path);
         if self.visiting.contains(&path) {
             return Err(Diagnostic::new(
@@ -711,7 +714,12 @@ fn validate_entry_visibility(
         match item {
             Item::Function(function) => {
                 let mut function_symbols = declared_symbols.clone();
-                extend_local_bindings(&function.body, &mut function_symbols);
+                function_symbols.extend(
+                    function
+                        .parameters
+                        .iter()
+                        .map(|parameter| parameter.name.clone()),
+                );
                 validate_statements_visibility(
                     &function.body,
                     aliases,
@@ -740,41 +748,6 @@ fn validate_entry_visibility(
     Ok(())
 }
 
-fn extend_local_bindings(statements: &[Statement], names: &mut HashSet<String>) {
-    for statement in statements {
-        match statement {
-            Statement::Binding(binding) => {
-                names.insert(binding.name.clone());
-            }
-            Statement::If {
-                branches,
-                otherwise,
-                ..
-            } => {
-                for branch in branches {
-                    extend_local_bindings(&branch.body, names);
-                }
-                if let Some(body) = otherwise {
-                    extend_local_bindings(body, names);
-                }
-            }
-            Statement::Match(statement) => {
-                for case in &statement.cases {
-                    extend_local_bindings(&case.body, names);
-                }
-            }
-            Statement::For { name, body, .. } => {
-                names.insert(name.clone());
-                extend_local_bindings(body, names);
-            }
-            Statement::Assignment { .. }
-            | Statement::Return { .. }
-            | Statement::Require { .. }
-            | Statement::Expression(_) => {}
-        }
-    }
-}
-
 fn validate_statements_visibility(
     statements: &[Statement],
     aliases: &HashMap<String, HashSet<String>>,
@@ -782,14 +755,18 @@ fn validate_statements_visibility(
     imported_symbols: &HashSet<String>,
     declared_symbols: &HashSet<String>,
 ) -> Result<(), Diagnostic> {
+    let mut scope = declared_symbols.clone();
     for statement in statements {
         validate_statement_visibility(
             statement,
             aliases,
             private_symbols,
             imported_symbols,
-            declared_symbols,
+            &scope,
         )?;
+        if let Statement::Binding(binding) = statement {
+            scope.insert(binding.name.clone());
+        }
     }
     Ok(())
 }
@@ -809,7 +786,19 @@ fn validate_statement_visibility(
             imported_symbols,
             declared_symbols,
         ),
-        Statement::Assignment { value, .. } | Statement::Expression(value) => {
+        Statement::Assignment { name, value, span } => {
+            if private_symbol_is_unavailable(
+                name,
+                private_symbols,
+                imported_symbols,
+                declared_symbols,
+            ) {
+                return Err(Diagnostic::new(
+                    "SEL-M004",
+                    format!("private symbol `{name}` from an imported module is not in scope"),
+                    *span,
+                ));
+            }
             validate_expr_visibility(
                 value,
                 aliases,
@@ -818,6 +807,13 @@ fn validate_statement_visibility(
                 declared_symbols,
             )
         }
+        Statement::Expression(value) => validate_expr_visibility(
+            value,
+            aliases,
+            private_symbols,
+            imported_symbols,
+            declared_symbols,
+        ),
         Statement::Return { value, .. } => value.as_ref().map_or(Ok(()), |value| {
             validate_expr_visibility(
                 value,
@@ -904,7 +900,12 @@ fn validate_statement_visibility(
             }
             Ok(())
         }
-        Statement::For { iterable, body, .. } => {
+        Statement::For {
+            name,
+            iterable,
+            body,
+            ..
+        } => {
             validate_expr_visibility(
                 iterable,
                 aliases,
@@ -912,12 +913,14 @@ fn validate_statement_visibility(
                 imported_symbols,
                 declared_symbols,
             )?;
+            let mut loop_scope = declared_symbols.clone();
+            loop_scope.insert(name.clone());
             validate_statements_visibility(
                 body,
                 aliases,
                 private_symbols,
                 imported_symbols,
-                declared_symbols,
+                &loop_scope,
             )
         }
     }

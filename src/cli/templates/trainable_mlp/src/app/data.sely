@@ -1,0 +1,24 @@
+module app.data
+
+from app.contracts import Contract
+from json import as_f64_list, get, read_file, sha256
+from data import len, range
+
+pub record Dataset:
+    inputs: Tensor[F32]
+    targets: Tensor[F32]
+    rows: I64
+    source_hash: Text
+
+pub fn load_dataset(path: Text, rows: I64, contract: Contract) -> Result[Dataset, JsonIoError]:
+    let document: Json = read_file(path)?
+    let input_values: List[F64] = as_f64_list(get(document, ["inputs"])?)?
+    let target_values: List[F64] = as_f64_list(get(document, ["targets"])?)?
+    require len(input_values) == rows * contract.feature_count else JsonIoError("dataset input shape does not match contract")
+    require len(target_values) == rows else JsonIoError("dataset target shape does not match contract")
+    for index in range(rows):
+        let target: F64 = target_values[index]
+        require target == 0.0 or target == 1.0 else JsonIoError("dataset target must be zero or one")
+    let inputs: Tensor[F32] = tensor_f32(input_values, [rows, contract.feature_count])
+    let targets: Tensor[F32] = tensor_f32(target_values, [rows, 1])
+    return Ok(Dataset(inputs, targets, rows, sha256(document)))

@@ -1,0 +1,67 @@
+module app.contracts
+
+from data import len
+from json import as_f32, as_f64, as_i64, as_text, as_text_list, get, read_file, sha256
+
+pub record Contract:
+    dataset_id: Text
+    model_id: Text
+    architecture: Text
+    dataset_spec_hash: Text
+    model_spec_hash: Text
+    run_spec_hash: Text
+    feature_count: I64
+    feature_names: List[Text]
+    hidden_size: I64
+    output_size: I64
+    train_rows: I64
+    test_rows: I64
+    steps: I64
+    learning_rate: F64
+    threshold: F32
+
+pub fn load_contract() -> Result[Contract, JsonIoError]:
+    let dataset: Json = read_file("contracts/dataset.json")?
+    let model: Json = read_file("contracts/model.json")?
+    let run_contract: Json = read_file("contracts/run.json")?
+    let dataset_schema: Text = as_text(get(dataset, ["schema"])?)?
+    let model_schema: Text = as_text(get(model, ["schema"])?)?
+    let run_schema: Text = as_text(get(run_contract, ["schema"])?)?
+    require dataset_schema == "seloryn.dataset.v1" else JsonIoError("unsupported dataset contract")
+    require model_schema == "seloryn.model.v1" else JsonIoError("unsupported model contract")
+    require run_schema == "seloryn.run-contract.v1" else JsonIoError("unsupported run contract")
+    let dataset_id: Text = as_text(get(dataset, ["dataset_id"])?)?
+    let model_id: Text = as_text(get(model, ["model_id"])?)?
+    let architecture: Text = as_text(get(model, ["architecture"])?)?
+    let loss: Text = as_text(get(model, ["loss"])?)?
+    let feature_count: I64 = as_i64(get(dataset, ["feature_count"])?)?
+    let feature_names: List[Text] = as_text_list(get(dataset, ["feature_names"])?)?
+    let dataset_dtype: Text = as_text(get(dataset, ["dtype"])?)?
+    let model_dtype: Text = as_text(get(model, ["dtype"])?)?
+    let hidden_size: I64 = as_i64(get(model, ["hidden_size"])?)?
+    let output_size: I64 = as_i64(get(model, ["output_size"])?)?
+    let input_size: I64 = as_i64(get(model, ["input_size"])?)?
+    let train_rows: I64 = as_i64(get(dataset, ["train_rows"])?)?
+    let test_rows: I64 = as_i64(get(dataset, ["test_rows"])?)?
+    let steps: I64 = as_i64(get(model, ["steps"])?)?
+    let learning_rate: F64 = as_f64(get(model, ["learning_rate"])?)?
+    let threshold: F32 = as_f32(get(model, ["threshold"])?)?
+    let device_policy: Text = as_text(get(run_contract, ["device_policy"])?)?
+    let fallback: Text = as_text(get(run_contract, ["fallback"])?)?
+    require dataset_id == "seloryn-synthetic-score" else JsonIoError("unexpected dataset id")
+    require model_id == "seloryn-synthetic-score-mlp" else JsonIoError("unexpected model id")
+    require architecture == "dense_relu_dense_score" else JsonIoError("unsupported model architecture")
+    require loss == "mean_squared_error" else JsonIoError("unsupported model loss")
+    require dataset_dtype == "f32" and model_dtype == "f32" else JsonIoError("starter supports only f32 datasets and models")
+    require input_size == feature_count else JsonIoError("dataset and model feature counts differ")
+    require feature_count == 4 else JsonIoError("starter requires exactly four features")
+    require len(feature_names) == feature_count else JsonIoError("dataset feature names do not match feature count")
+    require hidden_size == 4 else JsonIoError("starter requires hidden size four")
+    require output_size == 1 else JsonIoError("starter requires one output")
+    require train_rows > 0 and test_rows > 0 else JsonIoError("dataset row counts must be positive")
+    require steps > 0 and steps <= 640 else JsonIoError("training steps outside bounded contract")
+    require learning_rate > 0.0 else JsonIoError("learning rate must be positive")
+    require threshold >= 0.0 and threshold <= 1.0 else JsonIoError("threshold must be between zero and one")
+    require device_policy == "cpu_required" else JsonIoError("device policy must require CPU")
+    require fallback == "error" else JsonIoError("fallback policy must be error")
+    return Ok(Contract(dataset_id, model_id, architecture, sha256(dataset), sha256(model), sha256(run_contract), feature_count, feature_names, hidden_size, output_size, train_rows, test_rows, steps, learning_rate, threshold))

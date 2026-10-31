@@ -20,6 +20,10 @@ capabilities; they are not packages published to a registry.
   source-owned MLP project, including bounded data, declared checkpoint
   capabilities and a reload check. It is the shortest path from an empty
   directory to an editable training workflow.
+- `seloryn init --template=trainable-mlp` creates a contract-first modular
+  train/eval/infer starter. Its `src/app` tree is only an example: the
+  manifest entry and imported module graph define the project, so developers
+  can choose their own names and directories.
 - `self-hosted-language-model/` defines modular contextual language-model
   workflows in `.sely`, including a one-hot linear baseline and a selectable
   embedding/ReLU MLP path with tokenizer, indexed dataset, cross-entropy objective,

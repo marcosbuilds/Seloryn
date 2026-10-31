@@ -1,0 +1,13 @@
+[package]
+name = "__PROJECT_NAME__"
+language = "0.12"
+source_root = "src"
+entry = "main.sely"
+
+[capabilities]
+read = ["contracts", "data", "checkpoints"]
+write = ["checkpoints"]
+
+[limits]
+json_max_bytes = 1048576
+json_max_depth = 32

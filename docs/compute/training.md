@@ -61,6 +61,21 @@ developer edits the model, objective, gradient update and checkpoint code in
 `.sely`, while the runtime preserves tensor bounds, declared file capabilities
 and verifiable training events.
 
+For the contract-driven project workflow, use the modular starter:
+
+```text
+seloryn init my-model --template=trainable-mlp
+'{"mode":"train"}' | seloryn run my-model --format=json --log=json2
+'{"mode":"eval"}' | seloryn run my-model --format=json --log=json2
+```
+
+The generated `src/app` tree is illustrative only. Change `source_root` and
+`entry` or move modules freely; the loader follows the imported module graph
+and ignores unrelated source files. The starter proves a bounded CPU/ReLU MLP
+with source-owned data validation, SGD, evaluation, inference and
+contract-bound checkpoint reload, not a general framework or fixed directory
+convention.
+
 ## Executable MLP profile
 
 The `training.train_mlp` standard function accepts exactly eight arguments:
